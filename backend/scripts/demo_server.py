@@ -18,7 +18,7 @@ from tests.esdata import DataRepo  # noqa: E402
 from wda.config import Settings  # noqa: E402
 from wda.main import create_app  # noqa: E402
 
-PASSWORD = "demo-passwort"
+PASSWORD = "demo-passwort"  # noqa: S105 (nur Demo mit nachgebautem Bestand, nie Betrieb)
 
 
 def main() -> None:
