@@ -97,7 +97,7 @@ const EMPTY: Form = {
     }`,
   styles: `
     .card { margin-top: var(--gap); } .small { font-size: 12px; } .ok { color: var(--ok); }
-    table.data td { text-align: left; white-space: normal; } .actions { white-space: nowrap; } .actions > * { margin-left: 10px; }
+    table.data td, table.data th { text-align: left; white-space: normal; } .actions { white-space: nowrap; } .actions > * { margin-left: 10px; }
     .form { display: grid; gap: 10px; max-width: 640px; } .form label { display: grid; gap: 4px; }
     .inner { margin-top: 10px; } .form label.check { display: flex; gap: 6px; align-items: center; } h2 { margin: 0; }
   `,

@@ -86,6 +86,31 @@ assert.match(csv[1], /text\/csv/);
 await page.goto(base + '/laeufe');
 await page.waitForSelector('table.data a:has-text("OER-Statistik")');
 
+// Dashboard im Baukasten: Kachel aus der Kennzahl, Breite, Ordnen, Vorschau, Speichern, Ansehen
+await page.goto(base + '/bibliothek');
+await page.click('text=Neues Dashboard');
+await page.waitForURL(/\/bearbeiten\//);
+await page.waitForSelector('app-spec-form');
+for (let n = 0; n < 2; n++) {
+  await page.locator('select[name=add-metric]').selectOption({ index: 1 });
+  await page.click('text=Kachel hinzufügen');
+}
+await page.waitForFunction(() => document.querySelectorAll('app-spec-form .item').length === 2);
+await page.locator('select[name=w-k2]').selectOption({ label: 'ganze Breite' });
+await page.locator('input[name=title-k2]').fill('Zweite Kachel');
+await page.click('[aria-label="Nach oben: Zweite Kachel"]');
+await page.waitForFunction(() => document.querySelector('app-spec-form .item input')?.value === 'Zweite Kachel');
+await page.click('summary:has-text("Spezifikation")');
+const built = JSON.parse(await page.inputValue('#spec'));
+assert.deepEqual(built.tiles.map((t) => [t.id, t.layout.x, t.layout.y, t.layout.w]), [['k2', 0, 0, 12], ['k1', 0, 4, 6]]);
+await page.click('button:has-text("Vorschau")');
+await page.waitForSelector('app-report-view h2:has-text("Zweite Kachel")');
+await page.fill('input[name=name]', 'Probe-Dashboard');
+await page.click('form.form > .row button[type=submit]');
+await page.waitForSelector('text=Gespeichert.');
+await page.click('a:has-text("Ansehen")');
+await page.waitForSelector('app-report-view .grid section:nth-child(2)');
+
 // Instanzen: anlegen (Passwort geht nur hinein), ändern mit behaltener Anmeldung, entfernen
 await page.goto(base + '/instanzen');
 await page.click('text=Instanz anlegen');
@@ -108,14 +133,15 @@ await page.waitForSelector('tr:has-text("Probe zwei")', { state: 'detached' });
 // Editor: Prüfung nennt die Fehler mit Ort, nichts wird gespeichert
 await page.goto(base + '/bibliothek');
 await page.click('section:has-text("Templates") >> text=Bearbeiten');
-await page.waitForSelector('textarea');
-await page.fill('textarea', '{"title": "", "sections": [{"id": "a", "type": "gibtsnicht"}]}');
+await page.waitForSelector('app-spec-form');
+await page.click('summary:has-text("Spezifikation")');
+await page.fill('#spec', '{"title": "", "sections": [{"id": "a", "type": "gibtsnicht"}]}');
 await page.click('text=Prüfen');
 await page.waitForSelector('.problems li.error code:has-text("sections.0")');
 
 // Sitzung läuft während der Arbeit ab: neu anmelden, ohne dass der Text verloren geht
 const draft = '{"title": "Entwurf, der bleiben muss", "sections": []}';
-await page.fill('textarea', draft);
+await page.fill('#spec', draft);
 await page.context().clearCookies();
 await page.click('text=Prüfen');
 await page.waitForSelector('[role=dialog] >> text=Die Sitzung ist abgelaufen');
@@ -125,7 +151,7 @@ await page.waitForSelector('[role=dialog] [role=alert]');
 await page.fill('#relogin-pw', 'demo-passwort');
 await page.click('[role=dialog] button[type=submit]');
 await page.waitForSelector('[role=dialog]', { state: 'detached' });
-assert.equal(await page.inputValue('textarea'), draft);
+assert.equal(await page.inputValue('#spec'), draft);
 await page.click('text=Prüfen');
 await page.waitForSelector('.problems li.ok');
 // ... und danach keine Schleife: die nächste Seite lädt ohne erneute Anmeldung

@@ -22,6 +22,8 @@ interface Builtin { id: string; title: string; description?: string; definitions
     <div class="row">
       <h1 class="grow">Bibliothek</h1>
       <input type="search" placeholder="Suchen …" aria-label="Suchen" [ngModel]="query()" (ngModelChange)="query.set($event)" />
+      <button type="button" (click)="create('dashboard')">Neues Dashboard</button>
+      <button type="button" (click)="create('template')">Neues Template</button>
       <button type="button" (click)="exportAll()">Alles exportieren</button>
       <label class="btn">Importieren<input type="file" accept="application/json,.json" class="sr-only" (change)="importFile($event)" /></label>
     </div>
@@ -172,6 +174,18 @@ export class Library {
       if (full.spec.filter_ids?.length) { await this.router.navigate(['/ansicht', item.id]); return; }
       await this.router.navigate(['/'], { queryParams: { q: encodeState({ spec: full.spec.query, view: full.spec.view?.type ?? 'table' }) } });
     } catch (error) { this.fail(error, 'Kennzahl nicht ladbar.'); }
+  }
+
+  /** Legt ein leeres Dashboard oder Template an und öffnet den Baukasten. */
+  protected async create(kind: 'dashboard' | 'template'): Promise<void> {
+    const name = kind === 'dashboard' ? 'Neues Dashboard' : 'Neues Template';
+    const spec = kind === 'dashboard' ? { tiles: [] } : { title: name, sections: [] };
+    this.error.set('');
+    try {
+      const group = this.group();
+      const made = await this.api.post<Definition>('/definitions', { kind, name, spec, group_id: group || null });
+      await this.router.navigate(['/bearbeiten', made.id]);
+    } catch (error) { this.fail(error, 'Anlegen nicht möglich.'); }
   }
 
   protected addGroup(): Promise<void> {

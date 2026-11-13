@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError, Latest } from '../core/api';
 import { Auth } from '../core/auth';
 import { Definition, Report } from '../core/types';
+import { Instances } from '../core/instances';
 import { ReportView } from '../runs/report-view';
+import { SpecForm } from './spec-form';
 
 /**
  * Definition bearbeiten: Name, Beschreibung und die Spezifikation als JSON. Die Prüfung nennt
@@ -12,7 +14,7 @@ import { ReportView } from '../runs/report-view';
  */
 @Component({
   selector: 'app-editor',
-  imports: [FormsModule, RouterLink, ReportView],
+  imports: [FormsModule, RouterLink, ReportView, SpecForm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:beforeunload)': 'beforeUnload($event)' },
   template: `
@@ -25,9 +27,20 @@ import { ReportView } from '../runs/report-view';
       <form class="card form" (ngSubmit)="save()">
         <label>Name <input name="name" [(ngModel)]="name" required maxlength="200" /></label>
         <label>Beschreibung <input name="description" [(ngModel)]="description" maxlength="2000" /></label>
-        <label for="spec">Spezifikation (JSON)</label>
-        <textarea id="spec" name="spec" spellcheck="false" rows="24" [(ngModel)]="text" (ngModelChange)="dirty()"
-                  [attr.aria-invalid]="problems().length > 0" aria-describedby="spec-problems"></textarea>
+        @if (def.kind === 'dashboard' || def.kind === 'template') {
+          @if (parsed(); as spec) {
+            <app-spec-form [kind]="def.kind" [spec]="spec" [metrics]="metrics()" [filters]="filters()"
+                           [instances]="instances.list()" (changed)="fromForm($event)" />
+          } @else {
+            <p class="muted">Die Spezifikation unten ist gerade kein gültiges JSON; der Baukasten erscheint wieder, sobald sie es ist.</p>
+          }
+        }
+        <details [open]="!hasForm()">
+          <summary>Spezifikation (JSON){{ hasForm() ? ' – für alles, was der Baukasten nicht zeigt' : '' }}</summary>
+          <label class="sr-only" for="spec">Spezifikation (JSON)</label>
+          <textarea id="spec" name="spec" spellcheck="false" rows="24" [ngModel]="text()" (ngModelChange)="text.set($event); dirty()"
+                    [attr.aria-invalid]="problems().length > 0" aria-describedby="spec-problems"></textarea>
+        </details>
         <ul id="spec-problems" class="problems" aria-live="polite">
           @for (problem of problems(); track $index) {
             <li class="error">@if (problem.loc) { <code>{{ problem.loc }}</code> } {{ problem.msg }}</li>
@@ -59,7 +72,7 @@ import { ReportView } from '../runs/report-view';
   styles: `
     .form { display: grid; gap: 8px; margin: var(--gap) 0; }
     .form label { display: grid; gap: 4px; }
-    textarea { font: 13px/1.45 var(--mono); width: 100%; resize: vertical; tab-size: 2; }
+    #spec { font: 13px/1.45 var(--mono); width: 100%; resize: vertical; tab-size: 2; margin-top: 8px; }
     .problems { margin: 0; padding-left: 18px; } .ok { color: var(--ok); } .top { margin-top: 20px; }
   `,
 })
@@ -75,7 +88,19 @@ export class Editor {
   protected readonly report = new Latest<Report>();
   protected name = '';
   protected description = '';
-  protected text = '';
+  protected readonly text = signal('');
+  protected readonly instances = inject(Instances);
+  private readonly others = signal<Definition[]>([]);
+  protected readonly metrics = computed(() => this.others().filter((d) => d.kind === 'metric'));
+  protected readonly filters = computed(() => this.others().filter((d) => d.kind === 'filter'));
+  protected readonly hasForm = computed(() => ['dashboard', 'template'].includes(this.definition()?.kind ?? ''));
+  /** Die Spezifikation als Objekt, solange der Text gültiges JSON ist */
+  protected readonly parsed = computed<Record<string, any> | null>(() => {
+    try {
+      const value = JSON.parse(this.text());
+      return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+    } catch { return null; }
+  });
 
   /** Stand beim Laden oder letzten Speichern, um ungespeicherte Änderungen zu erkennen */
   private stored = '';
@@ -87,7 +112,9 @@ export class Editor {
     effect(() => { if (auth.renewed() > 0) untracked(() => { if (!this.definition()) void this.reload(); }); });
   }
 
-  private snapshot(): string { return JSON.stringify([this.name, this.description, this.text]); }
+  private snapshot(): string { return JSON.stringify([this.name, this.description, this.text()]); }
+
+  protected fromForm(spec: Record<string, any>): void { this.text.set(JSON.stringify(spec, null, 2)); this.dirty(); }
   hasChanges(): boolean { return !!this.definition() && this.snapshot() !== this.stored; }
   /** Verlassen mit ungespeicherten Änderungen nur nach Rückfrage */
   canLeave(): boolean {
@@ -100,7 +127,10 @@ export class Editor {
     try {
       const def = await this.api.get<Definition>('/definitions/' + encodeURIComponent(this.defId()));
       this.name = def.name; this.description = def.description;
-      this.text = JSON.stringify(def.spec, null, 2);
+      this.text.set(JSON.stringify(def.spec, null, 2));
+      if (def.kind === 'dashboard' || def.kind === 'template') {
+        this.api.get<Definition[]>('/definitions').then((all) => this.others.set(all), () => undefined);
+      }
       this.problems.set([]); this.checked.set(false);
       this.stored = this.snapshot();
       this.definition.set(def);
@@ -110,7 +140,7 @@ export class Editor {
   protected dirty(): void { this.checked.set(false); this.message.set(''); }
 
   private parse(): unknown | undefined {
-    try { return JSON.parse(this.text); } catch (error) {
+    try { return JSON.parse(this.text()); } catch (error) {
       this.problems.set([{ loc: '', msg: 'Kein gültiges JSON: ' + (error as Error).message }]);
       this.checked.set(true);
       return undefined;
@@ -134,7 +164,7 @@ export class Editor {
   protected async preview(): Promise<void> {
     const def = this.definition();
     if (!def || !(await this.check())) return;
-    const spec = JSON.parse(this.text);
+    const spec = JSON.parse(this.text());
     void this.report.run(async (signal) =>
       (await this.api.post<{ report: Report }>('/preview', { kind: def.kind, name: this.name.trim() || def.name, spec }, signal)).report);
   }
@@ -155,7 +185,7 @@ export class Editor {
     this.error.set(''); this.conflict.set(false);
     try {
       const updated = await this.api.put<Definition>('/definitions/' + encodeURIComponent(def.id), {
-        version: version ?? def.version, name: this.name.trim(), description: this.description, spec: JSON.parse(this.text) });
+        version: version ?? def.version, name: this.name.trim(), description: this.description, spec: JSON.parse(this.text()) });
       this.definition.set({ ...def, ...updated });
       this.name = this.name.trim();
       this.stored = this.snapshot();
