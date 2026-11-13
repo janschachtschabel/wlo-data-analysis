@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    image: wlo-data-analysis:latest
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - wda-data:/data
+    restart: unless-stopped
+
+volumes:
+  wda-data:

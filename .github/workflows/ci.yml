@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t wlo-data-analysis:ci .
+      - name: Start ohne Passwort muss abbrechen
+        run: |
+          if docker run --rm wlo-data-analysis:ci; then
+            echo "Container ist ohne WDA_ADMIN_PASSWORD gestartet" >&2
+            exit 1
+          fi
+      - name: Health-Check
+        run: |
+          docker run -d --name wda -p 8080:8080 -e WDA_ADMIN_PASSWORD=ci-passwort wlo-data-analysis:ci
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8080/api/health && exit 0
+            sleep 1
+          done
+          docker logs wda
+          exit 1

@@ -45,7 +45,10 @@ def load_settings() -> Settings:
         fields = sorted({"WDA_" + str(err["loc"][0]).upper() for err in exc.errors()})
         hint = ""
         if "WDA_ADMIN_PASSWORD" in fields:
-            hint = " WDA_ADMIN_PASSWORD muss gesetzt sein, ohne Admin-Passwort startet die App nicht."
+            hint = (
+                " WDA_ADMIN_PASSWORD muss gesetzt sein,"
+                " ohne Admin-Passwort startet die App nicht."
+            )
         raise ConfigError(
             f"Ungültige Konfiguration: {', '.join(fields)}.{hint}"
         ) from None
