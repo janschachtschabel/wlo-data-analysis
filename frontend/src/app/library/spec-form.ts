@@ -122,15 +122,15 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
   styles: `
     :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
     select { max-width: 100%; } .body label { min-width: 0; }
-    label { display: grid; gap: 4px; } .small { font-size: 12px; }
+    label { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; max-width: 100%; } .small { font-size: 12px; }
     fieldset { border: 1px solid var(--border); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; }
     label.check { display: flex; gap: 6px; align-items: center; }
-    .items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .items { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
     .item { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; border: 1px solid var(--border); border-radius: 6px;
             padding: 8px 10px; background: var(--surface-2); }
     .item.over { outline: 2px dashed var(--accent); outline-offset: 1px; }
     .grip { cursor: grab; color: var(--muted); padding-top: 4px; user-select: none; }
-    .body { flex: 1 1 200px; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
+    .body { flex: 1 1 160px; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
     .wide { flex: 1 1 260px; } .wide input, textarea { width: 100%; }
     .tag { align-self: center; font-size: 12px; font-weight: 600; background: var(--surface); border-radius: 10px; padding: 1px 8px; }
     .tools { display: flex; gap: 4px; } .tools button { padding: 3px 8px; }
