@@ -111,6 +111,11 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   (`+ - * /`, Klammern, `round`, `max`, `min`). Alternativ erzeugt `columns` eine Spalte je
   Wert eines Feldes.
 - `percent`: Anteile je Spalte oder je Zeile.
+- Der Lizenzschlüssel (`ccm:commonlicense_key`) trifft beim Repositorium als Filter per
+  Wortanfang (`CC_BY` zählte alle `CC_BY…` mit). Die Engine lehnt solche Filter ab und
+  verweist auf die exakten Wege: den Schlüssel als Zeilen verwenden (mit Gruppen für
+  Lizenzkategorien) oder über `license` filtern (`OPEN`, `CC_BY_OPEN`, `CC_BY_RESTRICTED`,
+  `COPYRIGHT_OTHERS`).
 - Jede Spalte nennt ihre echte Gesamtzahl (jedes Dokument einmal). Bei mehrwertigen
   Feldern ist das weniger als die Summe der Zeilen.
 - `provenance` nennt Abrufzeitpunkt, Zahl der Einzelabfragen, die aufgelösten Filter und

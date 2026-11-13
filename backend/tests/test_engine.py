@@ -137,7 +137,7 @@ def test_groups_sum_on_single_valued_license(repo, tmp_path):
     assert got["__missing__"] == repo.brute(lambda d: not d[LIC])
     assert got["a"] + got["b"] + got["c"] + got["__missing__"] == 400
     assert r["provenance"]["queries"] == 1  # alles aus einer Facette
-    assert any("Summen" in n for n in r["provenance"]["notes"])
+    assert r["provenance"]["notes"] == []   # einwertig: Summen sind exakt
     assert r["rows"][-1] == {"key": "__missing__", "label": "ohne Wert", "kind": "missing",
                              "values": [got["__missing__"]]}
 
@@ -147,10 +147,12 @@ def test_group_mode_explicit_overrides_auto(repo, tmp_path):
     summed = query(repo, tmp_path, rows={"property": TAX, "groups": groups,
                                          "group_mode": "sum"})
     assert cells(summed)["mp"] == repo.brute(repo.has(TAX, M)) + repo.brute(repo.has(TAX, P))
-    with pytest.raises(EduSharingError) as info:  # einwertiges Feld verträgt kein ODER
+    assert any("zählt es mehrfach" in n for n in summed["provenance"]["notes"])
+    before = len(repo.searches)
+    with pytest.raises(QueryError, match="einwertig"):  # einwertiges Feld verträgt kein ODER
         query(repo, tmp_path, rows={"property": LIC, "group_mode": "distinct", "groups": [
             {"label": "x", "values": ["CC_0", "PDM"]}]})
-    assert info.value.kind == "single_value"
+    assert len(repo.searches) == before
 
 
 def test_missing_on_multi_valued_field(repo, tmp_path):
@@ -189,7 +191,10 @@ def test_row_field_also_in_filters(repo, tmp_path):
     assert r["columns"][0]["total"] == repo.brute(repo.has(TAX, M, P))
     assert any("nur die gefilterten" in n for n in r["provenance"]["notes"])
     for rows in ({"property": TAX, "missing": True},
-                 {"property": TAX, "groups": [{"label": "x", "values": [M]}]}):
+                 {"property": TAX, "top": 1, "other": True},
+                 {"property": TAX, "groups": [{"label": "x", "values": [M]}]},
+                 {"property": TAX, "group_mode": "sum",
+                  "groups": [{"label": "x", "values": [D]}]}):
         with pytest.raises(QueryError):
             query(repo, tmp_path, filters=[{"property": TAX, "values": [M]}], rows=rows)
 
@@ -200,11 +205,16 @@ def test_include_sort_top_other(repo, tmp_path):
     r = query(repo, tmp_path, rows={"property": TAX, "sort": "label"})
     labels = [x["label"] for x in r["rows"]]
     assert labels == sorted(labels, key=str.casefold) and len(labels) == 5
-    # mehrwertig: „Übrige" entfällt mit Hinweis
+    # mehrwertig: „Übrige" ist eine eigene Zählung, keine Summe der restlichen Zeilen
     r = query(repo, tmp_path, rows={"property": TAX, "top": 2, "other": True})
-    assert len(r["rows"]) == 2
+    assert [x["kind"] for x in r["rows"]] == ["value", "value", "other"]
+    rest = [u for u in (M, P, D, DISC + "240", DISC + "320")
+            if u not in {x["key"] for x in r["rows"]}]
+    assert r["rows"][-1]["values"] == [repo.brute(repo.has(TAX, *rest))]
+    assert r["rows"][-1]["values"][0] < sum(repo.brute(repo.has(TAX, u)) for u in rest)
     assert any("Übrige" in n for n in r["provenance"]["notes"])
     assert any("ersten 2 von 5" in n for n in r["provenance"]["notes"])
+    assert r["provenance"]["queries"] == 2
     # einwertig: „Übrige" ist die Summe des Rests
     r = query(repo, tmp_path, rows={"property": LIC, "top": 3, "other": True, "missing": True})
     assert [x["kind"] for x in r["rows"]] == ["value"] * 3 + ["other", "missing"]
@@ -340,6 +350,133 @@ def test_oer_shape_costs_five_calls_per_sector(repo, tmp_path):
         lambda d: hs(d) and M in d[TAX] and not d[LIC])
     # 4 gezählte Spalten, je eine Facetten-Abfrage plus eine für „ohne Wert"
     assert r["provenance"]["queries"] == 8
+    assert all(v is not None for row in r["rows"] for v in row["values"])
+
+
+def test_license_key_prefix_is_never_silently_wrong(repo, tmp_path):
+    """Der Lizenzschlüssel trifft als Kriterium per Präfix: CC_BY zählte alle CC_BY… mit."""
+    cc_by = {"property": LIC, "values": ["CC_BY"]}
+    for spec in (
+        {"filters": [cc_by]},
+        {"series": [{"id": "a", "label": "A", "filters": [cc_by]}]},
+        {"columns": {"property": LIC}},
+        {"columns": {"property": LIC, "include": ["CC_BY_NC"]}},
+        {"filters": [cc_by], "rows": {"property": LIC}},
+    ):
+        with pytest.raises(QueryError, match="mitzählen"):
+            query(repo, tmp_path, **spec)
+    with pytest.raises(QueryError, match="nur einen Wert"):
+        query(repo, tmp_path, filters=[{"property": LIC, "values": ["CC_0", "PDM"]}])
+    # Schlüssel ohne längere Namensvettern sind exakt und erlaubt
+    r = query(repo, tmp_path, rows={"property": TAX}, series=[
+        {"id": "cc0", "label": "CC0", "filters": [{"property": LIC, "values": ["CC_0"]}]},
+        {"id": "mit", "label": "mit", "filters": [{"property": LIC, "values": [""]}]}])
+    assert r["columns"][0]["total"] == repo.brute(repo.has(LIC, "CC_0"))
+    assert r["columns"][1]["total"] == repo.brute(lambda d: bool(d[LIC]))
+    assert any("leere Wert" in n for n in r["provenance"]["notes"])
+    # der exakte Weg: Lizenz als Zeilen, das andere Feld als Spalten
+    r = query(repo, tmp_path, rows={"property": LIC}, columns={"property": SRC})
+    col = next(pos for pos, c in enumerate(r["columns"]) if c["label"] == "oersi_spider")
+    assert cells(r, col)["CC_BY"] == repo.brute(
+        lambda d: "CC_BY" in d[LIC] and "oersi_spider" in d[SRC])
+
+
+def test_field_that_is_multi_valued_only_in_the_data(tmp_path):
+    """Die Quelle hat im Metadatenset keinen Mehrwert-Typ, manche Dokumente tragen aber
+    mehrere. Nichts darf als Summe gezählt werden."""
+    from .esdata import make_docs
+    docs = make_docs()
+    for pos, doc in enumerate(docs):
+        if pos % 3 == 0:
+            doc[SRC] = ["oersi_spider", "youtube_spider", "bpb_spider"][: 2 + pos % 2]
+        if pos % 10 == 1:
+            doc[SRC] = []
+    repo = DataRepo(docs)
+    r = query(repo, tmp_path, rows={"property": SRC, "top": 1, "other": True, "missing": True})
+    first = r["rows"][0]["key"]
+    rest = [s for s in ("oersi_spider", "youtube_spider", "bpb_spider") if s != first]
+    got = cells(r)
+    assert got["__other__"] == repo.brute(repo.has(SRC, *rest))
+    assert got["__missing__"] == repo.brute(lambda d: not d[SRC]) == 40
+    r = query(repo, tmp_path, rows={"property": SRC, "groups": [
+        {"id": "g", "label": "zwei", "values": ["oersi_spider", "bpb_spider"]}]})
+    assert cells(r)["g"] == repo.brute(repo.has(SRC, "oersi_spider", "bpb_spider"))
+
+
+def test_overlapping_sum_groups_and_other(repo, tmp_path):
+    r = query(repo, tmp_path, rows={"property": LIC, "top": 1, "other": True, "groups": [
+        {"id": "a", "label": "a", "values": ["CUSTOM"]},
+        {"id": "b", "label": "b", "values": ["CC_0"]},
+        {"id": "c", "label": "c", "values": ["CC_0", "CC_BY", "CUSTOM"]}]})
+    assert cells(r)["__other__"] == repo.brute(repo.has(LIC, "CC_0", "CC_BY"))
+
+
+def test_huge_numbers_do_not_crash(repo, tmp_path):
+    nines = "9" * 400
+    r = query(repo, tmp_path, percent="row", rows={"property": TAX}, series=[
+        {"id": "a", "label": "A"},
+        {"id": "b", "label": "B", "formula": f"a * {nines}"},
+        {"id": "c", "label": "C", "formula": f"round(a * {nines}, 2)"},
+        {"id": "d", "label": "D", "formula": "a * 1000000000000000000"}])
+    assert all(row["values"][1:] == [None, None, None] for row in r["rows"])
+    assert [c["total"] for c in r["columns"]][1:] == [None, None, None]
+
+
+def test_percent_skips_derived_columns(repo, tmp_path):
+    series = [{"id": "alle", "label": "Alle"},
+              {"id": "oer", "label": "OER", "filters": [
+                  {"property": "license", "values": ["OPEN", "CC_BY_OPEN"]}]},
+              {"id": "quote", "label": "Quote", "formula": "round(oer / alle * 100, 1)"}]
+    r = query(repo, tmp_path, percent="column", rows={"property": TAX}, series=series)
+    assert all(row["percent"][2] is None and row["percent"][0] is not None
+               for row in r["rows"])
+    r = query(repo, tmp_path, percent="row", rows={"property": TAX}, series=series)
+    assert all(row["percent"][2] is None for row in r["rows"])
+    assert any("nicht überschneiden" in n for n in r["provenance"]["notes"])
+
+
+def test_truncated_facet_gives_unknown_not_zero(tmp_path):
+    from .esdata import make_docs
+    docs = make_docs()
+    for pos, doc in enumerate(docs):
+        doc[SRC] = [f"quelle_{pos % 30:02d}"]  # 30 Werte, je 13 oder 14 Dokumente
+    docs.extend({TAX: [], LVL: [], LIC: [], SRC: ["selten"]} for _ in range(1))
+    repo = DataRepo(docs)
+
+    async def go():
+        http = httpx.AsyncClient(transport=repo.transport())
+        client = EduSharingClient(Instance(id="t", name="T", base_url="https://r.example"),
+                                  http, TTLCache(ttl=0))
+        original = client.aggregate
+
+        async def small(criteria, facets=(), **kw):  # Facetten künstlich kürzen (5 × 2 Werte)
+            kw["facet_limit"] = 2
+            return await original(criteria, facets, **kw)
+
+        client.aggregate = small
+        vocab = VocabStore(client, tmp_path)
+        return await run_query(QuerySpec(instance="t", rows={
+            "property": SRC, "include": ["quelle_00", "selten"], "missing": True}), client, vocab)
+
+    r = asyncio.run(go())
+    got = cells(r)
+    assert got["quelle_00"] == 14 and got["selten"] is None
+    assert got["__missing__"] is None
+    assert any("gekürzt" in n for n in r["provenance"]["notes"])
+
+
+def test_budget_is_checked_before_any_call(repo, tmp_path):
+    groups = [{"label": f"g{i}", "values": [M]} for i in range(60)]
+    with pytest.raises(QueryError, match="Einzelabfragen"):
+        query(repo, tmp_path, rows={"property": TAX, "groups": groups},
+              columns={"property": LVL, "top": 12})
+    assert repo.searches == []
+
+
+def test_function_names_are_not_column_ids():
+    for name in ("round", "max", "min"):
+        with pytest.raises(ValueError):
+            QuerySpec(instance="t", series=[{"id": name, "label": "x"}])
 
 
 def test_cached_flag_and_refresh(repo, tmp_path):

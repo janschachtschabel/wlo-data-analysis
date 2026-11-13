@@ -39,6 +39,9 @@ class Instance(BaseModel):
     # Felder ohne Werteliste im Metadatenset, die trotzdem als Facette erlaubt sind.
     # Alles andere ohne Werteliste (Titel, URL, …) wäre eine Datensatzliste.
     facet_fields: tuple[str, ...] = DEFAULT_FACET_FIELDS
+    # Einwertige Felder, bei denen ein Kriterium als Präfix trifft und nur einen Wert
+    # annimmt (gemessen: der Lizenzschlüssel, "CC_BY" zählt alle "CC_BY…").
+    prefix_fields: tuple[str, ...] = ("ccm:commonlicense_key",)
 
     @field_validator("base_url", "search_url")
     @classmethod

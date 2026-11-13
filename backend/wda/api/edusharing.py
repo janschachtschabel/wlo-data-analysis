@@ -18,7 +18,15 @@ from ..filters import FilterIn, Name, resolve_filters
 
 router = APIRouter(prefix="/instances/{instance_id}")
 
-_STATUS = {"timeout": 504, "invalid_query": 422}
+# Fehler, die an der Abfrage liegen, sind 422; alles andere liegt am Repositorium.
+_STATUS = {"timeout": 504, "invalid_query": 422, "unknown_property": 422,
+           "unknown_facet": 422, "single_value": 422}
+
+
+def status_for(exc: EduSharingError) -> int:
+    if exc.kind == "rejected" and exc.status == 400:
+        return 422  # Grund vom Repositorium verborgen, aber es lehnt die Abfrage ab
+    return _STATUS.get(exc.kind, 502)
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -26,7 +34,7 @@ def register_error_handlers(app: FastAPI) -> None:
     async def upstream_error(request: Request, exc: EduSharingError) -> JSONResponse:
         return JSONResponse(
             {"detail": exc.message, "kind": exc.kind, "upstream_status": exc.status},
-            status_code=_STATUS.get(exc.kind, 502))
+            status_code=status_for(exc))
 
     @app.exception_handler(UnresolvedValue)
     async def unresolved(request: Request, exc: UnresolvedValue) -> JSONResponse:
@@ -107,6 +115,10 @@ async def aggregate(instance_id: str, body: AggregateIn, request: Request) -> di
     client, vocab = _services(request, instance_id)
     criteria, resolved_filters = await resolve_filters(vocab, body.filters)
 
+    notes = [
+        f"'{c.property}' trifft als Filter per Wortanfang: '{c.values[0]}' zählt auch alle "
+        "Schlüssel mit, die so beginnen. Exakte Zahlen je Schlüssel stehen in der Facette."
+        for c in criteria if c.property in client.instance.prefix_fields]
     facet_props = list(dict.fromkeys(body.facets))
     for prop in facet_props:
         await vocab.check_facet(prop)
@@ -131,6 +143,7 @@ async def aggregate(instance_id: str, body: AggregateIn, request: Request) -> di
         "total": result.total,
         "facets": facets_out,
         "filters": resolved_filters,
+        "notes": notes,
         "fetched_at": result.fetched_at,
         "cached": result.cached,
     }

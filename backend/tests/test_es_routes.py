@@ -172,7 +172,12 @@ def test_facet_values_can_be_used_as_literal_filters(api, repo):
 def test_response_keys_are_closed(api):
     body = api.post("/api/instances/wlo-prod/aggregate",
                     json={"facets": ["ccm:taxonid"]}).json()
-    assert set(body) == {"instance", "total", "facets", "filters", "fetched_at", "cached"}
+    assert set(body) == {"instance", "total", "facets", "filters", "notes", "fetched_at",
+                         "cached"}
+    assert body["notes"] == []
+    noted = api.post("/api/instances/wlo-prod/aggregate", json={"filters": [
+        {"property": "ccm:commonlicense_key", "values": ["CC_BY"]}]}).json()
+    assert "Wortanfang" in noted["notes"][0]
     assert set(body["facets"][0]) == {"property", "caption", "other_count", "truncated", "values"}
     assert set(body["facets"][0]["values"][0]) == {"value", "label", "count"}
 
@@ -200,9 +205,12 @@ def test_aggregate_invalid_input(api, repo, payload, status):
 
 
 @pytest.mark.parametrize(("script", "status", "kind", "upstream"), [
-    ([error_response(400, HIDDEN)], 502, "rejected", 400),
-    ([error_response(400, "Could not find parameter ccm:x in the query ngsearch")], 502,
+    ([error_response(400, HIDDEN)], 422, "rejected", 400),
+    ([error_response(400, "Could not find parameter ccm:x in the query ngsearch")], 422,
      "unknown_property", 400),
+    ([error_response(400, "Trying to search for multiple values of a non-multivalue field")],
+     422, "single_value", 400),
+    ([httpx.Response(403, text="nein")], 502, "rejected", 403),
     ([httpx.ReadTimeout("x")], 504, "timeout", None),
     ([httpx.Response(200, json={"pagination": {"total": 1}, "facets": 5})], 502,
      "bad_response", 200),

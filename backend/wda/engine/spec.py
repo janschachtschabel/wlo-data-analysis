@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
 
 from ..filters import FilterIn, Name, ValueIn
+from .formula import FUNCTIONS
 
 MAX_SERIES = 40
 MAX_GROUPS = 300
@@ -81,4 +82,6 @@ class QuerySpec(_Model):
         ids = [s.id for s in self.series]
         if len(ids) != len(set(ids)):
             raise ValueError("Spalten-IDs müssen eindeutig sein")
+        if set(ids) & set(FUNCTIONS):
+            raise ValueError("round, max und min sind als Spalten-ID nicht erlaubt")
         return self

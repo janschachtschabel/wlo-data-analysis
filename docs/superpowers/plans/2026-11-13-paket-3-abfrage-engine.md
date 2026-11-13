@@ -44,6 +44,7 @@ Ergebnis:
 
 ## Global Constraints
 
+- Nach dem Review geändert: Ob Summen exakt sind, hängt nicht am Feldtyp des Metadatensets, sondern an `prefix_fields` der Instanz (einwertige Felder mit Präfix-Treffer, Standard: Lizenzschlüssel). Nur dort wird summiert; für alle anderen Felder sind Gruppen (`auto`), „Übrige" und „ohne Wert" eigene Zählabfragen. Ein Filter auf einem Präfix-Feld ist nur mit einem Wert erlaubt, der kein Anfang eines anderen vorkommenden Schlüssels ist. Steht das Zeilenfeld in den Grundfiltern, sind Gruppen, „Übrige" und „ohne Wert" ein Fehler. Anteile gibt es nicht für Spalten mit Formel.
 - Die Engine ruft ausschließlich `EduSharingClient.aggregate` auf; sie kann keine Datensätze sehen.
 - Zeilen ohne Gruppen und Gruppen im Modus `sum` kommen aus **einer** Facetten-Abfrage je Spalte. `sum` addiert Facettenwerte und ist nur für einwertige Felder exakt.
 - Gruppen im Modus `distinct` kosten eine Zählabfrage je Gruppe und Spalte (Werte der Gruppe als ein Kriterium, ODER). `auto` wählt `distinct`, wenn der Feldtyp im Metadatenset mit `multivalue` beginnt, sonst `sum`.

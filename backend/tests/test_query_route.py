@@ -57,7 +57,13 @@ def test_query_errors(api, repo):
     assert r.status_code == 422 and r.json()["suggestions"][0]["caption"] == "Mathematik"
     r = api.post("/api/query", json={"instance": "wlo-prod", "filters": [
         {"property": "ccm:unbekannt", "values": ["x"]}]})
-    assert r.status_code == 502 and r.json()["kind"] == "unknown_property"
+    assert r.status_code == 422 and r.json()["kind"] == "unknown_property"
+    r = api.post("/api/query", json={"instance": "wlo-prod", "filters": [
+        {"property": "ccm:commonlicense_key", "values": ["CC_BY"]}]})
+    assert r.status_code == 422 and "mitzählen" in r.json()["detail"]
+    r = api.post("/api/query", json={"instance": "wlo-prod", "series": [
+        {"id": "a", "label": "A"}, {"id": "b", "label": "B", "formula": "a * " + "9" * 400}]})
+    assert r.status_code == 200 and r.json()["columns"][1]["total"] is None
 
 
 def test_query_requires_login(settings, repo):

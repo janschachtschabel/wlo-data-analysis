@@ -20,7 +20,7 @@ from ..edusharing.client import MAX_VALUES, Aggregate, Criterion, EduSharingClie
 from ..edusharing.vocab import VocabStore
 from ..filters import FilterIn, resolve_filters, resolve_values
 from .formula import Formula, QueryError, compile_formula
-from .spec import MAX_CALLS, QuerySpec, Series
+from .spec import MAX_CALLS, MAX_SERIES, QuerySpec, Series
 
 Number = int | float
 
@@ -91,25 +91,29 @@ async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore
 async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore, run: _Run
                    ) -> dict[str, Any]:
     notes: list[str] = []
+    prefix_fields = set(client.instance.prefix_fields)
     base_list, base_described = await resolve_filters(vocab, spec.filters)
     base = tuple(base_list)
     base_props = {c.property for c in base}
     rows_spec = spec.rows
     row_prop = rows_spec.property if rows_spec else None
+    # Einwertiges Feld: Facettenwerte summieren sich exakt; ein Kriterium nimmt nur einen Wert.
+    single = row_prop in prefix_fields
 
     # ---- Zeilenplanung (ohne Aufrufe) ----------------------------------------
     mode = "facet"
     groups: list[_Row] = []
     include: list[dict[str, str]] | None = None
-    multi_valued = False
     if rows_spec:
         await vocab.check_facet(rows_spec.property)
-        row_field = await vocab.field(rows_spec.property)
-        multi_valued = bool(row_field and row_field.type.startswith("multivalue"))
         if rows_spec.groups:
             mode = rows_spec.group_mode
             if mode == "auto":
-                mode = "distinct" if multi_valued else "sum"
+                mode = "sum" if single else "distinct"
+            if mode == "distinct" and single:
+                raise QueryError(
+                    f"'{row_prop}' ist einwertig: Gruppen gehen hier nur als Summe "
+                    "(group_mode sum oder auto).")
             for pos, group in enumerate(rows_spec.groups, 1):
                 members = await resolve_values(vocab, rows_spec.property, group.values)
                 groups.append(_Row(group.id or f"g{pos}", group.label, "group",
@@ -119,40 +123,60 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         if rows_spec.include:
             include = await resolve_values(vocab, rows_spec.property, rows_spec.include)
         if row_prop in base_props:
-            if mode == "distinct" or rows_spec.missing:
+            # Die Facette ignoriert den Filter auf dem eigenen Feld.
+            if groups or rows_spec.missing or rows_spec.other:
                 raise QueryError(
                     f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern. Das geht nicht "
-                    "zusammen mit Gruppen (distinct) oder der Zeile „ohne Wert“.")
+                    "zusammen mit Gruppen, „Übrige“ oder der Zeile „ohne Wert“.")
             notes.append(
                 f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern: Die Zeilen zeigen "
                 "nur die gefilterten Werte.")
 
-    # ---- Spaltenplanung -------------------------------------------------------
-    columns = await _plan_columns(spec, vocab, run, base, base_props, row_prop, notes)
-    data_columns = [c for c in columns if not c.derived]
-    per_column = 1 + (1 if rows_spec and rows_spec.missing and multi_valued else 0) + (
-        len(groups) if mode == "distinct" else 0)
-    planned = len(data_columns) * per_column + (1 if spec.columns else 0)
+    # ---- Spaltenplanung und Grenzen (vor dem ersten Aufruf) -------------------
+    n_planned = (min(spec.columns.top, MAX_SERIES) if spec.columns and not spec.columns.include
+                 else len(spec.columns.include) if spec.columns
+                 else sum(1 for s in spec.series if s.formula is None) or 1)
+    per_column = 1
+    if rows_spec:
+        per_column += (1 if rows_spec.missing and not single else 0)
+        per_column += (1 if rows_spec.other and not single else 0)
+        per_column += (len(groups) if mode == "distinct" else 0)
+    planned = n_planned * per_column + (1 if spec.columns else 0) + len(prefix_fields)
     if planned > MAX_CALLS:
         raise QueryError(
-            f"Die Abfrage bräuchte {planned} Einzelabfragen, erlaubt sind {MAX_CALLS}. "
+            f"Die Abfrage bräuchte bis zu {planned} Einzelabfragen, erlaubt sind {MAX_CALLS}. "
             "Weniger Spalten oder Gruppen wählen.")
+    _check_prefix_shape(base, prefix_fields)
+    columns = await _plan_columns(spec, vocab, run, base, base_props, row_prop, notes)
+    data_columns = [c for c in columns if not c.derived]
+    for col in data_columns:
+        _check_prefix_shape(col.criteria, prefix_fields)
+    await _check_prefix_values(
+        run, client, [c for col in data_columns for c in col.criteria] + list(base),
+        prefix_fields, notes)
 
     # ---- Ausführung -----------------------------------------------------------
     main = await asyncio.gather(*[
         run.call(base + col.criteria, row_prop if rows_spec else None) for col in data_columns])
     facet_counts: dict[str, dict[str, int]] = {}
-    truncated = False
+    cut: set[str] = set()  # Spalten, deren Werteliste gekürzt ist
     for col, agg in zip(data_columns, main, strict=True):
         col.total = agg.total
         if rows_spec:
             facet = agg.facets[rows_spec.property]
             facet_counts[col.id] = {v.value: v.count for v in facet.values}
-            truncated = truncated or facet.truncated
-    if truncated:
+            if facet.truncated:
+                cut.add(col.id)
+    if cut:
         notes.append(
             f"Die Werteliste von '{row_prop}' wurde vom Repositorium gekürzt; "
             "seltene Werte fehlen.")
+
+    def cell(col: _Column, value: str) -> int | None:
+        fc = facet_counts[col.id]
+        if value in fc:
+            return fc[value]
+        return None if col.id in cut else 0  # gekürzt: unbekannt statt 0
 
     rows: list[_Row] = []
     if rows_spec:
@@ -168,64 +192,80 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         elif mode == "sum":
             rows = groups
             for col in data_columns:
-                fc = facet_counts[col.id]
                 for g in groups:
-                    col.cells[g.key] = sum(fc.get(m, 0) for m in set(g.members))
-            notes.append(
-                "Gruppen sind Summen der Einzelwerte. Das ist nur exakt, wenn jedes Dokument "
-                "höchstens einen Wert des Feldes trägt.")
+                    col.cells[g.key] = _sum(cell(col, m) for m in set(g.members))
+            if not single:
+                notes.append(
+                    "Gruppen sind Summen der Einzelwerte. Trägt ein Dokument mehrere Werte "
+                    "einer Gruppe, zählt es mehrfach.")
         else:
             rows = await _value_rows(rows_spec, vocab, base, include, facet_counts, data_columns)
-            for col in data_columns:
-                fc = facet_counts[col.id]
-                for row in rows:
-                    col.cells[row.key] = fc.get(row.key, 0)
+            for row in rows:
+                row.members = (row.key,)
+                for col in data_columns:
+                    col.cells[row.key] = cell(col, row.key)
 
     # ---- Formeln, Sortierung, top/other, „ohne Wert" --------------------------
     _apply_formulas(columns, [r.key for r in rows])
     rows = _sort_rows(rows, columns, rows_spec, include, bool(groups))
     if rows_spec and rows_spec.top is not None and len(rows) > rows_spec.top:
         kept, rest = rows[: rows_spec.top], rows[rows_spec.top:]
+        notes.append(f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
         if rows_spec.other:
-            if multi_valued or mode == "distinct":
-                notes.append(
-                    "„Übrige“ entfällt: Bei einem mehrwertigen Feld wäre die Summe der "
-                    "restlichen Zeilen keine Dokumentzahl.")
-            else:
-                other = _Row("__other__", "Übrige", "other")
+            # Werte, die in keiner angezeigten Zeile stecken
+            shown = {m for r in kept for m in r.members}
+            rest_values = tuple(sorted({m for r in rest for m in r.members} - shown))
+            other = _Row("__other__", "Übrige", "other")
+            if not rest_values:
                 for col in data_columns:
-                    col.cells[other.key] = sum(col.cells.get(r.key) or 0 for r in rest)
+                    col.cells[other.key] = 0
+            elif single:
+                for col in data_columns:
+                    col.cells[other.key] = _sum(cell(col, v) for v in rest_values)
+            elif len(rest_values) > MAX_VALUES:
+                other = None
+                notes.append("„Übrige“ entfällt: zu viele verschiedene Werte.")
+            else:
+                counted = await asyncio.gather(*[
+                    run.call(base + col.criteria + (Criterion(rows_spec.property, rest_values),))
+                    for col in data_columns])
+                for col, agg in zip(data_columns, counted, strict=True):
+                    col.cells[other.key] = agg.total
+                notes.append(
+                    "„Übrige“ zählt die Dokumente mit mindestens einem der nicht gezeigten "
+                    "Werte; ein Dokument kann zugleich in einer gezeigten Zeile stehen.")
+            if other is not None:
                 kept.append(other)
                 _apply_formulas(columns, [other.key])
-        notes.append(f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
         rows = kept
     if rows_spec and rows_spec.missing:
-        if truncated:
-            notes.append("„Ohne Wert“ entfällt, weil die Werteliste gekürzt ist.")
+        missing = _Row("__missing__", "ohne Wert", "missing")
+        if single:
+            # Einwertig: Die Facettenwerte summieren sich zur Zahl der Dokumente mit Wert.
+            with_value: list[int | None] = [
+                None if col.id in cut else sum(facet_counts[col.id].values())
+                for col in data_columns]
         else:
-            missing = _Row("__missing__", "ohne Wert", "missing")
-            if multi_valued:
-                with_value = await asyncio.gather(*[
-                    _count_with_any_value(run, base + col.criteria, rows_spec.property,
-                                          facet_counts[col.id])
-                    for col in data_columns])
-            else:
-                # Einwertiges Feld: Die Facettenwerte summieren sich zur Zahl der Dokumente
-                # mit Wert. (Ein Kriterium mit mehreren Werten lehnt das Repositorium ab.)
-                with_value = [sum(facet_counts[col.id].values()) for col in data_columns]
-                notes.append(
-                    "„Ohne Wert“ ist Gesamtzahl minus Summe der Einzelwerte; exakt, wenn "
-                    "jedes Dokument höchstens einen Wert des Feldes trägt.")
-            for col, counted in zip(data_columns, with_value, strict=True):
-                col.cells[missing.key] = None if counted is None else col.total - counted
-            if any(c is None for c in with_value):
-                notes.append("„Ohne Wert“ fehlt in Spalten mit zu vielen verschiedenen Werten.")
-            rows.append(missing)
-            _apply_formulas(columns, [missing.key])
+            with_value = await asyncio.gather(*[
+                _count_with_any_value(run, base + col.criteria, rows_spec.property,
+                                      facet_counts[col.id], col.id in cut)
+                for col in data_columns])
+        for col, counted in zip(data_columns, with_value, strict=True):
+            col.cells[missing.key] = (None if counted is None or col.total is None
+                                      else max(col.total - counted, 0))
+        if any(c is None for c in with_value):
+            notes.append(
+                "„Ohne Wert“ fehlt, wo die Werteliste gekürzt ist oder zu viele Werte hat.")
+        rows.append(missing)
+        _apply_formulas(columns, [missing.key])
 
     _apply_formula_totals(columns)
     if any(c.derived for c in columns):
         notes.append("Spalten mit Formel sind aus anderen Spalten berechnet, nicht gezählt.")
+    if spec.percent == "row" and len(data_columns) > 1:
+        notes.append(
+            "Zeilenanteile beziehen sich auf die Summe der gezählten Spalten. Das ist nur "
+            "sinnvoll, wenn sich die Spalten nicht überschneiden.")
 
     # ---- Ausgabe --------------------------------------------------------------
     out_rows = []
@@ -234,12 +274,13 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         entry: dict[str, Any] = {"key": row.key, "label": row.label, "kind": row.kind,
                                  "values": values}
         if spec.percent == "column":
-            entry["percent"] = [_share(v, col.total) for v, col in zip(values, columns,
-                                                                         strict=True)]
+            entry["percent"] = [None if col.derived else _share(v, col.total)
+                                for v, col in zip(values, columns, strict=True)]
         elif spec.percent == "row":
             denominator = sum(v for v, col in zip(values, columns, strict=True)
                               if v is not None and not col.derived)
-            entry["percent"] = [_share(v, denominator) for v in values]
+            entry["percent"] = [None if col.derived else _share(v, denominator)
+                                for v, col in zip(values, columns, strict=True)]
         out_rows.append(entry)
 
     fetched = [r.fetched_at for r in run.results]
@@ -259,6 +300,54 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                          "formula": c.formula.text if c.formula else None} for c in columns],
         },
     }
+
+
+def _sum(values) -> int | None:
+    total = 0
+    for value in values:
+        if value is None:
+            return None
+        total += value
+    return total
+
+
+def _check_prefix_shape(criteria, prefix_fields: set[str]) -> None:
+    for crit in criteria:
+        if crit.property in prefix_fields and len(crit.values) > 1:
+            raise QueryError(
+                f"'{crit.property}' nimmt als Filter nur einen Wert. Für mehrere Lizenzen "
+                "das Feld als Zeilen mit Gruppen verwenden oder über 'license' filtern.")
+
+
+async def _check_prefix_values(run: _Run, client: EduSharingClient, criteria,
+                               prefix_fields: set[str], notes: list[str]) -> None:
+    """Ein Kriterium auf einem Präfix-Feld zählt auch alle längeren Schlüssel mit. Erlaubt
+    sind deshalb nur Werte, die kein Anfang eines anderen vorkommenden Schlüssels sind."""
+    wanted: dict[str, set[str]] = {}
+    for crit in criteria:
+        if crit.property in prefix_fields:
+            wanted.setdefault(crit.property, set()).update(crit.values)
+    for prop, values in wanted.items():
+        if "" in values:
+            notes.append(
+                f"Der leere Wert für '{prop}' zählt alle Dokumente, bei denen das Feld "
+                "gesetzt ist.")
+            values = values - {""}
+        if not values:
+            continue
+        facet = (await run.call((), prop)).facets[prop]
+        if facet.truncated:
+            raise QueryError(
+                f"Die Werte von '{prop}' lassen sich nicht vollständig prüfen; das Feld "
+                "kann deshalb nicht als Filter dienen.")
+        keys = [v.value for v in facet.values]
+        for value in sorted(values):
+            longer = sorted(k for k in keys if k != value and k.startswith(value))
+            if longer:
+                raise QueryError(
+                    f"Der Filter '{prop}' = '{value}' würde auch {', '.join(longer[:6])} "
+                    f"mitzählen (das Repositorium vergleicht hier nur den Anfang). "
+                    f"Stattdessen '{prop}' als Zeilen verwenden oder über 'license' filtern.")
 
 
 async def _plan_columns(
@@ -404,17 +493,20 @@ def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, gro
 
 
 async def _count_with_any_value(run: _Run, criteria: tuple[Criterion, ...], prop: str,
-                                counts: dict[str, int]) -> int | None:
+                                counts: dict[str, int], truncated: bool) -> int | None:
     """Zahl der Dokumente mit mindestens einem Wert im Feld; ``None``, wenn nicht bestimmbar."""
     values = tuple(counts)
+    if truncated or len(values) > MAX_VALUES:
+        return None
     if not values:
         return 0
-    if len(values) > MAX_VALUES:
-        return None
     return (await run.call(criteria + (Criterion(prop, values),))).total
 
 
 def _share(value: Number | None, total: Number | None) -> float | None:
     if value is None or not total:
         return None
-    return round(value / total * 100, 2)
+    try:
+        return round(value / total * 100, 2)
+    except (OverflowError, ValueError):
+        return None

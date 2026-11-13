@@ -12,7 +12,8 @@ from dataclasses import dataclass
 
 MAX_LENGTH = 500
 MAX_NODES = 200
-_FUNCTIONS = {"round": (1, 2), "max": (1, 8), "min": (1, 8)}
+MAX_MAGNITUDE = 1e15  # darüber ist ein Ergebnis keine sinnvolle Kennzahl mehr
+FUNCTIONS = {"round": (1, 2), "max": (1, 8), "min": (1, 8)}
 Number = int | float
 
 
@@ -27,8 +28,11 @@ class Formula:
     _tree: ast.expr
 
     def evaluate(self, values: Mapping[str, Number | None]) -> Number | None:
-        result = _eval(self._tree, values)
-        if result is None or isinstance(result, bool):
+        try:
+            result = _eval(self._tree, values)
+        except (OverflowError, ValueError, ZeroDivisionError):
+            return None
+        if result is None or isinstance(result, bool) or abs(result) > MAX_MAGNITUDE:
             return None
         if isinstance(result, float):
             if not math.isfinite(result):
@@ -72,14 +76,14 @@ def _check(node: ast.AST, names: set[str], text: str) -> None:
         if isinstance(node.value, bool) or not isinstance(node.value, int | float):
             raise bad
     elif isinstance(node, ast.Name):
-        if node.id in _FUNCTIONS:
+        if node.id in FUNCTIONS:
             raise bad
         names.add(node.id)
     elif isinstance(node, ast.Call):
-        if (not isinstance(node.func, ast.Name) or node.func.id not in _FUNCTIONS
+        if (not isinstance(node.func, ast.Name) or node.func.id not in FUNCTIONS
                 or node.keywords):
             raise bad
-        low, high = _FUNCTIONS[node.func.id]
+        low, high = FUNCTIONS[node.func.id]
         if not low <= len(node.args) <= high:
             raise QueryError(
                 f"Die Funktion {node.func.id} in '{text}' hat die falsche Zahl an Argumenten.")
