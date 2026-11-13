@@ -132,5 +132,6 @@ def test_list_install_run_and_export(api):
     assert total[30:] == [None] * 12  # Handeinträge noch leer
     assert "400" not in report["blocks"][0]["markdown"] and "UTC" in report["blocks"][0][
         "markdown"]
-    for fmt in ("csv", "md", "html", "pdf"):
+    from wda.report.formats import pdf_available
+    for fmt in ("csv", "md", "html") + (("pdf",) if pdf_available() else ()):
         assert api.get(f"/api/runs/{run['id']}/export?format={fmt}").status_code == 200

@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from wda.api.export import file_name
 from wda.main import create_app
+from wda.report.formats import pdf_available
 
 from .conftest import ADMIN_PASSWORD
 from .esdata import DataRepo
@@ -32,6 +33,10 @@ def test_export_in_every_format(api):
     run = api.post(f"/api/definitions/{m['id']}/run").json()
     expected = {"json": "application/json", "csv": "text/csv", "md": "text/markdown",
                 "html": "text/html", "pdf": "application/pdf"}
+    if not pdf_available():
+        del expected["pdf"]
+        r = api.get(f"/api/runs/{run['id']}/export", params={"format": "pdf"})
+        assert r.status_code == 503 and "Pango" in r.json()["detail"]
     for fmt, media in expected.items():
         r = api.get(f"/api/runs/{run['id']}/export", params={"format": fmt})
         assert r.status_code == 200, r.text
@@ -47,7 +52,9 @@ def test_export_in_every_format(api):
     assert data["blocks"][0]["rows"][-1] == {
         "key": "__total__", "label": "Gesamt", "kind": "total", "values": [400], "level": 0,
         "percent": None}
-    assert api.get(f"/api/runs/{run['id']}/export?format=pdf").content.startswith(b"%PDF")
+    if pdf_available():
+        pdf = api.get(f"/api/runs/{run['id']}/export?format=pdf").content
+        assert pdf.startswith(b"%PDF")
     inline = api.get(f"/api/runs/{run['id']}/export", params={"download": "false"})
     assert inline.headers["content-disposition"].startswith("inline")
 

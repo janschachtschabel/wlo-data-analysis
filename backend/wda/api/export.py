@@ -11,10 +11,10 @@ import unicodedata
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from ..report.build import build_report
-from ..report.formats import FORMATS, render
+from ..report.formats import FORMATS, PdfUnavailable, render
 
 router = APIRouter()
 
@@ -34,7 +34,13 @@ async def export_run(
 ) -> Response:
     run = await request.app.state.services.runner.get_run(run_id)
     report = build_report(run)
-    body = await asyncio.to_thread(render, report, format)  # PDF-Satz braucht Rechenzeit
+    try:
+        body = await asyncio.to_thread(render, report, format)  # PDF-Satz braucht Rechenzeit
+    except PdfUnavailable:
+        raise HTTPException(
+            503, "Der PDF-Export braucht die Bibliothek Pango, die auf diesem System fehlt. "
+                 "Im Docker-Image ist sie enthalten; HTML lässt sich im Browser als PDF "
+                 "drucken.") from None
     media_type, extension = FORMATS[format]
     name = file_name(report.title, report.started_at, extension)
     headers = {

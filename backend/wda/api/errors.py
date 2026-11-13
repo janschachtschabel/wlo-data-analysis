@@ -13,7 +13,7 @@ from ..store.definitions import Conflict, NotFound
 from ..store.specs import InvalidDefinition
 
 _HTTP_KINDS = {401: "unauthenticated", 404: "not_found", 405: "method_not_allowed",
-               409: "conflict", 413: "too_large", 429: "throttled"}
+               409: "conflict", 413: "too_large", 429: "throttled", 503: "unavailable"}
 
 
 def register_error_handlers(app: FastAPI) -> None:

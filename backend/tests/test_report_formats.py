@@ -6,7 +6,15 @@ import pytest
 
 from wda.report.build import build_report
 from wda.report.charts import chart_for
-from wda.report.formats import render, to_csv, to_html, to_json, to_markdown, to_pdf
+from wda.report.formats import (
+    pdf_available,
+    render,
+    to_csv,
+    to_html,
+    to_json,
+    to_markdown,
+    to_pdf,
+)
 from wda.report.model import Column, Failure, Report, Row, Table, Text
 from wda.report.text import markdown_to_html
 
@@ -135,11 +143,16 @@ def test_charts_with_nothing_to_draw():
         assert chart_for(empty) is None
 
 
+needs_pdf = pytest.mark.skipif(not pdf_available(), reason="Pango fehlt auf diesem System")
+
+
+@needs_pdf
 def test_pdf_from_the_same_html():
     pdf = to_pdf(sample("bar"))
     assert pdf.startswith(b"%PDF") and len(pdf) > 3000
 
 
+@needs_pdf
 def test_pdf_renderer_never_fetches(monkeypatch):
     import wda.report.formats as formats
     real = formats.to_html
@@ -161,7 +174,8 @@ def test_real_run_in_all_formats(tmp_path):
          "query": {"instance": "a", "rows": {"property": "ccm:commonlicense_key"}}}))
     report = build_report(world.go(world.runner.get_run(run["id"])))
     world.services.db.close()
-    outputs = {fmt: render(report, fmt) for fmt in ("json", "csv", "md", "html", "pdf")}
+    formats = ("json", "csv", "md", "html") + (("pdf",) if pdf_available() else ())
+    outputs = {fmt: render(report, fmt) for fmt in formats}
     assert all(outputs.values())
     html = outputs["html"].decode()
     assert "Sekundarstufe I" in html and "<svg" in html and "Hochschule: " in html

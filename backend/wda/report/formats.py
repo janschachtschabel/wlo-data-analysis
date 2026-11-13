@@ -278,9 +278,24 @@ def to_html(report: Report) -> bytes:
     return html.encode("utf-8")
 
 
+class PdfUnavailable(Exception):
+    """Dem System fehlen die Bibliotheken für den PDF-Satz (im Docker-Image sind sie da)."""
+
+
+def pdf_available() -> bool:
+    try:
+        import weasyprint  # noqa: F401
+    except (ImportError, OSError):
+        return False
+    return True
+
+
 def to_pdf(report: Report) -> bytes:
-    from weasyprint import HTML  # erst hier: der Import ist schwer
-    from weasyprint.urls import URLFetcher, URLFetchingError
+    try:
+        from weasyprint import HTML  # erst hier: der Import ist schwer
+        from weasyprint.urls import URLFetcher, URLFetchingError
+    except (ImportError, OSError):
+        raise PdfUnavailable from None
 
     class NoFetch(URLFetcher):
         """Der Bericht ist in sich vollständig; nichts wird aus Netz oder Dateien geladen."""
