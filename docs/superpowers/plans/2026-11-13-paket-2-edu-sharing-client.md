@@ -17,6 +17,8 @@
 - Zwei Kriterien mit derselben Property sind ein Fehler vor dem Absenden (das Repositorium nähme still das letzte).
 - Ein nicht auflösbarer Filterwert bricht die Abfrage mit Vorschlägen ab; nichts wird still weggelassen.
 - Fehler des Repositoriums erreichen die Oberfläche als deutsche Meldung mit Art und Status, nie mit Stacktrace.
+- Facetten nur auf Feldern mit Werteliste oder aus `facet_fields` der Instanz; `facet_limit` höchstens 5000 (ergänzt nach dem Review: sonst wird eine Facette über Titel oder URL zur Datensatzliste).
+- Timeouts werden nicht wiederholt.
 - Standardwerte: `facetLimit` 2000, Cache-TTL 900 s (`WDA_CACHE_TTL`), Metadatenset-TTL 86.400 s, Timeout 90 s, höchstens 4 gleichzeitige Abfragen je Instanz, 2 Wiederholungen bei 502/503/504 und Verbindungsfehlern.
 - Zugangsdaten einer Instanz gehen nur als Basic-Auth an deren eigene Basis-URL.
 

@@ -34,7 +34,11 @@ class TTLCache:
         loader: Callable[[], Awaitable[Any]],
         refresh: bool = False,
     ) -> tuple[Any, bool]:
-        """Liefert ``(wert, aus_cache)``. Fehler des Laders werden nicht gecacht."""
+        """Liefert ``(wert, aus_cache)``. Fehler des Laders werden nicht gecacht.
+
+        Läuft für den Schlüssel bereits ein Ladevorgang, wird dessen Ergebnis geliefert,
+        auch bei ``refresh=True``: Es ist höchstens wenige Sekunden alt.
+        """
         if not refresh:
             entry = self._entries.get(key)
             if entry is not None:
@@ -52,7 +56,11 @@ class TTLCache:
     async def _load(self, key: Hashable, loader: Callable[[], Awaitable[Any]]) -> Any:
         value = await loader()
         if self._ttl > 0:
-            self._entries[key] = (self._clock() + self._ttl, value)
+            now = self._clock()
+            if len(self._entries) >= self._max_entries // 2:
+                for stale in [k for k, (expires, _) in self._entries.items() if expires <= now]:
+                    del self._entries[stale]
+            self._entries[key] = (now + self._ttl, value)
             self._entries.move_to_end(key)
             while len(self._entries) > self._max_entries:
                 self._entries.popitem(last=False)

@@ -24,6 +24,21 @@ def test_config_error_does_not_echo_url_secrets():
     assert "topsecret" not in str(info.value)
 
 
+def test_credentials_over_http_only_locally():
+    inst = Instance(id="l", name="L", base_url="http://localhost:8080", username="u", password="p")
+    assert inst.public()["has_credentials"] is True
+    assert Instance(id="o", name="O", base_url="http://offen.example").base_url
+
+
+def test_facet_fields_default_and_override():
+    assert "ccm:commonlicense_key" in Instance(
+        id="a", name="A", base_url="https://a.example").facet_fields
+    custom = Instance(id="a", name="A", base_url="https://a.example",
+                      facet_fields=["cclom:general_keyword"])
+    assert custom.facet_fields == ("cclom:general_keyword",)
+    assert list(custom.public()["facet_fields"]) == ["cclom:general_keyword"]
+
+
 def test_unknown_instance():
     with pytest.raises(KeyError):
         InstanceRegistry(None).get("gibt-es-nicht")
@@ -60,6 +75,8 @@ def test_extra_instance_and_override():
     json.dumps([{"id": "Groß Schreibung", "name": "A", "base_url": "https://a.example"}]),
     json.dumps([{"id": "a", "name": "A", "base_url": "https://"}]),
     json.dumps([{"id": "a", "name": "A"}]),
+    json.dumps([{"id": "a", "name": "A", "base_url": "http://a.example",
+                 "username": "u", "password": "p"}]),
     json.dumps([{"id": "a", "name": "A", "base_url": "https://user:topsecret@a.example"}]),
     json.dumps([{"id": "a", "name": "A", "base_url": "https://a.example/?token=abc"}]),
     json.dumps([{"id": "a", "name": "A", "base_url": "https://a.example",

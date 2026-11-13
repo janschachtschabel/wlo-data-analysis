@@ -89,7 +89,9 @@ def test_nodes_are_dropped():
     [Criterion("ccm:taxonid", ("a",)), Criterion("ccm:taxonid", ("b",))],
     [Criterion("ccm:taxonid", ())],
     [Criterion("", ("a",))],
-    [Criterion("ccm:taxonid", ("a", ""))],
+    [Criterion(" ccm:taxonid", ("a",))],
+    [Criterion("ccm:taxonid", ("a" * 2001,))],
+    [Criterion("ccm:taxonid", tuple(str(i) for i in range(5001)))],
 ])
 def test_invalid_query_never_sent(criteria):
     repo = FakeRepo()
@@ -100,8 +102,8 @@ def test_invalid_query_never_sent(criteria):
 
 
 @pytest.mark.parametrize("kwargs", [
-    {"facet_limit": 0}, {"facet_limit": 100001}, {"content_type": "ALLES"},
-    {"facets": [""]},
+    {"facet_limit": 0}, {"facet_limit": 5001}, {"content_type": "ALLES"},
+    {"facets": [""]}, {"facets": ["ccm:taxonid "]}, {"facets": ["a b"]},
 ])
 def test_invalid_parameters_never_sent(kwargs):
     repo = FakeRepo()
@@ -111,11 +113,15 @@ def test_invalid_parameters_never_sent(kwargs):
     assert repo.requests == []
 
 
-def test_empty_string_value_allowed_for_single_criterion():
-    """``ccm:commonlicense_key = ""`` zählt alle Dokumente mit gesetztem Schlüssel."""
+def test_empty_string_value_is_a_value():
+    """``ccm:commonlicense_key = ""`` zählt alle Dokumente mit gesetztem Schlüssel; in
+    Wertelisten kommt der leere Wert als Facettenwert vor und muss filterbar sein."""
     repo = FakeRepo()
-    run(make(repo).aggregate([Criterion("ccm:commonlicense_key", ("",))]))
+    client = make(repo)
+    run(client.aggregate([Criterion("ccm:commonlicense_key", ("",))]))
+    run(client.aggregate([Criterion("ccm:educationalcontext", ("political", ""))]))
     assert repo.bodies()[0]["criteria"] == [{"property": "ccm:commonlicense_key", "values": [""]}]
+    assert repo.bodies()[1]["criteria"][0]["values"] == ["", "political"]
 
 
 @pytest.mark.parametrize(("message", "kind"), [
@@ -144,6 +150,18 @@ def test_400_classification(message, kind):
     (httpx.Response(200, json={"pagination": {"total": 5},
                                "facets": [{"property": "x", "values": [{"value": "a"}]}]}),
      "bad_response"),
+    (httpx.Response(200, json={"pagination": {"total": 5}, "facets": 5}), "bad_response"),
+    (httpx.Response(200, json={"pagination": {"total": 5},
+                               "facets": [{"property": "x", "values": 5}]}), "bad_response"),
+    (httpx.Response(200, json={"pagination": {"total": -5}}), "bad_response"),
+    (httpx.Response(200, json={"pagination": {"total": 5},
+                               "facets": [{"property": "x", "values": [
+                                   {"value": "a", "count": -1}]}]}), "bad_response"),
+    (httpx.Response(200, json={"pagination": {"total": 5},
+                               "facets": [{"property": "x", "values": [],
+                                           "sumOtherDocCount": "viele"}]}), "bad_response"),
+    (httpx.Response(302, json={"pagination": {"total": 5}},
+                    headers={"location": "https://boese.example/"}), "bad_response"),
     (httpx.Response(401, json={"error": "x"}), "rejected"),
     (httpx.Response(403, text="nein"), "rejected"),
     (error_response(500, "all shards failed", "DAOException"), "unavailable"),
@@ -181,6 +199,7 @@ def test_timeout_and_connect_error():
     with pytest.raises(EduSharingError) as info:
         run(make(repo).aggregate([]))
     assert info.value.kind == "timeout"
+    assert len(repo.requests) == 1  # Timeouts werden nicht wiederholt
     repo2 = FakeRepo()
     repo2.script = [httpx.ConnectError("kein Netz")] * 3
     with pytest.raises(EduSharingError) as info2:
@@ -265,6 +284,25 @@ def test_custom_repository_metadataset_query_are_url_encoded():
     assert agg.total == 7
     assert repo.requests[0].url.raw_path.decode().split("?")[0] == (
         "/unter/edu-sharing/rest/search/v1/queries/mein%20repo/mds%2Fx/q%3F1")
+
+
+def test_aggregate_shape_is_closed():
+    """Das Ergebnis hat genau diese Felder; für Datensätze gibt es keinen Platz."""
+    import dataclasses
+
+    from wda.edusharing.client import Aggregate, Facet, FacetValue
+
+    assert [f.name for f in dataclasses.fields(Aggregate)] == [
+        "total", "facets", "fetched_at", "cached"]
+    assert [f.name for f in dataclasses.fields(Facet)] == ["property", "values", "other_count"]
+    assert [f.name for f in dataclasses.fields(FacetValue)] == ["value", "count"]
+
+
+def test_about_only_passes_known_keys():
+    repo = FakeRepo()
+    repo.script = [httpx.Response(200, json={"version": {
+        "repository": "11.0", "major": 1, "intern": "geheim", "flag": True, "x": {"a": 1}}})]
+    assert run(make(repo).about()) == {"repository": "11.0", "major": 1}
 
 
 def test_about_and_metadataset():

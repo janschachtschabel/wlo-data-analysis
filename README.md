@@ -50,7 +50,12 @@ Vorbelegte Instanzen: `wlo-prod` (`https://redaktion.openeduhub.net`) und `wlo-s
 (`https://repository.staging.openeduhub.net`). Ein Eintrag in `WDA_INSTANCES` mit
 derselben `id` überschreibt die Vorbelegung. Felder je Instanz: `id`, `name`, `base_url`,
 optional `repository` (`-home-`), `metadataset` (`mds_oeh`), `query` (`ngsearch`),
-`search_url`, `username`, `password`.
+`search_url`, `username`, `password` (nur mit `https`) und `facet_fields`.
+
+Facetten sind nur auf Feldern erlaubt, die im Metadatenset eine Werteliste haben, sowie
+auf den in `facet_fields` freigegebenen Feldern (Standard: Lizenzschlüssel, Quelle,
+Bezugsquelle, Sprache). Eine Facette über Titel oder URL wäre eine Liste einzelner
+Datensätze und wird abgelehnt.
 
 ## Schnittstelle
 
@@ -78,7 +83,8 @@ Beispiel für eine Aggregat-Abfrage (offene Lizenzen in der Sekundarstufe I nach
 Die Antwort nennt die Gesamtzahl, je Facette die Werte mit Label und Zählung, wie jeder
 Filterwert aufgelöst wurde, den Abrufzeitpunkt und ob sie aus dem Cache stammt. Ein
 Filterwert, der zu keinem oder zu mehreren Vokabular-Einträgen passt, bricht die Abfrage
-mit Vorschlägen ab. Die Abfragen fordern beim Repositorium nie Datensätze an
+mit Vorschlägen ab. Ein Wert, den das Vokabular nicht kennt (etwa ein Facettenwert ohne
+URI), lässt sich als `{"value": "…", "literal": true}` unverändert übergeben. Die Abfragen fordern beim Repositorium nie Datensätze an
 (`maxItems=0`). Das gemessene Verhalten der edu-sharing-Suche steht in
 [`docs/edu-sharing-api-erkenntnisse.md`](docs/edu-sharing-api-erkenntnisse.md).
 

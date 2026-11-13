@@ -22,7 +22,10 @@ from ..instances import Instance
 from .errors import EduSharingError
 
 CONTENT_TYPES = frozenset({"FILES", "FOLDERS", "FILES_AND_FOLDERS", "COLLECTIONS", "ALL"})
-MAX_FACET_LIMIT = 100_000
+# Das Repositorium liefert bis zu 5 × facetLimit Werte. 5000 reicht für jedes Vokabular
+# und jede Quellenliste, verhindert aber, dass eine Facette zur Datensatzliste wird.
+MAX_FACET_LIMIT = 5000
+_ABOUT_KEYS = ("repository", "renderservice", "major", "minor")
 _RETRY_STATUS = frozenset({502, 503, 504})
 _NAME = r"([\w:.\-]{1,120})"
 
@@ -59,8 +62,21 @@ class Aggregate:
     cached: bool = False
 
 
+MAX_VALUE_LENGTH = 2000
+MAX_VALUES = 5000
+
+
 def _is_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_count(value: Any) -> bool:
+    return _is_int(value) and value >= 0
+
+
+def _valid_name(name: Any) -> bool:
+    return (isinstance(name, str) and 0 < len(name) <= 200
+            and not any(ch.isspace() for ch in name))
 
 
 class EduSharingClient:
@@ -97,7 +113,8 @@ class EduSharingClient:
         version = data.get("version") if isinstance(data, dict) else None
         if not isinstance(version, dict):
             raise EduSharingError("bad_response", "Die Instanz nennt keine Version.", 200)
-        return {k: v for k, v in version.items() if isinstance(v, str | int | float)}
+        return {k: version[k] for k in _ABOUT_KEYS
+                if isinstance(version.get(k), str | int) and not isinstance(version.get(k), bool)}
 
     async def metadataset(self) -> dict[str, Any]:
         inst = self.instance
@@ -140,8 +157,9 @@ class EduSharingClient:
     def _normalize_criteria(criteria: Iterable[Criterion]) -> tuple[Criterion, ...]:
         seen: dict[str, Criterion] = {}
         for crit in criteria:
-            if not isinstance(crit.property, str) or not crit.property.strip():
-                raise EduSharingError("invalid_query", "Ein Filter hat kein Feld.")
+            if not _valid_name(crit.property):
+                raise EduSharingError(
+                    "invalid_query", "Ein Filter hat kein gültiges Feld (leer oder mit Leerraum).")
             if crit.property in seen:
                 # Das Repositorium nähme still nur das letzte Kriterium.
                 raise EduSharingError(
@@ -152,18 +170,19 @@ class EduSharingClient:
             if not values or any(not isinstance(v, str) for v in values):
                 raise EduSharingError(
                     "invalid_query", f"Der Filter auf '{crit.property}' hat keine Werte.")
-            if "" in values and len(values) > 1:
+            if any(len(v) > MAX_VALUE_LENGTH for v in values) or len(values) > MAX_VALUES:
                 raise EduSharingError(
-                    "invalid_query",
-                    f"Der Filter auf '{crit.property}' enthält einen leeren Wert.")
+                    "invalid_query", f"Der Filter auf '{crit.property}' ist zu groß.")
             seen[crit.property] = Criterion(crit.property, values)
         return tuple(seen[p] for p in sorted(seen))
 
     @staticmethod
     def _normalize_facets(facets: Sequence[str]) -> tuple[str, ...]:
         for facet in facets:
-            if not isinstance(facet, str) or not facet.strip():
-                raise EduSharingError("invalid_query", "Eine Facette hat kein Feld.")
+            if not _valid_name(facet):
+                raise EduSharingError(
+                    "invalid_query",
+                    "Eine Facette hat kein gültiges Feld (leer oder mit Leerraum).")
         return tuple(sorted(set(facets)))
 
     async def _search(
@@ -193,20 +212,32 @@ class EduSharingClient:
         if not isinstance(data, dict):
             raise bad
         pagination = data.get("pagination")
-        if not isinstance(pagination, dict) or not _is_int(pagination.get("total")):
+        if not isinstance(pagination, dict) or not _is_count(pagination.get("total")):
+            raise bad
+        raw_facets = data.get("facets")
+        if raw_facets is None:
+            raw_facets = []
+        if not isinstance(raw_facets, list):
             raise bad
         facets: dict[str, Facet] = {}
-        for raw in data.get("facets") or []:
+        for raw in raw_facets:
             if not isinstance(raw, dict) or not isinstance(raw.get("property"), str):
                 raise bad
+            raw_values = raw.get("values")
+            if raw_values is None:
+                raw_values = []
+            if not isinstance(raw_values, list):
+                raise bad
             values = []
-            for item in raw.get("values") or []:
+            for item in raw_values:
                 if (not isinstance(item, dict) or not isinstance(item.get("value"), str)
-                        or not _is_int(item.get("count"))):
+                        or not _is_count(item.get("count"))):
                     raise bad
                 values.append(FacetValue(item["value"], item["count"]))
-            other = raw.get("sumOtherDocCount") or 0
-            if not _is_int(other):
+            other = raw.get("sumOtherDocCount")
+            if other is None:
+                other = 0
+            if not _is_count(other):
                 raise bad
             facets[raw["property"]] = Facet(raw["property"], tuple(values), other)
         # Nur die angefragten Facetten weitergeben; ``nodes`` und alles Übrige wird verworfen.
@@ -227,9 +258,10 @@ class EduSharingClient:
                         method, url, auth=self._auth, timeout=self._timeout,
                         headers={"Accept": "application/json"}, **kwargs)
             except httpx.TimeoutException:
-                last = EduSharingError(
-                    "timeout", f"{self.instance.name} hat nicht rechtzeitig geantwortet.")
-                continue
+                # Nicht wiederholen: Ein zweiter Versuch würde nur noch einmal so lange warten.
+                raise EduSharingError(
+                    "timeout",
+                    f"{self.instance.name} hat nicht rechtzeitig geantwortet.") from None
             except httpx.HTTPError:
                 # Text der Ausnahme bewusst nicht übernehmen (kann URL mit Zugangsdaten enthalten)
                 last = EduSharingError(
@@ -240,6 +272,12 @@ class EduSharingClient:
                 continue
             if response.status_code >= 400:
                 raise self._http_error(response)
+            if not 200 <= response.status_code < 300:
+                # Weiterleitungen werden nicht verfolgt (Zugangsdaten bleiben beim Host).
+                raise EduSharingError(
+                    "bad_response",
+                    f"{self.instance.name} hat unerwartet mit Status "
+                    f"{response.status_code} geantwortet.", response.status_code)
             try:
                 return response.json()
             except ValueError:

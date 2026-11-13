@@ -99,6 +99,23 @@ def test_max_entries_evicts_oldest():
     run(scenario())
 
 
+def test_expired_entries_are_swept():
+    clock = Clock()
+    cache = TTLCache(ttl=10, max_entries=4, clock=clock)
+
+    async def scenario():
+        async def loader():
+            return 1
+
+        await cache.get_or_load("a", loader)
+        await cache.get_or_load("b", loader)
+        clock.now += 11
+        await cache.get_or_load("c", loader)
+        assert len(cache) == 1
+
+    run(scenario())
+
+
 def test_ttl_zero_disables_caching():
     cache = TTLCache(ttl=0)
     calls = []

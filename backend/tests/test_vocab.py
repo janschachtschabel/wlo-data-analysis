@@ -192,6 +192,64 @@ def test_unwritable_data_dir_still_works(tmp_path):
     assert "ccm:taxonid" in run(make(repo, blocker).fields())
 
 
+def test_empty_metadataset_keeps_good_copy(tmp_path):
+    clock = Clock()
+    run(make(FakeRepo(), tmp_path, clock, ttl=100).fields())
+    clock.now += 101
+    repo = FakeRepo()
+    repo.mds_error = httpx.Response(200, json={"widgets": []})
+    store = make(repo, tmp_path, clock, ttl=100)
+
+    async def scenario():
+        assert "ccm:taxonid" in await store.fields()
+        resolved = await store.resolve("ccm:taxonid", "Mathematik")
+        assert resolved.how == "label"
+
+    run(scenario())
+    assert store.stale is True
+    stored = json.loads((tmp_path / "cache" / "mds-t.json").read_text(encoding="utf-8"))
+    assert len(stored["fields"]) == 4
+
+
+def test_failure_is_remembered_briefly(tmp_path):
+    repo = FakeRepo()
+    repo.mds_error = httpx.Response(503, text="x")
+    clock = Clock()
+    store = make(repo, tmp_path, clock)
+
+    async def scenario():
+        results = await asyncio.gather(*[store.fields() for _ in range(10)],
+                                       return_exceptions=True)
+        assert all(isinstance(r, EduSharingError) for r in results)
+        assert len(mds_calls(repo)) == 3  # ein Ladeversuch mit zwei Wiederholungen
+        clock.now += 31
+        repo.mds_error = None
+        assert "ccm:taxonid" in await store.fields()
+
+    run(scenario())
+
+
+def test_literal_and_facet_rules(tmp_path):
+    store = make(FakeRepo(), tmp_path)
+
+    async def scenario():
+        r = await store.resolve("ccm:educationalcontext", "political", literal=True)
+        assert (r.value, r.label, r.how) == ("political", "political", "literal")
+        r = await store.resolve("ccm:taxonid", DISC + "380", literal=True)
+        assert (r.value, r.label, r.how) == (DISC + "380", "Mathematik", "literal")
+        r = await store.resolve("ccm:commonlicense_key", "  CC_BY ")
+        assert r.value == "CC_BY"
+        await store.check_facet("ccm:taxonid")            # hat eine Werteliste
+        await store.check_facet("ccm:commonlicense_key")  # für die Instanz freigegeben
+        await store.check_facet("ccm:replicationsource")  # freigegeben, nicht im Metadatenset
+        for prop in ("cclom:title", "ccm:wwwurl", "sys:node-uuid"):
+            with pytest.raises(EduSharingError) as info:
+                await store.check_facet(prop)
+            assert info.value.kind == "invalid_query"
+
+    run(scenario())
+
+
 def test_malformed_metadataset(tmp_path):
     repo = FakeRepo()
     repo.mds_error = httpx.Response(200, json={"widgets": "keine liste"})

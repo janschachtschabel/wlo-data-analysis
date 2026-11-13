@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = None
     llm_model: str = "gpt-6-luna"
     cache_ttl: float = Field(default=900.0, ge=0)
-    vocab_ttl: float = Field(default=86400.0, ge=0)
+    vocab_ttl: float = Field(default=86400.0, ge=60)
     upstream_timeout: float = Field(default=90.0, gt=0)
     upstream_concurrency: int = Field(default=4, ge=1, le=32)
 

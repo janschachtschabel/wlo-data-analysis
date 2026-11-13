@@ -6,9 +6,24 @@ import json
 from typing import Any
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, SecretStr, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .config import ConfigError
+
+DEFAULT_FACET_FIELDS: tuple[str, ...] = (
+    "ccm:commonlicense_key",
+    "ccm:replicationsource",
+    "ccm:oeh_publisher_combined",
+    "cclom:general_language",
+)
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 class Instance(BaseModel):
@@ -21,6 +36,9 @@ class Instance(BaseModel):
     search_url: str | None = None
     username: str | None = None
     password: SecretStr | None = None
+    # Felder ohne Werteliste im Metadatenset, die trotzdem als Facette erlaubt sind.
+    # Alles andere ohne Werteliste (Titel, URL, …) wäre eine Datensatzliste.
+    facet_fields: tuple[str, ...] = DEFAULT_FACET_FIELDS
 
     @field_validator("base_url", "search_url")
     @classmethod
@@ -35,6 +53,14 @@ class Instance(BaseModel):
         if parts.query or parts.fragment:
             raise ValueError("darf weder Abfrage-Teil noch Fragment enthalten")
         return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def _credentials_need_https(self) -> Instance:
+        parts = urlsplit(self.base_url)
+        if (self.username or self.password) and parts.scheme != "https" \
+                and parts.hostname not in _LOCAL_HOSTS:
+            raise ValueError("Zugangsdaten sind nur mit einer https-URL erlaubt")
+        return self
 
     @property
     def rest_url(self) -> str:

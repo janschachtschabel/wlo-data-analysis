@@ -141,7 +141,49 @@ def test_aggregate_duplicate_values_after_resolution_are_merged(api, repo):
     assert len(r.json()["filters"][0]["values"]) == 1
 
 
+def test_facets_on_record_fields_are_refused(api, repo):
+    """Eine Facette über Titel oder URL wäre eine Datensatzliste."""
+    for prop in ("cclom:title", "ccm:wwwurl", "sys:node-uuid"):
+        r = api.post("/api/instances/wlo-prod/aggregate",
+                     json={"facets": ["ccm:taxonid", prop]})
+        assert r.status_code == 422, prop
+        assert r.json()["kind"] == "invalid_query"
+    assert repo.searches == []
+    ok = api.post("/api/instances/wlo-prod/aggregate",
+                  json={"facets": ["ccm:commonlicense_key", "ccm:replicationsource"]})
+    assert ok.status_code == 200
+
+
+def test_facet_values_can_be_used_as_literal_filters(api, repo):
+    r = api.post("/api/instances/wlo-prod/aggregate", json={"filters": [
+        {"property": "ccm:educationalcontext",
+         "values": ["Sekundarstufe I", {"value": "political", "literal": True},
+                    {"value": "", "literal": True}]},
+        {"property": "ccm:commonlicense_key", "values": ["CUSTOM", "CC_BY_SA", ""]}]})
+    assert r.status_code == 200, r.text
+    assert repo.bodies()[0]["criteria"] == [
+        {"property": "ccm:commonlicense_key", "values": ["", "CC_BY_SA", "CUSTOM"]},
+        {"property": "ccm:educationalcontext",
+         "values": ["", EC + "sekundarstufe_1", "political"]}]
+    hows = [v["how"] for v in r.json()["filters"][0]["values"]]
+    assert hows == ["label", "literal", "literal"]
+
+
+def test_response_keys_are_closed(api):
+    body = api.post("/api/instances/wlo-prod/aggregate",
+                    json={"facets": ["ccm:taxonid"]}).json()
+    assert set(body) == {"instance", "total", "facets", "filters", "fetched_at", "cached"}
+    assert set(body["facets"][0]) == {"property", "caption", "other_count", "truncated", "values"}
+    assert set(body["facets"][0]["values"][0]) == {"value", "label", "count"}
+
+
 @pytest.mark.parametrize(("payload", "status"), [
+    ({"filters": [{"property": "ccm:taxonid", "values": ["Physik"]},
+                  {"property": " ccm:taxonid", "values": ["Mathematik"]}]}, 422),
+    ({"facets": ["ccm:taxonid "]}, 422),
+    ({"facet_limit": 5001}, 422),
+    ({"filters": [{"property": "ccm:x", "values": ["a" * 2001]}]}, 422),
+    ({"filters": [{"property": "ccm:x", "values": [{"value": "a", "literal": False}]}]}, 422),
     ({"filters": [{"property": "ccm:taxonid", "values": []}]}, 422),
     ({"filters": [{"property": "ccm:taxonid", "values": ["Physik"]},
                   {"property": "ccm:taxonid", "values": ["Mathematik"]}]}, 422),
@@ -161,7 +203,9 @@ def test_aggregate_invalid_input(api, repo, payload, status):
     ([error_response(400, HIDDEN)], 502, "rejected", 400),
     ([error_response(400, "Could not find parameter ccm:x in the query ngsearch")], 502,
      "unknown_property", 400),
-    ([httpx.ReadTimeout("x")] * 3, 504, "timeout", None),
+    ([httpx.ReadTimeout("x")], 504, "timeout", None),
+    ([httpx.Response(200, json={"pagination": {"total": 1}, "facets": 5})], 502,
+     "bad_response", 200),
     ([httpx.Response(200, text="<html>")], 502, "bad_response", 200),
     ([error_response(500, "all shards failed")], 502, "unavailable", 500),
 ])

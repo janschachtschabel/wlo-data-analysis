@@ -5,13 +5,18 @@ Keine dieser Routen kann Datensätze liefern; der Client fordert nur Zählungen 
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
-from ..edusharing.client import MAX_FACET_LIMIT, Criterion, EduSharingClient
+from ..edusharing.client import (
+    MAX_FACET_LIMIT,
+    MAX_VALUE_LENGTH,
+    Criterion,
+    EduSharingClient,
+)
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore, _norm
 
@@ -43,17 +48,28 @@ def _services(request: Request, instance_id: str) -> tuple[EduSharingClient, Voc
         raise HTTPException(404, "Instanz nicht gefunden") from None
 
 
+Name = Annotated[StrictStr, Field(min_length=1, max_length=200, pattern=r"^\S+$")]
+Value = Annotated[StrictStr, Field(max_length=MAX_VALUE_LENGTH)]
+
+
+class LiteralValue(BaseModel):
+    """Wert, der unverändert als Filter gilt, ohne Abgleich mit dem Vokabular."""
+
+    model_config = ConfigDict(extra="forbid")
+    value: Value
+    literal: Literal[True]
+
+
 class FilterIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    property: StrictStr = Field(min_length=1, max_length=200)
-    values: list[StrictStr] = Field(min_length=1, max_length=2000)
+    property: Name
+    values: list[Value | LiteralValue] = Field(min_length=1, max_length=2000)
 
 
 class AggregateIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     filters: list[FilterIn] = Field(default_factory=list, max_length=20)
-    facets: list[Annotated[StrictStr, Field(min_length=1, max_length=200)]] = Field(
-        default_factory=list, max_length=12)
+    facets: list[Name] = Field(default_factory=list, max_length=12)
     facet_limit: int = Field(default=2000, ge=1, le=MAX_FACET_LIMIT)
     content_type: StrictStr = "FILES"
     refresh: bool = False
@@ -88,7 +104,7 @@ async def vocabulary(
     request: Request,
     property: Annotated[str, Query(min_length=1, max_length=200)],
     q: Annotated[str, Query(max_length=200)] = "",
-    limit: Annotated[int, Query(ge=1, le=20000)] = 50,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 50,
 ) -> dict[str, Any]:
     _, vocab = _services(request, instance_id)
     field = await vocab.field(property)
@@ -122,14 +138,19 @@ async def aggregate(instance_id: str, body: AggregateIn, request: Request) -> di
                 "Mehrere Werte gehören in einen Filter.")
         seen.add(flt.property)
         resolved: dict[str, dict[str, str]] = {}
-        for text in flt.values:
-            res = await vocab.resolve(flt.property, text)
+        for item in flt.values:
+            if isinstance(item, LiteralValue):
+                res = await vocab.resolve(flt.property, item.value, literal=True)
+            else:
+                res = await vocab.resolve(flt.property, item)
             resolved.setdefault(res.value, {"value": res.value, "label": res.label,
                                             "how": res.how})
         criteria.append(Criterion(flt.property, tuple(resolved)))
         resolved_filters.append({"property": flt.property, "values": list(resolved.values())})
 
     facet_props = list(dict.fromkeys(body.facets))
+    for prop in facet_props:
+        await vocab.check_facet(prop)
     result = await client.aggregate(
         criteria, facet_props, facet_limit=body.facet_limit,
         content_type=body.content_type, refresh=body.refresh)

@@ -37,6 +37,13 @@ def test_env_overrides(monkeypatch):
     assert s.cookie_secure is False
 
 
+def test_vocab_ttl_has_a_minimum(monkeypatch):
+    monkeypatch.setenv("WDA_ADMIN_PASSWORD", "x")
+    monkeypatch.setenv("WDA_VOCAB_TTL", "0")
+    with pytest.raises(ConfigError, match="WDA_VOCAB_TTL"):
+        load_settings()
+
+
 def test_secrets_not_in_repr(monkeypatch):
     monkeypatch.setenv("WDA_ADMIN_PASSWORD", "supergeheim")
     monkeypatch.setenv("WDA_LLM_API_KEY", "sk-abc")
