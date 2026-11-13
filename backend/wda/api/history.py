@@ -16,7 +16,7 @@ Instance = Annotated[str | None, Query(min_length=1, max_length=64)]
 
 
 def _history(request: Request) -> History:
-    return History(request.app.state.services.db)
+    return request.app.state.services.history
 
 
 @router.get("/definitions/{def_id}/history/keys")

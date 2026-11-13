@@ -26,6 +26,10 @@ INTERVAL = 30.0
 _PERMANENT = (InvalidDefinition, NotFound, UnknownInstance, QueryError)
 
 
+# Fehlerarten einer Abfrage, die an der Definition liegen und beim nächsten Versuch bleiben
+_OWN_FAULT = frozenset({"invalid_query", "unknown_instance", "unresolved_value"})
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -45,11 +49,31 @@ class Scheduler:
         self._runner = runner
         self._clock = clock
         self._sleep = sleep
+        self._running: set[str] = set()
+
+    def running(self, schedule_id: str) -> bool:
+        return schedule_id in self._running
 
     async def execute(self, schedule: dict[str, Any], *, advance: bool = True,
                       run_id: str | None = None,
-                      progress: Callable[[int, int], None] | None = None) -> dict[str, Any] | None:
-        """Ein Lauf für einen Zeitplan; das Ergebnis steht danach am Zeitplan."""
+                      progress: Callable[[int, int], None] | None = None
+                      ) -> dict[str, Any] | None | bool:
+        """Ein Lauf für einen Zeitplan; das Ergebnis steht danach am Zeitplan. Liefert den
+        Lauf, ``None``, wenn er vor dem Speichern scheiterte, und ``False``, wenn nichts lief:
+        Ein fälliger Termin (``advance``) wird vorher beansprucht; gelingt das nicht
+        (ausgeschaltet, geändert, von anderer Seite genommen, läuft gerade), geschieht nichts."""
+        if schedule["id"] in self._running:
+            return False
+        self._running.add(schedule["id"])
+        try:
+            if advance and not await self._schedules().claim(schedule, self._clock()):
+                return False
+            return await self._execute(schedule, advance, run_id, progress)
+        finally:
+            self._running.discard(schedule["id"])
+
+    async def _execute(self, schedule: dict[str, Any], advance: bool, run_id: str | None,
+                       progress: Callable[[int, int], None] | None) -> dict[str, Any] | None:
         started = self._clock()
         run: dict[str, Any] | None = None
         status, error, retry = "failed", None, True
@@ -59,7 +83,10 @@ class Scheduler:
                 origin="schedule", run_id=run_id, progress=progress)
             status = run["status"]
             error = first_error(run) if status != "ok" else None
-            retry = status == "failed"
+            # Ein neuer Versuch hilft nur, wenn etwas außerhalb gestört war.
+            retry = status == "failed" and any(
+                (r.get("error") or {}).get("kind") not in _OWN_FAULT
+                for r in run["results"] if r.get("error"))
         except _PERMANENT as exc:
             error, retry = str(exc), False
         except ConfigError as exc:
@@ -76,13 +103,15 @@ class Scheduler:
         """Führt alles Fällige aus, eins nach dem anderen. Liefert die Zahl der Läufe."""
         done = 0
         for schedule in await self._schedules().due(self._clock()):
+            if schedule["id"] in self._running:
+                continue  # läuft gerade von Hand; der Termin bleibt für den nächsten Durchgang
             try:
-                await self.execute(schedule)
+                done += await self.execute(schedule) is not False
             except asyncio.CancelledError:
                 raise
             except Exception:
                 log.exception("Zeitplan %s ließ sich nicht abschließen", schedule["id"])
-            done += 1
+                done += 1
         return done
 
     async def run_forever(self) -> None:

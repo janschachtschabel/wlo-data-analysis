@@ -6,6 +6,7 @@ Ein Lauf enthält nur Ergebnisse der Abfrage-Engine, also Zählungen, nie Datens
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import sqlite3
@@ -86,6 +87,15 @@ def _restore(result: dict[str, Any] | None, query: Any) -> dict[str, Any] | None
     return result
 
 
+def fingerprint(results: list[dict[str, Any]]) -> str:
+    """Kurzform dessen, was ein Lauf tatsächlich gefragt hat: die Abfragen samt der Filter,
+    die aus gespeicherten Filtern und Kennzahlen hineingeflossen sind. Ändert sich eine davon,
+    ändert sich die Kurzform, auch wenn die Definition selbst gleich blieb."""
+    asked = [[r.get("key"), r.get("query")] for r in results]
+    return hashlib.sha256(
+        json.dumps(asked, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
+
+
 def load_run(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
     """Ein gespeicherter Lauf mit seinen Ergebnissen."""
     run = Runner._head(row)
@@ -126,6 +136,8 @@ def backfill_points(db: Database) -> int:
         "SELECT id FROM runs WHERE id NOT IN (SELECT DISTINCT run_id FROM points)"
         " ORDER BY seq")])
     done = 0
+    if len(ids) > 50:
+        log.info("Trage die Zahlen von %s älteren Läufen für die Historie nach …", len(ids))
     for run_id in ids:
         def one(con: sqlite3.Connection, run_id: str = run_id) -> bool:
             row = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
@@ -136,6 +148,9 @@ def backfill_points(db: Database) -> int:
             except (ValueError, KeyError, TypeError):
                 log.warning("Lauf %s ist unlesbar und bleibt ohne Punkte", run_id)
                 return False
+            if row["fingerprint"] is None:
+                con.execute("UPDATE runs SET fingerprint=? WHERE id=?",
+                            (fingerprint(run["results"]), run_id))
             points = _points(run)
             if not points:
                 return False
@@ -345,11 +360,20 @@ class Runner:
             except KeyError:
                 raise UnknownInstance(instance) from None
 
-        def prepare(con: sqlite3.Connection) -> tuple[Definition, list[Planned]]:
+        def prepare(con: sqlite3.Connection) -> tuple[Definition, list[Planned], bool]:
             definition = draft or fetch(con, def_id)
-            return definition, self._plan(con, definition, instance)
+            plan = self._plan(con, definition, instance)
+            own = False
+            if instance is not None:
+                # Nennt jemand ausdrücklich die Instanz, gegen die die Definition ohnehin
+                # läuft, ist das kein abweichender Lauf.
+                usual = [p.query.instance for p in self._plan(con, definition, None)
+                         if p.query is not None]
+                own = bool(usual) and all(name == instance for name in usual)
+            return definition, plan, own
 
-        definition, plan = await self._db.read(prepare)
+        definition, plan, own = await self._db.read(prepare)
+        stored_instance = None if own else instance
         save = save and draft is None
         started = self._clock()
         # Alle Kacheln nebeneinander; der Client begrenzt die gleichzeitigen Abfragen.
@@ -374,8 +398,8 @@ class Runner:
             "definition_id": definition.id or None, "kind": definition.kind,
             "name": definition.name, "definition_version": definition.version,
             "spec": definition.spec, "status": status, "started_at": started,
-            "finished_at": self._clock(), "origin": origin, "instance": instance,
-            "saved": save, "results": results}
+            "finished_at": self._clock(), "origin": origin, "instance": stored_instance,
+            "fingerprint": fingerprint(results), "saved": save, "results": results}
         if save:
             points = await asyncio.to_thread(_points, run)
             await self._db.write(lambda con: self._store(con, run, points))
@@ -390,10 +414,11 @@ class Runner:
             run["definition_id"] = None
         con.execute(
             "INSERT INTO runs (id, definition_id, kind, name, definition_version, spec, status,"
-            " started_at, finished_at, origin, instance) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " started_at, finished_at, origin, instance, fingerprint)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (run["id"], run["definition_id"], run["kind"], run["name"],
              run["definition_version"], _dumps(run["spec"]), run["status"], run["started_at"],
-             run["finished_at"], run["origin"], run["instance"]))
+             run["finished_at"], run["origin"], run["instance"], run["fingerprint"]))
         if points:
             write_points(con, run["id"], points)
         con.executemany(
@@ -418,7 +443,8 @@ class Runner:
                 "kind": row["kind"], "name": row["name"],
                 "definition_version": row["definition_version"], "status": row["status"],
                 "started_at": row["started_at"], "finished_at": row["finished_at"],
-                "origin": row["origin"], "instance": row["instance"]}
+                "origin": row["origin"], "instance": row["instance"],
+                "fingerprint": row["fingerprint"]}
 
     async def runs(self, definition_id: str | None = None, limit: int = 50,
                    before: int | None = None, status: str | None = None,

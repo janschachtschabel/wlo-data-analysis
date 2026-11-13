@@ -6,7 +6,7 @@ from wda.report.compare import delta_text
 
 from .esdata import DISC
 from .test_definition_routes import QUERY, TAX, make
-from .test_history import api, repo, run  # noqa: F401
+from .test_history import api, local_day, repo, run  # noqa: F401
 
 M = DISC + "380"
 
@@ -41,7 +41,7 @@ def test_compare_with_previous_run(api, repo):  # noqa: F811
     # ausdrücklich genannter Lauf und Datum
     by_id = api.get(f"/api/runs/{second['id']}/report", params={"compare": first["id"]}).json()
     assert by_id["compare"]["run_id"] == first["id"]
-    day = first["started_at"][:10]
+    day = local_day(first["started_at"])
     by_day = api.get(f"/api/runs/{second['id']}/report", params={"compare": day}).json()
     assert by_day["compare"]["run_id"] == first["id"]
     assert api.get(f"/api/runs/{second['id']}/report",

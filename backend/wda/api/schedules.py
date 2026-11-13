@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
 from ..errors import QueryError, UnknownInstance
+from ..store.definitions import Conflict
 
 router = APIRouter()
 
@@ -78,11 +79,13 @@ async def run_schedule(schedule_id: str, request: Request) -> JSONResponse:
     """Führt den Zeitplan jetzt als Auftrag aus; der nächste Termin bleibt, wie er ist."""
     schedule = await _store(request).get(schedule_id)
     scheduler = request.app.state.scheduler
+    if scheduler.running(schedule_id):
+        raise Conflict("Dieser Zeitplan läuft gerade; bitte das Ende abwarten.")
 
     async def work(run_id: str, progress) -> None:
         run = await scheduler.execute(
             schedule, advance=False, run_id=run_id, progress=progress)
-        if run is None:
+        if not run:
             raise QueryError("Der Lauf ist gescheitert; der Grund steht am Zeitplan.")
 
     job = request.app.state.services.jobs.start(schedule["definition_id"], work)

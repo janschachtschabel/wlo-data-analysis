@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS runs (
     spec TEXT NOT NULL, status TEXT NOT NULL,
     started_at TEXT NOT NULL, finished_at TEXT NOT NULL,
     origin TEXT NOT NULL DEFAULT 'manual',  -- 'manual' | 'schedule'
-    instance TEXT);                         -- abweichende Instanz dieses Laufs
+    instance TEXT,                          -- abweichende Instanz dieses Laufs
+    fingerprint TEXT);                      -- Kurzform der ausgeführten Abfragen
 CREATE INDEX IF NOT EXISTS runs_definition ON runs(definition_id, started_at);
 CREATE TABLE IF NOT EXISTS run_results (
     run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -125,6 +126,8 @@ class Database:
                 con.execute("ALTER TABLE runs ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
             if "instance" not in have:
                 con.execute("ALTER TABLE runs ADD COLUMN instance TEXT")
+            if "fingerprint" not in have:
+                con.execute("ALTER TABLE runs ADD COLUMN fingerprint TEXT")
             con.execute("UPDATE meta SET value=? WHERE key='schema_version'",
                         (str(SCHEMA_VERSION),))
             con.execute("COMMIT")

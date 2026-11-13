@@ -14,6 +14,14 @@ from .test_definition_routes import QUERY, TAX, make, tile
 M = DISC + "380"
 
 
+def local_day(stamp):
+    """Der Kalendertag eines Laufs in der Zeitzone der Anwendung."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(
+        ZoneInfo("Europe/Berlin")).date().isoformat()
+
+
 @pytest.fixture
 def repo():
     return DataRepo()
@@ -52,7 +60,7 @@ def test_series_over_runs_with_default_and_chosen_cells(api, repo):
     assert [p["run_id"] for p in hist["points"]] == [first["id"], second["id"]]
     assert [p["values"] for p in hist["points"]] == [[400], [410]]
     assert set(hist["points"][0]) == {"run_id", "started_at", "status", "definition_version",
-                                      "origin", "values"}
+                                      "origin", "changed", "values"}
 
     chosen = api.get(f"/api/definitions/{m['id']}/history", params={
         "key": "main", "row": ["value:" + M, "total:__total__"], "column": column}).json()
@@ -110,7 +118,7 @@ def test_range_limit_and_deleted_or_failed_runs(api):
     api.delete(f"/api/runs/{runs[3]['id']}")
     hist = api.get(f"/api/definitions/{d['id']}/history").json()
     assert len(hist["points"]) == 3
-    day = runs[0]["started_at"][:10]
+    day = local_day(runs[0]["started_at"])
     assert len(api.get(f"/api/definitions/{d['id']}/history",
                        params={"from": day, "to": day}).json()["points"]) == 3
     assert api.get(f"/api/definitions/{d['id']}/history",

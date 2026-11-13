@@ -20,6 +20,7 @@ from .instances import Instance, InstanceRegistry
 from .jobs import Jobs
 from .store.db import Database
 from .store.definitions import DefinitionStore
+from .store.history import History
 from .store.runner import Runner, backfill_points
 from .store.schedules import ScheduleStore
 from .store.transfer import Transfer
@@ -114,6 +115,10 @@ class Services:
     @property
     def runner(self) -> Runner:
         return Runner(self.db, self, keep=self._settings.runs_keep)
+
+    @property
+    def history(self) -> History:
+        return History(self.db, ZoneInfo(self._settings.timezone))
 
     @property
     def schedules(self) -> ScheduleStore:

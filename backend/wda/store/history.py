@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from ..errors import QueryError
 from ..report.build import build_report
@@ -31,22 +33,50 @@ def _scope(def_id: str, instance: str | None) -> tuple[str, list[Any]]:
     return "definition_id=? AND instance=?", [def_id, instance]
 
 
-def check_when(value: str | None, what: str) -> str | None:
-    if value is not None and not _WHEN.match(value):
+def bound(value: str | None, what: str, tz: ZoneInfo, end: bool = False) -> str | None:
+    """Ein Datum oder Zeitpunkt als UTC in der Schreibweise der gespeicherten Läufe. Ein
+    bloßer Tag meint den Kalendertag in der Zeitzone der Anwendung: seinen Anfang, mit
+    ``end`` sein Ende. Ein Zeitpunkt ohne Zone gilt ebenfalls in dieser Zeitzone."""
+    if value is None:
+        return None
+    if not _WHEN.match(value):
         raise QueryError(f"'{what}' erwartet ein Datum wie 2026-11-13.")
-    return value
+    try:
+        if len(value) == 10:
+            day = datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
+            moment = datetime.combine(day + timedelta(days=1) if end else day, time(), tz)
+            if end:
+                moment -= timedelta(milliseconds=1)
+        else:
+            moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if moment.tzinfo is None:
+                moment = moment.replace(tzinfo=tz)
+    except ValueError:
+        raise QueryError(f"'{what}' ist kein gültiges Datum.") from None
+    return moment.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def changed(before: Any, after: Any) -> bool:
+    """Haben zwei Läufe (Kopfzeilen) Verschiedenes gefragt? Maßgeblich ist die Kurzform der
+    ausgeführten Abfragen; fehlt sie bei einem älteren Lauf, die Version der Definition."""
+    if before["fingerprint"] is not None and after["fingerprint"] is not None:
+        return before["fingerprint"] != after["fingerprint"]
+    return before["definition_version"] != after["definition_version"]
 
 
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_HEAD = ("SELECT seq, id, definition_id, name, definition_version, instance, started_at"
-         " FROM runs ")
+_HEAD = ("SELECT seq, id, definition_id, name, definition_version, instance, started_at,"
+         " fingerprint, status FROM runs ")
+# „der vorige Lauf“ ist einer, mit dem sich vergleichen lässt: nicht gescheitert, mit Zahlen
+_USABLE = " AND status != 'failed' AND EXISTS (SELECT 1 FROM points WHERE run_id = runs.id)"
 
 
-def compare_target(con: sqlite3.Connection, run_id: str, target: str
+def compare_target(con: sqlite3.Connection, run_id: str, target: str, tz: ZoneInfo
                    ) -> tuple[dict[str, Any], dict[str, Any], dict[tuple[str, str, str], Any]]:
     """Kopfzeilen des gezeigten und des Vergleichslaufs und dessen Punkte. ``target``:
-    ``previous`` (voriger Lauf derselben Definition gegen dieselbe Instanz), ein Datum
-    (letzter solcher Lauf an oder vor diesem Tag) oder die ID eines Laufs."""
+    ``previous`` (voriger brauchbarer Lauf derselben Definition gegen dieselbe Instanz), ein
+    Datum (letzter solcher Lauf vor dem gezeigten, an oder vor diesem Tag) oder die ID eines
+    Laufs."""
     current = con.execute(_HEAD + "WHERE id=?", (run_id,)).fetchone()
     if current is None:
         raise NotFound("Den Lauf gibt es nicht.")
@@ -56,12 +86,11 @@ def compare_target(con: sqlite3.Connection, run_id: str, target: str
     if target == "previous" or _DAY.match(target):
         if current["definition_id"] is not None:
             where, args = _scope(current["definition_id"], current["instance"])
-            if target == "previous":
-                where += " AND seq < ?"
-                args.append(current["seq"])
-            else:
-                where += " AND started_at <= ? AND id != ?"
-                args += [target + "T23:59:59.999Z", run_id]
+            where += " AND seq < ?" + _USABLE
+            args.append(current["seq"])
+            if target != "previous":
+                where += " AND started_at <= ?"
+                args.append(bound(target, "compare", tz, end=True))
             found = con.execute(_HEAD + f"WHERE {where} ORDER BY seq DESC LIMIT 1",  # noqa: S608
                                 args).fetchone()
     else:
@@ -74,8 +103,9 @@ def compare_target(con: sqlite3.Connection, run_id: str, target: str
 
 
 class History:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, tz: ZoneInfo) -> None:
         self._db = db
+        self._tz = tz
 
     @staticmethod
     def _layout(con: sqlite3.Connection, def_id: str, instance: str | None
@@ -114,16 +144,18 @@ class History:
         return await self._db.read(fn)
 
     async def compare(self, run_id: str, target: str):
-        return await self._db.read(lambda con: compare_target(con, run_id, target))
+        return await self._db.read(lambda con: compare_target(con, run_id, target, self._tz))
+
+    async def has_points(self, run_id: str) -> bool:
+        return await self._db.read(lambda con: con.execute(
+            "SELECT 1 FROM points WHERE run_id=? LIMIT 1", (run_id,)).fetchone() is not None)
 
     async def series(self, def_id: str, *, key: str | None = None,
                      rows: list[str] | None = None, columns: list[str] | None = None,
                      instance: str | None = None, start: str | None = None,
                      end: str | None = None, limit: int = 200) -> dict[str, Any]:
-        check_when(start, "from")
-        check_when(end, "to")
-        if end is not None and len(end) == 10:
-            end += "T23:59:59.999Z"  # der genannte Tag gehört dazu
+        start = bound(start, "from", self._tz)
+        end = bound(end, "to", self._tz, end=True)  # der genannte Tag gehört dazu
         limit = max(1, min(limit, MAX_RUNS))
 
         def fn(con: sqlite3.Connection) -> dict[str, Any]:
@@ -164,7 +196,8 @@ class History:
                 where += " AND started_at <= ?"
                 args.append(end)
             heads = list(reversed(con.execute(
-                "SELECT seq, id, started_at, status, definition_version, origin FROM runs"  # noqa: S608
+                "SELECT seq, id, started_at, status, definition_version, origin, fingerprint,"  # noqa: S608
+                " EXISTS (SELECT 1 FROM points WHERE run_id = runs.id) AS has_points FROM runs"
                 f" WHERE {where} ORDER BY seq DESC LIMIT ?", [*args, limit]).fetchall()))
             position = {head["id"]: n for n, head in enumerate(heads)}
             values: list[list[float | None]] = [[None] * len(chosen) for _ in heads]
@@ -199,16 +232,25 @@ class History:
                                "label": label, "row_label": row_names[row],
                                "column_label": column_names[column]})
             notes = []
-            versions = [h["definition_version"] for h in heads]
-            if len(set(versions)) > 1:
+            marks = [n > 0 and changed(heads[n - 1], head) for n, head in enumerate(heads)]
+            if any(marks):
                 notes.append({
                     "code": "definition_changed",
-                    "text": "Die Definition wurde in diesem Zeitraum geändert; Zahlen vor und "
-                            "nach der Änderung sind nicht ohne Weiteres vergleichbar."})
+                    "text": "Die Definition oder ein Filter, den sie benutzt, wurde in diesem "
+                            "Zeitraum geändert; Zahlen vor und nach der Änderung sind nicht "
+                            "ohne Weiteres vergleichbar."})
+            empty = sum(1 for h in heads if not h["has_points"] and h["status"] != "failed")
+            if empty:
+                notes.append({
+                    "code": "runs_without_points",
+                    "text": f"{empty} {'Lauf hat' if empty == 1 else 'Läufe haben'} keine "
+                            "Zahlen für die Historie (zu groß oder nicht lesbar) und "
+                            "erscheinen als Lücke."})
             return {"block": {"key": block["key"], "title": block["title"]}, "series": series,
                     "points": [{"run_id": h["id"], "started_at": h["started_at"],
                                 "status": h["status"],
                                 "definition_version": h["definition_version"],
+                                "changed": marks[n],
                                 "origin": h["origin"], "values": values[n]}
                                for n, h in enumerate(heads)],
                     "notes": notes}

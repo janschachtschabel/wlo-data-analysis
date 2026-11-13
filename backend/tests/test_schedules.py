@@ -284,3 +284,28 @@ def test_timezone_setting_is_checked(settings):
     with pytest.raises(ValidationError):
         Settings(admin_password="x", timezone="Mars/Olympus")
     assert Settings(admin_password="x", scheduler="off").scheduler is False
+
+
+def test_loop_survives_a_failing_round():
+    import asyncio
+
+    from wda.scheduler import Scheduler
+
+    rounds = []
+
+    class Broken:
+        async def due(self, now):
+            rounds.append(now)
+            if len(rounds) == 1:
+                raise RuntimeError("Ablage gerade nicht lesbar")
+            return []
+
+    async def sleep(seconds):
+        if len(rounds) >= 3:
+            raise asyncio.CancelledError
+
+    scheduler = Scheduler(lambda: Broken(), lambda: None, clock=lambda: utc(2026, 1, 1),
+                          sleep=sleep)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(scheduler.run_forever())
+    assert len(rounds) == 3

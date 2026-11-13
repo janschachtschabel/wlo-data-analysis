@@ -169,25 +169,46 @@ class ScheduleStore:
             _SELECT + " WHERE s.enabled=1 AND s.next_due<=? ORDER BY s.next_due, s.id",
             (iso(now),))])
 
+    async def claim(self, schedule: dict[str, Any], now: datetime) -> bool:
+        """Beansprucht den fälligen Termin: Nur wer ihn noch so vorfindet, wie er ihn gelesen
+        hat (eingeschaltet, derselbe Termin, fällig), darf laufen. Der Termin rückt sofort
+        weiter, damit kein zweiter Planer und kein späterer Durchgang ihn noch einmal nimmt."""
+        def fn(con: sqlite3.Connection) -> bool:
+            row = con.execute("SELECT * FROM schedules WHERE id=?", (schedule["id"],)).fetchone()
+            if (row is None or not row["enabled"] or row["next_due"] != schedule["next_due"]
+                    or row["next_due"] > iso(now)):
+                return False
+            after = max(now, parse(row["next_due"]))
+            con.execute("UPDATE schedules SET next_due=? WHERE id=?", (
+                iso(next_due(row["every"], row["at"], row["weekday"], row["day"], after,
+                             self._tz)), schedule["id"]))
+            return True
+
+        return await self._db.write(fn)
+
     async def record(self, schedule: dict[str, Any], *, started: datetime, now: datetime,
                      run_id: str | None, status: str, error: str | None,
                      retry: bool, advance: bool = True) -> None:
-        """Hält das Ergebnis eines Laufs fest. ``retry``: bald noch einmal versuchen (höchstens
-        so oft, wie ``RETRY_MINUTES`` Einträge hat). ``advance=False`` lässt den Termin stehen
-        (Lauf von Hand). Ist der Zeitplan inzwischen gelöscht, geschieht nichts."""
+        """Hält das Ergebnis eines Laufs fest; der Termin ist schon weitergerückt (``claim``).
+        ``retry``: bald noch einmal versuchen (höchstens so oft, wie ``RETRY_MINUTES`` Einträge
+        hat). ``advance=False``: Lauf von Hand, der Termin bleibt; gelingt er, entfällt ein
+        ausstehender neuer Versuch. Ist der Zeitplan inzwischen gelöscht, geschieht nichts."""
         def fn(con: sqlite3.Connection) -> None:
             row = con.execute("SELECT * FROM schedules WHERE id=?", (schedule["id"],)).fetchone()
             if row is None:
                 return
             attempts, due = row["attempts"], row["next_due"]
+            regular = iso(next_due(row["every"], row["at"], row["weekday"], row["day"],
+                                   now, self._tz))
             if advance:
                 if retry and attempts < len(RETRY_MINUTES):
                     due = iso(now + timedelta(minutes=RETRY_MINUTES[attempts]))
                     attempts += 1
                 else:
-                    attempts = 0
-                    due = iso(next_due(row["every"], row["at"], row["weekday"], row["day"],
-                                       now, self._tz))
+                    # nie zurück: Springt die Uhr rückwärts, bleibt der beanspruchte Termin
+                    attempts, due = 0, max(due, regular)
+            elif status != "failed" and attempts:
+                attempts, due = 0, regular
             con.execute(
                 "UPDATE schedules SET next_due=?, attempts=?, last_run_id=?, last_status=?,"
                 " last_error=?, last_started_at=? WHERE id=?",

@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 MAX_RUNNING = 4
 KEEP_FAILED = 600.0  # Sekunden
+MAX_FAILED = 50  # so viele gescheiterte Aufträge bleiben höchstens abrufbar
 
 Work = Callable[[str, Callable[[int, int], None]], Awaitable[Any]]
 
@@ -99,6 +100,9 @@ class Jobs:
 
     def _fail(self, job: Job, error: dict[str, Any]) -> None:
         job.status, job.error, job.ended = "failed", error, self._clock()
+        failed = [j.id for j in self._jobs.values() if j.status == "failed"]
+        for job_id in failed[:-MAX_FAILED]:
+            del self._jobs[job_id]
 
     async def aclose(self) -> None:
         tasks = [j.task for j in self._jobs.values() if j.task is not None and not j.task.done()]

@@ -15,6 +15,7 @@ def read_settings(request: Request) -> dict[str, Any]:
     settings = request.app.state.settings
     return {
         "version": __version__,
+        "timezone": settings.timezone,
         "export": {"formats": list(FORMATS), "pdf_available": pdf_available()},
         "llm": {
             "base_url": settings.llm_base_url,
