@@ -51,7 +51,7 @@ def test_export_in_every_format(api):
     data = json.loads(api.get(f"/api/runs/{run['id']}/export?format=json").content)
     assert data["blocks"][0]["rows"][-1] == {
         "key": "__total__", "label": "Gesamt", "kind": "total", "values": [400], "level": 0,
-        "percent": None}
+        "percent": None, "previous": None, "new": False}
     if pdf_available():
         pdf = api.get(f"/api/runs/{run['id']}/export?format=pdf").content
         assert pdf.startswith(b"%PDF")

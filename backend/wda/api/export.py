@@ -15,10 +15,11 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
-from ..report.build import build_report
+from ..errors import QueryError
 from ..report.formats import FORMATS, MAX_PDF_CELLS, PdfUnavailable, ReportTooLarge, render
 from ..report.model import Report
 from ..store.runner import DamagedRun
+from .report import Compare, built_report
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -58,11 +59,16 @@ async def export_run(
     run_id: str, request: Request,
     format: Literal["json", "csv", "md", "html", "pdf"] = "html",
     download: bool = True,
+    compare: Compare = None,
 ) -> Response:
+    """``compare`` wie beim Bericht: Die Veränderung steht dann hinter jeder Zahl, in CSV und
+    JSON stehen die Vorwerte daneben."""
     run = await request.app.state.services.runner.get_run(run_id)
     try:
-        report = build_report(run)
+        report = await built_report(request, run, compare)
         body = await _render(report, format)
+    except QueryError as exc:
+        raise HTTPException(422, str(exc)) from None
     except ReportTooLarge:
         raise HTTPException(
             413, f"Der Bericht ist für den PDF-Export zu groß (mehr als "

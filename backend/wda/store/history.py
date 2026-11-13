@@ -14,7 +14,7 @@ from ..errors import QueryError
 from ..report.build import build_report
 from ..report.model import Table
 from .db import Database
-from .definitions import fetch
+from .definitions import NotFound, fetch
 from .points import row_key
 from .runner import load_run
 
@@ -35,6 +35,42 @@ def check_when(value: str | None, what: str) -> str | None:
     if value is not None and not _WHEN.match(value):
         raise QueryError(f"'{what}' erwartet ein Datum wie 2026-11-13.")
     return value
+
+
+_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_HEAD = ("SELECT seq, id, definition_id, name, definition_version, instance, started_at"
+         " FROM runs ")
+
+
+def compare_target(con: sqlite3.Connection, run_id: str, target: str
+                   ) -> tuple[dict[str, Any], dict[str, Any], dict[tuple[str, str, str], Any]]:
+    """Kopfzeilen des gezeigten und des Vergleichslaufs und dessen Punkte. ``target``:
+    ``previous`` (voriger Lauf derselben Definition gegen dieselbe Instanz), ein Datum
+    (letzter solcher Lauf an oder vor diesem Tag) oder die ID eines Laufs."""
+    current = con.execute(_HEAD + "WHERE id=?", (run_id,)).fetchone()
+    if current is None:
+        raise NotFound("Den Lauf gibt es nicht.")
+    if target == run_id:
+        raise QueryError("Ein Lauf lässt sich nicht mit sich selbst vergleichen.")
+    found = None
+    if target == "previous" or _DAY.match(target):
+        if current["definition_id"] is not None:
+            where, args = _scope(current["definition_id"], current["instance"])
+            if target == "previous":
+                where += " AND seq < ?"
+                args.append(current["seq"])
+            else:
+                where += " AND started_at <= ? AND id != ?"
+                args += [target + "T23:59:59.999Z", run_id]
+            found = con.execute(_HEAD + f"WHERE {where} ORDER BY seq DESC LIMIT 1",  # noqa: S608
+                                args).fetchone()
+    else:
+        found = con.execute(_HEAD + "WHERE id=?", (target,)).fetchone()
+    if found is None:
+        raise NotFound("Dazu gibt es keinen früheren Lauf zum Vergleichen.")
+    points = {(r["key"], r["row_key"], r["column_id"]): r["value"] for r in con.execute(
+        "SELECT key, row_key, column_id, value FROM points WHERE run_id=?", (found["id"],))}
+    return dict(current), dict(found), points
 
 
 class History:
@@ -69,6 +105,9 @@ class History:
             return self._layout(con, def_id, instance)
 
         return await self._db.read(fn)
+
+    async def compare(self, run_id: str, target: str):
+        return await self._db.read(lambda con: compare_target(con, run_id, target))
 
     async def series(self, def_id: str, *, key: str | None = None,
                      rows: list[str] | None = None, columns: list[str] | None = None,

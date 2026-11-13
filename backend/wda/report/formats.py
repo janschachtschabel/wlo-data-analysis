@@ -12,6 +12,7 @@ from typing import Any
 
 from .build import format_number, format_time
 from .charts import chart_for
+from .compare import delta_text
 from .model import Failure, Report, Row, Table, Text
 from .text import markdown_to_html
 

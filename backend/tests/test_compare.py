@@ -58,7 +58,7 @@ def test_changed_definition_new_and_dropped_rows(api):  # noqa: F811
     first = run(api, m["id"])
     before = {r["key"] for r in first["results"][0]["result"]["rows"]}
     api.put(f"/api/definitions/{m['id']}", json={"version": 1, "spec": {"query": {
-        **QUERY, "filters": [{"property": TAX, "values": [M, DISC + "080"]}]}}})
+        **QUERY, "filters": [{"property": TAX, "values": [M, DISC + "460"]}]}}})
     second = run(api, m["id"])
     after = {r["key"] for r in second["results"][0]["result"]["rows"]}
     assert after - before and before - after  # die Zeilen haben sich wirklich geändert
