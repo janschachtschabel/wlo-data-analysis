@@ -7,6 +7,7 @@ import pytest
 from wda.config import Settings
 from wda.engine.engine import run_query
 from wda.engine.spec import QuerySpec
+from wda.errors import UnknownInstance
 from wda.instances import InstanceRegistry
 from wda.services import Services
 from wda.store.definitions import DefinitionStore, NotFound
@@ -290,5 +291,5 @@ def test_seq_is_never_reused(world):
     world.go(world.runner.delete_run(ids[-1]))
     world.go(world.runner.run(m.id))
     assert world.go(world.runner.runs(m.id))[0]["seq"] > max(seqs)
-    with pytest.raises(InvalidDefinition, match="Instanz"):
+    with pytest.raises(UnknownInstance, match="Instanz"):
         world.go(world.runner.run(m.id, instance="tippfehler"))

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from ..engine.engine import run_query
 from ..engine.spec import QuerySpec
-from ..errors import QueryError
+from ..errors import QueryError, UnknownInstance
 
 router = APIRouter()
 
@@ -26,5 +26,5 @@ async def query(spec: QuerySpec, request: Request) -> dict[str, Any]:
     try:
         client, vocab = services.client(spec.instance), services.vocab(spec.instance)
     except KeyError:
-        raise HTTPException(404, "Instanz nicht gefunden") from None
+        raise UnknownInstance(spec.instance) from None
     return await run_query(spec, client, vocab)

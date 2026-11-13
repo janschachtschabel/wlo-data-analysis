@@ -69,18 +69,29 @@ def _meta(report: Report) -> str:
 
 # ---- JSON ----------------------------------------------------------------------------
 
-def to_json(report: Report) -> bytes:
+REPORT_VERSION = 1
+
+
+def report_data(report: Report, with_html: bool = False) -> dict[str, Any]:
+    """Das Berichtsmodell als JSON-fähige Struktur. ``with_html`` legt Textabschnitten das
+    fertige, maskierte HTML bei (für die Oberfläche)."""
     def block(item: Any) -> dict[str, Any]:
         data = dataclasses.asdict(item)
         data["type"] = type(item).__name__.lower()
+        if with_html and isinstance(item, Text):
+            data["html"] = markdown_to_html(item.markdown)
         return data
 
-    data = {
+    return {
+        "report_version": REPORT_VERSION,
         "title": report.title, "kind": report.kind, "run_id": report.run_id,
         "definition_id": report.definition_id, "status": report.status,
         "started_at": report.started_at, "finished_at": report.finished_at,
         "notes": report.notes, "blocks": [block(b) for b in report.blocks]}
-    return json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False,
+
+
+def to_json(report: Report) -> bytes:
+    return json.dumps(report_data(report), ensure_ascii=False, indent=2, allow_nan=False,
                       default=str).encode("utf-8")
 
 

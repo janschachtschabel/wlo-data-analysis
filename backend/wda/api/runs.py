@@ -10,6 +10,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
+from .report import report_of
+
 router = APIRouter()
 
 
@@ -18,6 +20,7 @@ class RunIn(BaseModel):
     refresh: StrictBool = False
     instance: Annotated[StrictStr, Field(min_length=1, max_length=64)] | None = None
     save: StrictBool = True
+    report: StrictBool = False  # das Berichtsmodell gleich mitliefern
 
 
 def _runner(request: Request):
@@ -28,8 +31,11 @@ def _runner(request: Request):
 async def run_definition(def_id: str, request: Request, body: RunIn | None = None
                          ) -> dict[str, Any]:
     body = body or RunIn()
-    return await _runner(request).run(
+    run = await _runner(request).run(
         def_id, refresh=body.refresh, instance=body.instance, save=body.save)
+    if body.report:
+        run["report"] = report_of(run)
+    return run
 
 
 @router.get("/definitions/{def_id}/runs")

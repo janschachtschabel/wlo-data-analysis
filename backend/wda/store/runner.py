@@ -20,7 +20,7 @@ from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore
 from ..engine.engine import run_query
 from ..engine.spec import Group, QuerySpec, Rows
-from ..errors import QueryError, describe_validation
+from ..errors import QueryError, UnknownInstance, describe_validation
 from ..external.oersi import OersiClient, notation
 from ..filters import FilterIn
 from .db import Database
@@ -36,6 +36,7 @@ from .specs import (
     QueryBlock,
     TemplateSpec,
     View,
+    dump_spec,
     parse_spec,
 )
 
@@ -244,27 +245,37 @@ class Runner:
             out["error"] = _error("internal", "Unerwarteter Fehler bei dieser Abfrage.")
         return out
 
+    async def preview(self, kind: str, name: str, spec: Any, *, refresh: bool = False,
+                      instance: str | None = None) -> dict[str, Any]:
+        """Führt eine ungespeicherte Definition aus; nichts wird abgelegt."""
+        now = now_iso()
+        draft = Definition("", kind, name, "", None,
+                           json.loads(dump_spec(parse_spec(kind, spec))), 0, now, now)
+        return await self.run("", refresh=refresh, instance=instance, save=False, draft=draft)
+
     async def run(self, def_id: str, *, refresh: bool = False, instance: str | None = None,
-                  save: bool = True) -> dict[str, Any]:
+                  save: bool = True, draft: Definition | None = None) -> dict[str, Any]:
         if instance is not None:
             try:
                 self._services.client(instance)
             except KeyError:
-                raise InvalidDefinition(
-                    f"Die Instanz '{instance[:64]}' gibt es nicht.") from None
+                raise UnknownInstance(instance) from None
 
         def prepare(con: sqlite3.Connection) -> tuple[Definition, list[Planned]]:
-            definition = fetch(con, def_id)
+            definition = draft or fetch(con, def_id)
             return definition, self._plan(con, definition, instance)
 
         definition, plan = await self._db.read(prepare)
+        save = save and draft is None
         started = self._clock()
         # Alle Kacheln nebeneinander; der Client begrenzt die gleichzeitigen Abfragen.
         results = list(await asyncio.gather(*[self._execute(p, refresh) for p in plan]))
         failed = sum(1 for r in results if r["error"] is not None)
         status = "ok" if not failed else "failed" if failed == len(results) else "partial"
         run = {
-            "id": new_id(), "definition_id": definition.id, "kind": definition.kind,
+            # ein ungespeicherter Lauf ist nirgends abrufbar und hat deshalb keine ID
+            "id": new_id() if save else None,
+            "definition_id": definition.id or None, "kind": definition.kind,
             "name": definition.name, "definition_version": definition.version,
             "spec": definition.spec, "status": status, "started_at": started,
             "finished_at": self._clock(), "saved": save, "results": results}

@@ -26,6 +26,7 @@ def all_routes(routes):
 # Jede neue Route muss hier eingetragen werden. So fällt auf, wenn die Aufzählung der Routen
 # (und damit die Prüfung unten) einmal nichts mehr findet.
 PROTECTED = {
+    "/api/runs/{run_id}/report", "/api/preview", "/api/check",
     "/api", "/api/{rest:path}", "/api/instances", "/api/settings", "/api/query",
     "/api/instances/{instance_id}/about", "/api/instances/{instance_id}/fields",
     "/api/instances/{instance_id}/vocab", "/api/instances/{instance_id}/aggregate",

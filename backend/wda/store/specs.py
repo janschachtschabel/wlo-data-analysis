@@ -316,3 +316,19 @@ def references(spec: Spec) -> dict[str, str]:
                     f"'{metric_id}' wird zugleich als Filter und als Kennzahl verwendet.")
             found[metric_id] = "metric"
     return found
+
+
+def check_spec(kind: str, data: Any) -> list[dict[str, str]]:
+    """Alle Fehler einer Spezifikation mit ihrem Ort, ohne etwas zu speichern (für Editoren)."""
+    model = _MODELS.get(kind)
+    if model is not None:
+        try:
+            model.model_validate(data)
+        except ValidationError as exc:
+            return [{"loc": ".".join(str(part) for part in error["loc"]),
+                     "msg": describe_validation([error])} for error in exc.errors()[:50]]
+    try:
+        parse_spec(kind, data)
+    except InvalidDefinition as exc:
+        return [{"loc": "", "msg": str(exc)}]
+    return []

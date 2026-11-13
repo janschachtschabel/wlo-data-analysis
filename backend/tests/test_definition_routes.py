@@ -165,7 +165,7 @@ def test_run_routes(api, repo):
     assert partial["status"] == "partial"
     assert partial["results"][1]["error"]["kind"] == "unresolved_value"
     dry = api.post(f"/api/definitions/{d['id']}/run", json={"save": False}).json()
-    assert dry["saved"] is False and api.get(f"/api/runs/{dry['id']}").status_code == 404
+    assert dry["saved"] is False and dry["id"] is None
     other = api.post(f"/api/definitions/{m['id']}/run", json={"instance": "wlo-staging"})
     assert other.json()["results"][0]["query"]["instance"] == "wlo-staging"
 
@@ -209,7 +209,8 @@ def test_review_findings_of_package_4(api):
     m = make(api, "metric", "M", {"query": QUERY})
     # Tippfehler bei der Instanz: abgelehnt, kein gespeicherter Fehl-Lauf
     r = api.post(f"/api/definitions/{m['id']}/run", json={"instance": "tippfehler"})
-    assert r.status_code == 422 and api.get("/api/runs").json() == []
+    assert r.status_code == 404 and r.json()["kind"] == "unknown_instance"
+    assert api.get("/api/runs").json() == []
     # Zeichen, die die Datenbank nicht speichern kann: Meldung statt 500, nichts importiert
     for name in ("x\\ud800", "nul\\u0000name"):
         raw = ('{"format":"wda-definitions","version":1,"definitions":[{"id":"abcdef","kind":'

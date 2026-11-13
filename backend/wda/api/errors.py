@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ..config import ConfigError
-from ..errors import describe_validation, error_body
+from ..errors import UnknownInstance, describe_validation, error_body
 from ..store.definitions import Conflict, NotFound
 from ..store.runner import DamagedRun
 from ..store.specs import InvalidDefinition
@@ -43,6 +43,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidDefinition)
     async def invalid_definition(request: Request, exc: InvalidDefinition) -> JSONResponse:
         return JSONResponse(error_body("invalid_definition", str(exc)), status_code=422)
+
+    @app.exception_handler(UnknownInstance)
+    async def unknown_instance(request: Request, exc: UnknownInstance) -> JSONResponse:
+        return JSONResponse(error_body("unknown_instance", str(exc)), status_code=404)
 
     @app.exception_handler(DamagedRun)
     async def damaged_run(request: Request, exc: DamagedRun) -> JSONResponse:

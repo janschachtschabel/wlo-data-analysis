@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from ..edusharing.client import MAX_FACET_LIMIT, EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore, _norm
-from ..errors import Notes
+from ..errors import Notes, UnknownInstance
 from ..filters import (
     FilterIn,
     Name,
@@ -56,7 +56,7 @@ def _services(request: Request, instance_id: str) -> tuple[EduSharingClient, Voc
     try:
         return services.client(instance_id), services.vocab(instance_id)
     except KeyError:
-        raise HTTPException(404, "Instanz nicht gefunden") from None
+        raise UnknownInstance(instance_id) from None
 
 
 class AggregateIn(BaseModel):

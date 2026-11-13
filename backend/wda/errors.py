@@ -43,3 +43,10 @@ def describe_validation(errors: Sequence[Any]) -> str:
 def error_body(kind: str, detail: str, **extra: Any) -> dict[str, Any]:
     """Die eine Form, in der die API Fehler meldet: ein deutscher Satz und eine feste Art."""
     return {"detail": detail, "kind": kind, **extra}
+
+
+class UnknownInstance(Exception):
+    """Die genannte Instanz ist nicht eingerichtet."""
+
+    def __init__(self, instance_id: str) -> None:
+        super().__init__(f"Die Instanz '{instance_id[:64]}' gibt es nicht.")
