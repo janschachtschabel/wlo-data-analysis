@@ -137,7 +137,7 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
 
 export interface HistoryInput {
   series: { label: string }[];
-  points: { started_at: string; definition_version: number; values: (number | null)[] }[];
+  points: { started_at: string; definition_version: number; changed?: boolean; values: (number | null)[] }[];
 }
 
 /** Verlauf über die Zeit: je Reihe eine Linie; fehlende Werte sind Lücken, nie 0. */
@@ -154,9 +154,9 @@ export function historyPlan(input: HistoryInput, palette: Palette): ChartPlan {
   const gaps = points.filter((p) => series.some((s) => typeof p.values[s.index] !== 'number')).length;
   if (gaps) notes.push(`${gaps} ${gaps === 1 ? 'Lauf hat' : 'Läufe haben'} hier keinen Wert; die Linie ist dort unterbrochen.`);
   // Wo sich die Definition geändert hat, sind die Zahlen davor und danach nicht dasselbe.
-  const changes = points.filter((p, n) => n > 0 && p.definition_version !== points[n - 1].definition_version)
+  const changes = points.filter((p, n) => n > 0 && (p.changed ?? p.definition_version !== points[n - 1].definition_version))
     .map((p) => ({ xAxis: Date.parse(p.started_at) }));
-  if (changes.length) notes.push('Gestrichelte Linie: Die Definition wurde geändert.');
+  if (changes.length) notes.push('Gestrichelte Linie: Die Definition oder ein Filter, den sie benutzt, wurde geändert.');
   const legend = series.length > 1
     ? { top: 0, left: 0, type: 'scroll', textStyle: { color: palette.text }, icon: 'roundRect', itemWidth: 12, itemHeight: 12 }
     : undefined;

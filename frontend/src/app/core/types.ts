@@ -64,10 +64,10 @@ export interface Report {
   report_version: number; title: string; kind: Kind; run_id: string | null;
   status: 'ok' | 'partial' | 'failed'; started_at: string; finished_at: string;
   notes: Note[]; blocks: ReportBlock[];
-  definition_id?: string | null; compare?: { run_id: string; started_at: string } | null;
+  definition_id?: string | null; compare?: { run_id: string; started_at: string; empty?: boolean } | null;
 }
 export interface AppSettings {
-  version: string; export: { formats: string[]; pdf_available: boolean };
+  version: string; timezone?: string; export: { formats: string[]; pdf_available: boolean };
   llm: { base_url: string; model: string; api_key_set: boolean };
 }
 export interface Schedule {
@@ -84,7 +84,7 @@ export interface HistoryKeys {
 }
 export interface HistoryPoint {
   run_id: string; started_at: string; status: string; definition_version: number;
-  origin: string; values: (number | null)[];
+  origin: string; changed?: boolean; values: (number | null)[];
 }
 export interface HistoryData {
   block?: { key: string; title: string };

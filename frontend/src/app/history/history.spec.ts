@@ -27,7 +27,12 @@ describe('historyPlan', () => {
     const plan = historyPlan({ series: [{ label: 'A' }, { label: 'B' }], points: [point(1, [1, 2]), point(2, [1, 2], 2), point(3, [1, 2], 2)] }, palette);
     expect(plan.option!['series'][0].markLine.data).toEqual([{ xAxis: Date.parse('2026-11-02T06:00:00.000Z') }]);
     expect(plan.option!['series'][1].markLine).toBeUndefined();
-    expect(plan.notes.join(' ')).toContain('Definition wurde geändert');
+    expect(plan.notes.join(' ')).toContain('Gestrichelte Linie');
+  });
+  it('nimmt die Markierung der API, wenn sie eine liefert (geänderter Filter bei gleicher Version)', () => {
+    const points = [point(1, [1]), { ...point(2, [5]), changed: true }, { ...point(3, [5], 2), changed: false }];
+    const plan = historyPlan({ series: [{ label: 'A' }], points }, palette);
+    expect(plan.option!['series'][0].markLine.data).toEqual([{ xAxis: Date.parse('2026-11-02T06:00:00.000Z') }]);
   });
   it('zeichnet nichts ohne Läufe und höchstens acht Reihen', () => {
     expect(historyPlan({ series: [{ label: 'A' }], points: [] }, palette).option).toBeNull();

@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { Api, ApiError } from '../core/api';
 import { Auth } from '../core/auth';
 import { formatTime } from '../core/format';
-import { JobState, Schedule } from '../core/types';
+import { AppSettings, JobState, Schedule } from '../core/types';
 import { ScheduleForm, WEEKDAYS, describeRhythm, emptyForm, formOf, formProblem, rhythmBody } from './schedule';
 
 const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise', failed: 'gescheitert' };
@@ -21,10 +21,10 @@ const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise
       <p class="muted">{{ defId() ? 'Kein Zeitplan. Mit einem Zeitplan läuft diese Definition von selbst und der Verlauf füllt sich.' : 'Noch keine Zeitpläne. Ein Zeitplan lässt sich im Verlauf einer Kennzahl, eines Dashboards oder Templates anlegen.' }}</p>
     }
     @if (items().length) {
-      <div class="scroll"><table class="data">
+      <div class="scroll" tabindex="0" role="region" aria-label="Tabelle: Zeitpläne"><table class="data">
         <thead><tr>
-          @if (!defId()) { <th>Definition</th> }
-          <th>Rhythmus</th><th>nächster Lauf</th><th>letzter Lauf</th><th></th>
+          @if (!defId()) { <th scope="col">Definition</th> }
+          <th scope="col">Rhythmus</th><th scope="col">nächster Lauf</th><th scope="col">letzter Lauf</th><th scope="col"><span class="sr-only">Aktionen</span></th>
         </tr></thead>
         <tbody>
           @for (item of items(); track item.id) {
@@ -40,9 +40,9 @@ const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise
                 } @else { <span class="muted">noch keiner</span> }
               </td>
               <td class="actions">
-                <button type="button" class="link" (click)="runNow(item)" [disabled]="busy() === item.id">{{ busy() === item.id ? 'läuft …' : 'Jetzt ausführen' }}</button>
-                <button type="button" class="link" (click)="edit(item)">Ändern</button>
-                <button type="button" class="link" (click)="remove(item)">Löschen</button>
+                <button type="button" class="link" (click)="runNow(item)" [disabled]="busy().has(item.id)" [attr.aria-label]="'Jetzt ausführen: ' + item.definition_name">{{ busy().has(item.id) ? 'läuft …' : 'Jetzt ausführen' }}</button>
+                <button type="button" class="link" (click)="edit(item)" [attr.aria-label]="'Zeitplan ändern: ' + item.definition_name">Ändern</button>
+                <button type="button" class="link" (click)="remove(item)" [attr.aria-label]="'Zeitplan löschen: ' + item.definition_name">Löschen</button>
               </td>
             </tr>
           }
@@ -71,7 +71,7 @@ const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise
         <button type="submit" class="primary" [disabled]="saving()">{{ editing() ? 'Zeitplan ändern' : 'Zeitplan anlegen' }}</button>
         <button type="button" (click)="form.set(null)">Abbrechen</button>
       </form>
-      <p class="muted small">Die Uhrzeit gilt in der Zeitzone der Anwendung (Standard: Europe/Berlin). War die Anwendung zum Termin aus, wird der Lauf einmal nachgeholt.</p>
+      <p class="muted small">Die Uhrzeit gilt in der Zeitzone der Anwendung ({{ zone() }}); die Spalte „nächster Lauf“ zeigt die Zeit dieses Browsers. War die Anwendung zum Termin aus, wird der Lauf einmal nachgeholt.</p>
     } @else if (defId() && loaded() && !items().length) {
       <p><button type="button" (click)="start()">Zeitplan anlegen</button></p>
     }`,
@@ -95,7 +95,8 @@ export class Schedules {
   protected readonly form = signal<ScheduleForm | null>(null);
   protected readonly editing = signal<string | null>(null);
   protected readonly saving = signal(false);
-  protected readonly busy = signal<string | null>(null);
+  protected readonly busy = signal<ReadonlySet<string>>(new Set());
+  protected readonly zone = signal('Europe/Berlin');
   protected readonly weekdays = WEEKDAYS;
   protected readonly time = formatTime;
   protected readonly rhythm = describeRhythm;
@@ -104,6 +105,7 @@ export class Schedules {
 
   constructor() {
     const auth = inject(Auth);
+    this.api.get<AppSettings>('/settings').then((s) => this.zone.set(s.timezone ?? 'Europe/Berlin'), () => undefined);
     effect(() => { this.defId(); auth.renewed(); untracked(() => { this.form.set(null); void this.load(); }); });
   }
 
@@ -159,19 +161,25 @@ export class Schedules {
   }
 
   protected async runNow(item: Schedule): Promise<void> {
-    this.busy.set(item.id);
+    const mark = (on: boolean) => this.busy.update((ids) => {
+      const next = new Set(ids);
+      if (on) next.add(item.id); else next.delete(item.id);
+      return next;
+    });
+    mark(true);
     this.message.set('');
     this.error.set('');
     try {
       const job = await this.api.post<JobState>(`/schedules/${encodeURIComponent(item.id)}/run`);
       // warten, bis der Lauf verbucht ist; verlässt jemand die Seite, läuft er trotzdem zu Ende
-      for (let n = 0; n < 600 && this.alive; n++) {
-        const state = await this.api.get<JobState>('/runs/' + encodeURIComponent(job.id));
-        if (state.status !== 'running') break;
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      let finished = false;
+      for (let n = 0; n < 600 && this.alive && !finished; n++) {
+        finished = (await this.api.get<JobState>('/runs/' + encodeURIComponent(job.id))).status !== 'running';
+        if (!finished) await new Promise((resolve) => setTimeout(resolve, 1000));
       }
       if (!this.alive) return;
       await this.load();
+      if (!finished) { this.message.set('Der Lauf braucht ungewöhnlich lange und läuft weiter; das Ergebnis erscheint hier und unter „Läufe“.'); return; }
       const now = this.items().find((s) => s.id === item.id);
       if (now?.last_status === 'failed') this.error.set('Der Lauf ist gescheitert: ' + (now.last_error ?? 'Grund unbekannt.'));
       else { this.message.set('Der Lauf ist gespeichert.'); this.ran.emit(job.id); }
@@ -179,7 +187,7 @@ export class Schedules {
       this.fail(error, 'Der Lauf ließ sich nicht starten.');
       await this.load();
     } finally {
-      this.busy.set(null);
+      mark(false);
     }
   }
 }

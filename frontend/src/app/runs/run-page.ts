@@ -4,7 +4,7 @@ import { Api, ApiError, Latest, isAbort } from '../core/api';
 import { runAsJob } from '../core/jobs';
 import { formatTime } from '../core/format';
 import { Auth } from '../core/auth';
-import { AppSettings, Definition, Report } from '../core/types';
+import { AppSettings, Definition, Report, RunHead } from '../core/types';
 import { ReportView } from './report-view';
 
 const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise', failed: 'gescheitert' };
@@ -39,7 +39,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
     @if (storing()) {
       <p class="notice row" role="status">
         <span class="grow">Der Lauf wird gezählt und gespeichert@if (progress(); as p) { : {{ p.done }} von {{ p.total }} Abfragen }@else { … }</span>
-        <progress [max]="progress()?.total || 1" [value]="progress()?.done ?? 0"></progress>
+        <progress aria-label="Fortschritt des Laufs" [max]="progress()?.total || 1" [value]="progress()?.done ?? 0"></progress>
         <button type="button" (click)="leave()" title="Der Lauf läuft weiter und steht danach unter „Läufe“">Nicht warten</button>
       </p>
     }
@@ -49,8 +49,17 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
           <select name="compare" [value]="mode()" (change)="mode.set($any($event.target).value)">
             <option value="">kein Vergleich</option><option value="previous">vorigem Lauf</option>
             <option value="date">Stand an einem Tag</option>
+            @if (others().length) { <option value="run">einem bestimmten Lauf</option> }
           </select>
         </label>
+        @if (mode() === 'run') {
+          <label>Lauf
+            <select name="compare-run" [value]="other()" (change)="other.set($any($event.target).value)">
+              <option value="">bitte wählen</option>
+              @for (run of others(); track run.id) { <option [value]="run.id" [selected]="run.id === other()">{{ time(run.started_at) }}{{ run.status === 'ok' ? '' : ' (' + status(run.status) + ')' }}</option> }
+            </select>
+          </label>
+        }
         @if (mode() === 'date') {
           <label>Tag <input type="date" name="compare-date" [value]="date()" (change)="date.set($any($event.target).value)" /></label>
         }
@@ -95,8 +104,11 @@ export class RunPage {
   protected readonly mode = signal('');
   protected readonly date = signal('');
   protected readonly compareNote = signal('');
+  /** frühere Läufe derselben Definition, zum Auswählen */
+  protected readonly others = signal<RunHead[]>([]);
+  protected readonly other = signal('');
   protected readonly compare = computed(() =>
-    this.mode() === 'previous' ? 'previous' : this.mode() === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(this.date()) ? this.date() : '');
+    this.mode() === 'run' ? this.other() : this.mode() === 'previous' ? 'previous' : this.mode() === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(this.date()) ? this.date() : '');
   private waiting: AbortController | null = null;
 
   protected readonly formats = computed(() =>
@@ -115,6 +127,14 @@ export class RunPage {
       this.runId(); this.defId(); this.auth.renewed(); this.compare();
       untracked(() => this.load(false));
     });
+    effect(() => {
+      const defId = this.report.value()?.definition_id;
+      const runId = this.runId();
+      if (!runId || !defId) { untracked(() => this.others.set([])); return; }
+      this.api.get<RunHead[]>(`/definitions/${encodeURIComponent(defId)}/runs?limit=100`)
+        .then((runs) => this.others.set(runs.filter((r) => r.id !== runId)), () => this.others.set([]));
+    });
+    effect(() => { this.runId(); untracked(() => this.other.set('')); });
     effect(() => {
       const id = this.defId();
       this.auth.renewed();

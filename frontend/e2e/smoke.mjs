@@ -10,7 +10,8 @@ const EVIL = '<img src=x onerror="window.__xss=1">';
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const problems = [];
-page.on('console', (m) => m.type() === 'error' && problems.push(m.text()));
+// erwartet ist nur: kein Lauf zum Vergleichen (404 an genau dieser Adresse)
+page.on('console', (m) => m.type() === 'error' && !/\/report\?compare=/.test(m.location().url) && problems.push(m.text()));
 page.on('pageerror', (e) => problems.push(String(e)));
 let keep = false; // true: Rückfragen ablehnen
 page.on('dialog', (d) => (keep ? d.dismiss() : d.accept()));
@@ -239,6 +240,6 @@ await page.waitForURL(/\/login/);
 assert.equal(await page.evaluate(async () => (await fetch('/api/definitions')).status), 401);
 
 assert.equal(await page.evaluate(() => window.__xss), undefined, 'eingeschleustes HTML wurde ausgeführt');
-assert.deepEqual(problems.filter((p) => !p.includes('401') && !p.includes('422') && !p.includes('404')), []);
+assert.deepEqual(problems.filter((p) => !p.includes('401') && !p.includes('422')), []);
 await browser.close();
 console.log('Durchstich in Ordnung');

@@ -166,17 +166,22 @@ export class HistoryPage {
     });
   }
 
+  private turn = 0;
+
   private async open(): Promise<void> {
     const id = encodeURIComponent(this.defId());
+    const turn = ++this.turn;
     this.keys.set(null);
     this.failure.set('');
     try {
       const [definition, keys] = await Promise.all([
         this.api.get<Definition>('/definitions/' + id), this.api.get<HistoryKeys>(`/definitions/${id}/history/keys`)]);
+      if (turn !== this.turn) return; // inzwischen eine andere Definition
       this.definition.set(definition);
       this.keys.set(keys);
       this.pickBlock(keys.blocks[0]?.key ?? '');
     } catch (error) {
+      if (turn !== this.turn) return;
       this.failure.set(error instanceof ApiError ? error.message : 'Der Verlauf ist nicht ladbar.');
     }
   }
