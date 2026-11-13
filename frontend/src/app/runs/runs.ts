@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError } from '../core/api';
+import { Auth } from '../core/auth';
 import { formatTime } from '../core/format';
 import { RunHead } from '../core/types';
 
@@ -16,9 +17,9 @@ const PAGE = 50;
     <h1>Gespeicherte Läufe</h1>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     <div class="card">
-      @if (!runs().length && !loading()) { <p class="muted">Noch keine Läufe. Ein Lauf entsteht über „Lauf speichern“ an einer Kennzahl, einem Dashboard oder Template.</p> }
+      @if (!runs().length && !loading() && !error()) { <p class="muted">Noch keine Läufe. Ein Lauf entsteht über „Lauf speichern“ an einer Kennzahl, einem Dashboard oder Template.</p> }
       @if (runs().length) {
-        <table class="data">
+        <div class="scroll"><table class="data">
           <thead><tr><th>Name</th><th>Art</th><th>Stand</th><th>Status</th><th></th></tr></thead>
           <tbody>
             @for (run of runs(); track run.id) {
@@ -30,7 +31,7 @@ const PAGE = 50;
               </tr>
             }
           </tbody>
-        </table>
+        </table></div>
       }
       @if (more()) { <p><button type="button" (click)="load()" [disabled]="loading()">Weitere laden</button></p> }
     </div>`,
@@ -45,7 +46,10 @@ export class Runs {
   protected readonly status = (s: string) => STATUS[s] ?? s;
   protected readonly kind = (k: string) => KIND[k] ?? k;
 
-  constructor() { void this.load(); }
+  constructor() {
+    const auth = inject(Auth);
+    effect(() => { auth.renewed(); untracked(() => { this.runs.set([]); this.error.set(''); void this.load(); }); });
+  }
 
   protected async load(): Promise<void> {
     this.loading.set(true);

@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, ApiError, Latest } from '../core/api';
+import { Instances } from '../core/instances';
 import { FieldInfo, Filter, VocabPage, VocabValue } from '../core/types';
 import { addValue, looksLikeUri, removeFilter, removeValue, valueOf } from './state';
 
@@ -37,12 +38,12 @@ interface Option { kind: 'field' | 'value' | 'literal'; id: string; label: strin
           <span class="chip open">{{ current.caption || current.property }}
             <button type="button" class="x" (click)="leaveField()" aria-label="Feld schließen">✕</button></span>
         }
-        <input type="text" role="combobox" aria-autocomplete="list" [attr.aria-expanded]="options().length > 0"
-               aria-controls="filter-options" [attr.aria-activedescendant]="options().length ? 'fo-' + active() : null"
+        <input type="text" role="combobox" aria-autocomplete="list" [attr.aria-expanded]="listShown()"
+               aria-label="Filter hinzufügen" [attr.aria-controls]="listShown() ? 'filter-options' : null" [attr.aria-activedescendant]="options().length ? 'fo-' + active() : null"
                [placeholder]="field() ? 'Wert suchen oder URI einfügen …' : 'Filter hinzufügen: Feld suchen …'"
                [ngModel]="query()" (ngModelChange)="query.set($event)"
                (keydown)="key($event)" (focus)="open.set(true)" (input)="open.set(true)" (blur)="blur()" />
-        @if (open() && (options().length || hint())) {
+        @if (listShown()) {
           <ul id="filter-options" role="listbox" class="options card">
             @for (option of options(); track option.kind + option.id; let i = $index) {
               <li role="option" [id]="'fo-' + i" [attr.aria-selected]="i === active()" [class.on]="i === active()"
@@ -53,6 +54,7 @@ interface Option { kind: 'field' | 'value' | 'literal'; id: string; label: strin
             @if (hint()) { <li class="muted note">{{ hint() }}</li> }
           </ul>
         }
+        <span class="sr-only" role="status">{{ announce() }}</span>
       </span>
       @if (filters().length) {
         <label class="muted uris"><input type="checkbox" [ngModel]="showUris()" (ngModelChange)="showUris.set($event)" /> URIs zeigen</label>
@@ -81,6 +83,8 @@ interface Option { kind: 'field' | 'value' | 'literal'; id: string; label: strin
 })
 export class FilterBar {
   private readonly api = inject(Api);
+  private readonly instances = inject(Instances);
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
   readonly instance = input.required<string>();
   readonly filters = input.required<Filter[]>();
   /** bekannte Namen zu Werten (aus dem letzten Ergebnis), Schlüssel "feld\\nwert" */
@@ -106,7 +110,7 @@ export class FilterBar {
       this.fieldsError.set('');
       this.field.set(null);
       if (!instance) return;
-      this.api.get<FieldInfo[]>(`/instances/${encodeURIComponent(instance)}/fields`).then(
+      this.instances.fields(instance).then(
         (fields) => { if (instance === this.instance()) this.fields.set(fields); },
         (error) => { if (instance === this.instance()) this.fieldsError.set(error instanceof ApiError ? error.message : 'Felder nicht ladbar.'); },
       );
@@ -125,6 +129,12 @@ export class FilterBar {
       }, 200);
     });
     effect(() => { this.options(); this.active.set(0); });
+    // die mit den Pfeiltasten gewählte Zeile bleibt im sichtbaren Teil der Liste
+    effect(() => {
+      const index = this.active();
+      if (!this.listShown()) return;
+      queueMicrotask(() => this.host.nativeElement.querySelector('#fo-' + index)?.scrollIntoView({ block: 'nearest' }));
+    });
   }
 
   protected readonly options = computed<Option[]>(() => {
@@ -149,6 +159,14 @@ export class FilterBar {
         hint: looksLikeUri(query) ? 'URI steht nicht im Vokabular dieses Feldes' : 'genau dieser Text als Wert' });
     }
     return options;
+  });
+
+  protected readonly listShown = computed(() => this.open() && (this.options().length > 0 || !!this.hint()));
+  /** für Vorlesehilfen: wie viele Vorschläge es gibt */
+  protected readonly announce = computed(() => {
+    if (!this.listShown()) return '';
+    const count = this.options().length;
+    return (count === 1 ? '1 Vorschlag' : `${count} Vorschläge`) + (this.hint() ? '. ' + this.hint() : '');
   });
 
   protected readonly hint = computed(() => {

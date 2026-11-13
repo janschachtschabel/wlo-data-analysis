@@ -3,11 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Chart } from '../charts/chart';
 import { Api, ApiError, Latest } from '../core/api';
+import { Auth } from '../core/auth';
 import { formatNumber, formatTime } from '../core/format';
 import { Instances } from '../core/instances';
 import { Definition, FieldInfo, Filter, QueryResult, QuerySpec, ViewType } from '../core/types';
 import { FilterBar } from '../filters/filter-bar';
-import { ExplorerState, decodeState, emptyState, encodeState, fieldChoices } from '../filters/state';
+import { ExplorerState, decodeState, emptyState, encodeState, fieldChoices, replaceValue } from '../filters/state';
 import { ResultTable } from '../shared/result-table';
 
 const VIEWS: { id: ViewType; label: string }[] = [
@@ -75,21 +76,28 @@ const VIEWS: { id: ViewType; label: string }[] = [
       }
     </section>
 
-    <section class="card result" [attr.aria-busy]="result.loading()">
+    <h1 class="sr-only">Explorer</h1>
+    <section class="card result" [attr.aria-busy]="stale()">
+      @if (stale() && (result.value() || result.error())) { <p class="muted busy" role="status">Zähle neu …</p> }
+      <div [class.stale]="stale()">
       @if (result.error(); as error) {
         <p class="error" role="alert">{{ error.message }}</p>
         @if (suggestions().length) {
-          <p class="muted">Gemeint sein könnte: @for (s of suggestions(); track s) { <code>{{ s }}</code> }</p>
+          <p class="muted">Gemeint sein könnte:
+            @for (s of suggestions(); track s.id) {
+              <button type="button" class="suggestion" [title]="s.id" (click)="useSuggestion(s.id)">{{ s.label }}</button>
+            }
+          </p>
         }
       } @else if (result.value(); as data) {
         <div class="row head">
           @if (data.columns.length === 1) {
             <div>
-              <div class="big" [class.stale]="result.loading()">{{ number(data.columns[0].total) }}</div>
+              <div class="big">{{ number(data.columns[0].total) }}</div>
               <div class="muted">Materialien · {{ instances.name(data.instance) }}</div>
             </div>
           } @else {
-            <div class="muted" [class.stale]="result.loading()">{{ data.rows.length }} Zeilen × {{ data.columns.length }} Spalten · {{ instances.name(data.instance) }}</div>
+            <div class="muted">{{ data.rows.length }} Zeilen × {{ data.columns.length }} Spalten · {{ instances.name(data.instance) }}</div>
           }
           <span class="grow"></span>
           @if (spec().rows) {
@@ -111,9 +119,12 @@ const VIEWS: { id: ViewType; label: string }[] = [
         </details>
       } @else if (result.loading()) {
         <p class="muted">Zähle …</p>
+      } @else if (stale()) {
+        <p class="muted">Zähle …</p>
       } @else {
         <p class="muted">Keine Instanz gewählt.</p>
       }
+      </div>
     </section>`,
   styles: `
     section + section { margin-top: var(--gap); }
@@ -121,7 +132,7 @@ const VIEWS: { id: ViewType; label: string }[] = [
     .controls label { display: inline-flex; gap: 6px; align-items: center; }
     .save { margin-top: var(--gap); } .wide { width: min(420px, 100%); }
     .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
-    .stale { opacity: .45; }
+    .busy { margin: 0 0 6px; } .suggestion { margin: 0 6px 4px 0; padding: 2px 8px; }
     .head { margin-bottom: var(--gap); }
     .views button { border-radius: 0; margin-left: -1px; }
     .views button:first-child { border-radius: 6px 0 0 6px; } .views button:last-child { border-radius: 0 6px 6px 0; }
@@ -129,7 +140,6 @@ const VIEWS: { id: ViewType; label: string }[] = [
     .origin { margin-top: var(--gap); color: var(--muted); font-size: 13px; }
     .origin ul { margin: 6px 0 0; padding-left: 18px; }
     app-chart { margin-bottom: var(--gap); }
-    code { margin-right: 6px; }
   `,
 })
 export class Explorer {
@@ -151,6 +161,10 @@ export class Explorer {
   protected readonly saveError = signal('');
   protected readonly copied = signal(false);
   protected saveName = '';
+  /** Eine Eingabe wartet noch auf ihre Abfrage (Ruhezeit): Die Anzeige gehört zur vorigen. */
+  private readonly waiting = signal(false);
+  protected readonly stale = computed(() => this.waiting() || this.result.loading());
+  private readonly instance = computed(() => this.spec().instance);
   private timer: ReturnType<typeof setTimeout> | null = null;
   private fromUrl = false;
 
@@ -174,8 +188,10 @@ export class Explorer {
     if (!data) return [];
     return [...data.rows, { key: '__total__', label: 'Gesamt', kind: 'total' as const, values: data.columns.map((c) => c.total) }];
   });
-  protected readonly suggestions = computed<string[]>(() =>
-    (this.result.error()?.extra['suggestions'] ?? []).slice(0, 6).map((s: any) => String(s.caption ?? s.id ?? s)));
+  protected readonly suggestions = computed<{ id: string; label: string }[]>(() =>
+    ((this.result.error()?.extra['suggestions'] ?? []) as any[]).slice(0, 6)
+      .filter((s) => s && typeof s.id === 'string')
+      .map((s) => ({ id: s.id as string, label: String(s.caption || s.id) })));
 
   constructor() {
     const { state, error } = decodeState(this.route.snapshot.queryParamMap.get('q'));
@@ -185,6 +201,14 @@ export class Explorer {
       this.spec.set(state.spec);
       this.view.set(state.view);
       this.instances.current.set(state.spec.instance);
+      // Ein Link kann eine Instanz nennen, die es hier nicht gibt: sagen und leer beginnen.
+      void this.instances.load().then(() => {
+        const list = this.instances.list();
+        if (list.length && !list.some((i) => i.id === state.spec.instance)) {
+          this.linkError.set('Die Instanz aus dem Link gibt es hier nicht; der Explorer startet leer.');
+          this.instances.current.set(list[0].id);
+        }
+      }, () => undefined);
     }
     // Instanzwahl im Kopf: wechselt die Instanz, beginnt die Abfrage neu (Felder sind andere).
     effect(() => {
@@ -195,13 +219,16 @@ export class Explorer {
       });
     });
     effect(() => {
-      const instance = this.spec().instance;
-      this.fields.set([]);
+      const instance = this.instance(); // nur die Instanz, nicht jede Änderung der Abfrage
+      untracked(() => this.fields.set([]));
       if (!instance) return;
-      this.api.get<FieldInfo[]>(`/instances/${encodeURIComponent(instance)}/fields`).then(
-        (fields) => { if (instance === this.spec().instance) this.fields.set(fields); },
-        () => undefined);
+      this.instances.fields(instance).then(
+        (fields) => { if (instance === this.instance()) this.fields.set(fields); },
+        () => undefined); // die Filterleiste zeigt den Fehler
     });
+    // Nach erneuter Anmeldung zählt die Ansicht von selbst neu.
+    const auth = inject(Auth);
+    effect(() => { if (auth.renewed() > 0) untracked(() => this.spec().instance && this.run(false)); });
     // Jede Änderung: Adresse nachführen und nach kurzer Ruhe zählen.
     effect(() => {
       const state: ExplorerState = { spec: this.spec(), view: this.view() };
@@ -215,6 +242,7 @@ export class Explorer {
       const spec = this.spec();
       if (this.timer) clearTimeout(this.timer);
       if (!spec.instance) return;
+      untracked(() => this.waiting.set(true));
       this.timer = setTimeout(() => untracked(() => this.run(false)), this.fromUrl ? 0 : 250);
       this.fromUrl = false;
     });
@@ -222,6 +250,7 @@ export class Explorer {
 
   protected run(refresh: boolean): void {
     const spec = { ...this.spec(), refresh };
+    this.waiting.set(false);
     void this.result.run((signal) => this.api.post<QueryResult>('/query', spec, signal));
   }
 
@@ -237,9 +266,19 @@ export class Explorer {
   protected setTop(top: number): void { const rows = this.spec().rows; if (rows) this.patch({ rows: { ...rows, top: top || null } }); }
   protected setMissing(missing: boolean): void { const rows = this.spec().rows; if (rows) this.patch({ rows: { ...rows, missing } }); }
 
+  /** Vorschlag der API anstelle des Textes übernehmen, den sie nicht zuordnen konnte. */
+  protected useSuggestion(id: string): void {
+    const extra = this.result.error()?.extra ?? {};
+    const property = extra['property'], text = extra['text'];
+    if (typeof property !== 'string' || typeof text !== 'string') return;
+    this.setFilters(replaceValue(this.spec().filters ?? [], property, text, id));
+  }
+
   protected async copyLink(): Promise<void> {
     try {
-      await navigator.clipboard.writeText(location.href);
+      // aus dem Zustand gebaut: Die Adresszeile kann der Eingabe einen Moment nachlaufen.
+      const q = encodeState({ spec: this.spec(), view: this.view() });
+      await navigator.clipboard.writeText(`${location.origin}${location.pathname}?q=${q}`);
       this.copied.set(true);
       setTimeout(() => this.copied.set(false), 2000);
     } catch { /* ohne Zwischenablage bleibt die Adresszeile */ }

@@ -11,6 +11,7 @@ def site(settings, tmp_path):
     (static / "index.html").write_text("<!doctype html><title>Oberfläche</title>", encoding="utf-8")
     (static / "main-AB12CD34.js").write_text("console.log(1)")
     (static / "styles-XY98ZW76.css").write_text("body{}")
+    (static / "chunk-C-ffZ7cx.js").write_text("console.log(2)")  # Hash mit Bindestrich
     (static / "favicon.ico").write_bytes(b"\x00\x01")
     (static / "media" / "bild.svg").write_text("<svg/>")
     (static / ".geheim").write_text("VERSTECKT")
@@ -24,6 +25,7 @@ def test_files_of_the_build_are_served_with_their_type_and_cache(site):
     assert "javascript" in js.headers["content-type"]
     assert js.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert site.get("/styles-XY98ZW76.css").headers["content-type"].startswith("text/css")
+    assert "immutable" in site.get("/chunk-C-ffZ7cx.js").headers["cache-control"]
     assert site.get("/media/bild.svg").status_code == 200
     # nicht gehashte Dateien werden jedes Mal geprüft
     assert site.get("/favicon.ico").headers["cache-control"] == "no-cache"

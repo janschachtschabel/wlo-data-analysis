@@ -94,6 +94,38 @@ await page.fill('textarea', '{"title": "", "sections": [{"id": "a", "type": "gib
 await page.click('text=Prüfen');
 await page.waitForSelector('.problems li.error code:has-text("sections.0")');
 
+// Sitzung läuft während der Arbeit ab: neu anmelden, ohne dass der Text verloren geht
+const draft = '{"title": "Entwurf, der bleiben muss", "sections": []}';
+await page.fill('textarea', draft);
+await page.context().clearCookies();
+await page.click('text=Prüfen');
+await page.waitForSelector('[role=dialog] >> text=Die Sitzung ist abgelaufen');
+await page.fill('#relogin-pw', 'falsch');
+await page.click('[role=dialog] button[type=submit]');
+await page.waitForSelector('[role=dialog] [role=alert]');
+await page.fill('#relogin-pw', 'demo-passwort');
+await page.click('[role=dialog] button[type=submit]');
+await page.waitForSelector('[role=dialog]', { state: 'detached' });
+assert.equal(await page.inputValue('textarea'), draft);
+await page.click('text=Prüfen');
+await page.waitForSelector('.problems li.ok');
+// ... und danach keine Schleife: die nächste Seite lädt ohne erneute Anmeldung
+// ungespeicherte Änderung: Rückfrage beim Verlassen (wird oben angenommen)
+await page.click('nav >> text=Läufe');
+await page.waitForSelector('table.data a:has-text("OER-Statistik")');
+assert.equal(await page.locator('[role=dialog]').count(), 0);
+
+// Schmales Fenster: die Seite selbst rollt nicht seitwärts
+await page.setViewportSize({ width: 390, height: 800 });
+for (const path of ['/', '/bibliothek', '/laeufe']) {
+  await page.goto(base + path);
+  await page.waitForSelector('main h1', { state: 'attached' });
+  await page.waitForTimeout(400);
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.ok(wide <= 1, `${path} ist bei 390 px um ${wide} px zu breit`);
+}
+await page.setViewportSize({ width: 1400, height: 900 });
+
 // Abmelden sperrt die API wieder
 await page.click('text=Abmelden');
 await page.waitForURL(/\/login/);

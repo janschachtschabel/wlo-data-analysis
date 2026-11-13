@@ -65,3 +65,24 @@ describe('Grafik aus einer Ergebnistabelle', () => {
     expect(plan.option!['series'][1]).toMatchObject({ type: 'line', symbolSize: 8, data: [2, null], connectNulls: false });
   });
 });
+
+describe('chartPlan: was die Grafik weglässt, steht dabei', () => {
+  const palette = { series: ['#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8'], surface: '#fff', text: '#000', muted: '#666', grid: '#ccc' };
+  const row = (label: string, values: (number | null)[]) => ({ key: label, label, kind: 'value' as const, values });
+
+  it('stapelt keine berechneten Spalten', () => {
+    const input = {
+      columns: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'q', label: 'Quote', derived: true }],
+      rows: [row('x', [1, 2, 0.5])] };
+    const plan = chartPlan(input, 'stacked_bar', palette);
+    expect(plan.option!['series'].map((s: any) => s.name)).toEqual(['A', 'B']);
+    expect(plan.notes.join(' ')).toContain('Quote');
+  });
+
+  it('nennt Zeilen, die im Kreis fehlen', () => {
+    const input = { columns: [{ id: 'a', label: 'A' }], rows: [row('x', [5]), row('y', [0]), row('z', [null])] };
+    const plan = chartPlan(input, 'pie', palette);
+    expect(plan.option!['series'][0].data).toHaveLength(1);
+    expect(plan.notes.join(' ')).toContain('2 Zeilen ohne positiven Wert');
+  });
+});

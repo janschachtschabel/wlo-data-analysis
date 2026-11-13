@@ -7,11 +7,11 @@ import { ResultRow } from '../core/types';
   selector: 'app-result-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="scroll">
-      <table class="data">
+    <div class="scroll" tabindex="0" role="region" [attr.aria-label]="'Tabelle: ' + (rowTitle() || 'Ergebnis')">
+      <table class="data" [class.two]="!!headerGroups()">
         <thead>
           @if (headerGroups(); as groups) {
-            <tr>
+            <tr class="blocks">
               <th></th>
               @for (group of groups; track $index) { <th class="block" [attr.colspan]="group[1]">{{ group[0] }}</th> }
             </tr>
@@ -46,6 +46,9 @@ import { ResultRow } from '../core/types';
     .scroll { overflow: auto; max-height: 70vh; }
     .pct { margin-left: 6px; font-size: 12px; }
     th.block { text-align: center; border-left: 1px solid var(--border); }
+    /* zwei Kopfzeilen: die zweite klebt unter der ersten, statt sie zu verdecken */
+    tr.blocks th { height: 30px; }
+    table.two thead tr:nth-child(2) th { top: 30px; }
   `,
 })
 export class ResultTable {

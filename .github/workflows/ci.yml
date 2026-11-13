@@ -42,6 +42,17 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npx ng test --watch=false
       - run: npx ng build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Durchstich im Browser gegen den Demo-Server
+        run: |
+          pip install -r ../backend/requirements.txt
+          npm install --no-save --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+          (cd ../backend && python scripts/demo_server.py 8765 > /tmp/demo.log 2>&1 &)
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8765/api/health > /dev/null && break; sleep 1; done
+          node e2e/smoke.mjs http://127.0.0.1:8765 || { cat /tmp/demo.log; exit 1; }
 
   docker:
     runs-on: ubuntu-latest
@@ -65,5 +76,5 @@ jobs:
       - name: Oberfläche ist im Image
         run: |
           curl -fsS http://127.0.0.1:8080/ | grep -q '<app-root>'
-          script=$(curl -fsS http://127.0.0.1:8080/ | grep -o 'main-[A-Za-z0-9_]*\.js' | head -1)
+          script=$(curl -fsS http://127.0.0.1:8080/ | grep -o 'main-[A-Za-z0-9_-]*\.js' | head -1)
           curl -fsS -o /dev/null "http://127.0.0.1:8080/$script"

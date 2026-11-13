@@ -1,7 +1,7 @@
-import { Component, effect, inject, untracked } from '@angular/core';
+import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { Api } from '../core/api';
+import { ApiError } from '../core/api';
 import { Auth } from '../core/auth';
 import { Instances } from '../core/instances';
 
@@ -23,12 +23,29 @@ import { Instances } from '../core/instances';
           <option [value]="inst.id">{{ inst.name }}</option>
         }
       </select>
-      <button type="button" (click)="toggleTheme()" >Hell/Dunkel</button>
+      <button type="button" (click)="toggleTheme()" aria-label="Zwischen heller und dunkler Darstellung wechseln">Hell/Dunkel</button>
       <button type="button" (click)="logout()">Abmelden</button>
     </header>
-    <main><router-outlet /></main>`,
+    @if (loadError()) { <p class="error bar" role="alert">{{ loadError() }}</p> }
+    <main><router-outlet /></main>
+    @if (auth.expired()) {
+      <div class="veil">
+        <form class="card" role="dialog" aria-modal="true" aria-labelledby="relogin-title" (ngSubmit)="relogin()">
+          <h2 id="relogin-title">Die Sitzung ist abgelaufen</h2>
+          <p class="muted">Bitte neu anmelden. Die Seite und deine Eingaben bleiben erhalten; die letzte Aktion danach noch einmal auslösen.</p>
+          <label for="relogin-pw">Passwort</label>
+          <input id="relogin-pw" type="password" name="password" autocomplete="current-password" [(ngModel)]="password" required autofocus />
+          @if (reloginError()) { <p class="error" role="alert">{{ reloginError() }}</p> }
+          <button class="primary" type="submit" [disabled]="!password">Anmelden</button>
+        </form>
+      </div>
+    }`,
   styles: `
-    header { display: flex; gap: 16px; align-items: center; padding: 8px 16px;
+    .veil { position: fixed; inset: 0; z-index: 50; background: rgb(0 0 0 / .45); display: grid; place-items: center; }
+    .veil form { display: grid; gap: 10px; width: min(380px, 92vw); }
+    .bar { margin: 0; padding: 8px 16px; }
+    select { max-width: 46vw; }
+    header { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; padding: 8px 16px;
              background: var(--surface); border-bottom: 1px solid var(--border);
              position: sticky; top: 0; z-index: 5; }
     nav { display: flex; gap: 4px; }
@@ -39,21 +56,17 @@ import { Instances } from '../core/instances';
 })
 export class Shell {
   protected readonly instances = inject(Instances);
-  private readonly api = inject(Api);
-  private readonly auth = inject(Auth);
+  protected readonly auth = inject(Auth);
+  protected readonly loadError = signal('');
+  protected readonly reloginError = signal('');
+  protected password = '';
   private readonly router = inject(Router);
 
   constructor() {
-    void this.instances.load().catch(() => undefined);
-    // Sitzung abgelaufen: zur Anmeldung und danach zurück an dieselbe Stelle.
+    this.instances.load().catch((error) =>
+      this.loadError.set(error instanceof ApiError ? error.message : 'Instanzen nicht ladbar.'));
     effect(() => {
-      if (this.api.unauthenticated() === 0) return;
-      untracked(() => {
-        this.auth.authenticated.set(false);
-        if (!this.router.url.startsWith('/login')) {
-          void this.router.navigate(['/login'], { queryParams: { weiter: this.router.url } });
-        }
-      });
+      if (this.auth.renewed() > 0) untracked(() => { this.loadError.set(''); void this.instances.load().catch(() => undefined); });
     });
     const saved = localStorage.getItem('wda-theme'); // nur eine Darstellungsvorliebe
     if (saved === 'dark' || saved === 'light') document.documentElement.dataset['theme'] = saved;
@@ -66,6 +79,16 @@ export class Shell {
       : matchMedia('(prefers-color-scheme: dark)').matches;
     root.dataset['theme'] = dark ? 'light' : 'dark';
     localStorage.setItem('wda-theme', root.dataset['theme']);
+  }
+
+  protected async relogin(): Promise<void> {
+    this.reloginError.set('');
+    try {
+      await this.auth.login(this.password);
+      this.password = '';
+    } catch (error) {
+      this.reloginError.set(error instanceof ApiError ? error.message : 'Anmeldung nicht möglich.');
+    }
   }
 
   async logout(): Promise<void> {

@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Api, ApiError } from '../core/api';
+import { Auth } from '../core/auth';
 import { formatTime } from '../core/format';
 import { Definition, Group, Kind } from '../core/types';
 import { encodeState } from '../filters/state';
@@ -57,7 +58,7 @@ interface Builtin { id: string; title: string; description?: string; definitions
             @if (items.length) {
               <section class="card">
                 <h2>{{ kind.plural }}</h2>
-                <table class="data">
+                <div class="scroll"><table class="data">
                   <tbody>
                     @for (item of items; track item.id) {
                       <tr>
@@ -82,7 +83,7 @@ interface Builtin { id: string; title: string; description?: string; definitions
                       </tr>
                     }
                   </tbody>
-                </table>
+                </table></div>
               </section>
             }
           }
@@ -99,7 +100,7 @@ interface Builtin { id: string; title: string; description?: string; definitions
     .groups .on { font-weight: 700; } .left { text-align: left; } .top { margin-top: 20px; }
     .small { font-size: 12px; } .actions { white-space: nowrap; } .actions > * { margin-left: 10px; }
     table.data td { text-align: left; } table.data td.actions { text-align: right; }
-    @media (max-width: 900px) { .layout { flex-direction: column; } aside { width: 100%; } }
+    @media (max-width: 900px) { .layout { flex-direction: column; align-items: stretch; } aside { width: 100%; } }
   `,
 })
 export class Library {
@@ -130,7 +131,10 @@ export class Library {
     return out;
   });
 
-  constructor() { void this.reload(); }
+  constructor() {
+    const auth = inject(Auth);
+    effect(() => { auth.renewed(); untracked(() => { this.error.set(''); void this.reload(); }); });
+  }
 
   private async reload(): Promise<void> {
     try {
@@ -163,6 +167,9 @@ export class Library {
     if (item.kind !== 'metric') { await this.router.navigate(['/ansicht', item.id]); return; }
     try {
       const full = await this.api.get<Definition>('/definitions/' + encodeURIComponent(item.id));
+      // Gespeicherte Filter gehören zur Kennzahl, stehen aber nicht in ihrer Abfrage: Der Explorer
+      // würde ohne sie zählen. Solche Kennzahlen zeigt die Ansicht, die sie vollständig auswertet.
+      if (full.spec.filter_ids?.length) { await this.router.navigate(['/ansicht', item.id]); return; }
       await this.router.navigate(['/'], { queryParams: { q: encodeState({ spec: full.spec.query, view: full.spec.view?.type ?? 'table' }) } });
     } catch (error) { this.fail(error, 'Kennzahl nicht ladbar.'); }
   }
@@ -198,7 +205,7 @@ export class Library {
       const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) + '.json';
+      link.download = (name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'definition') + '.json';
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) { this.fail(error, 'Export nicht möglich.'); }

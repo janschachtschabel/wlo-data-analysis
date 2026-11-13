@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { Api, ApiError, Latest } from '../core/api';
 import { formatTime } from '../core/format';
-import { Instances } from '../core/instances';
+import { Auth } from '../core/auth';
 import { AppSettings, Definition, Report } from '../core/types';
 import { ReportView } from './report-view';
 
@@ -30,7 +30,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
         @for (format of formats(); track format.id) {
           <a class="btn" [class.off]="!format.available" [attr.aria-disabled]="!format.available"
              [title]="format.available ? '' : 'PDF gibt es nur im Docker-Image (Bibliothek Pango fehlt hier)'"
-             [href]="format.available ? '/api/runs/' + id + '/export?format=' + format.id : null">{{ format.label }}</a>
+             [href]="format.available ? exportLink(id, format.id) : null">{{ format.label }}</a>
         }
       }
     </div>
@@ -49,7 +49,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
 export class RunPage {
   private readonly api = inject(Api);
   private readonly router = inject(Router);
-  private readonly instances = inject(Instances);
+  private readonly auth = inject(Auth);
   readonly runId = input<string>();
   readonly defId = input<string>();
   protected readonly report = new Latest<Report>();
@@ -59,6 +59,8 @@ export class RunPage {
   protected readonly storeError = signal('');
   protected readonly time = formatTime;
   protected readonly status = (s: string) => STATUS[s] ?? s;
+  protected readonly exportLink = (id: string, format: string) =>
+    `/api/runs/${encodeURIComponent(id)}/export?format=${encodeURIComponent(format)}`;
 
   protected readonly formats = computed(() =>
     (this.settings()?.export.formats ?? ['json', 'csv', 'md', 'html', 'pdf']).map((id) => ({
@@ -72,12 +74,14 @@ export class RunPage {
   constructor() {
     this.api.get<AppSettings>('/settings').then((s) => this.settings.set(s), () => undefined);
     effect(() => {
-      this.runId(); this.defId(); this.instances.current();
-      this.load(false);
+      // Die Instanz steht in der Definition; die Wahl im Kopf löst hier keine zweite Zählung aus.
+      this.runId(); this.defId(); this.auth.renewed();
+      untracked(() => this.load(false));
     });
     effect(() => {
       const id = this.defId();
-      this.definition.set(null);
+      this.auth.renewed();
+      untracked(() => this.definition.set(null));
       if (id) this.api.get<Definition>('/definitions/' + encodeURIComponent(id)).then((d) => this.definition.set(d), () => undefined);
     });
   }

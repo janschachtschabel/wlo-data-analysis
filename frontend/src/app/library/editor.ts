@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError, Latest } from '../core/api';
+import { Auth } from '../core/auth';
 import { Definition, Report } from '../core/types';
 import { ReportView } from '../runs/report-view';
 
@@ -13,6 +14,7 @@ import { ReportView } from '../runs/report-view';
   selector: 'app-editor',
   imports: [FormsModule, RouterLink, ReportView],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(window:beforeunload)': 'beforeUnload($event)' },
   template: `
     @if (definition(); as def) {
       <div class="row">
@@ -38,7 +40,10 @@ import { ReportView } from '../runs/report-view';
           <span class="grow"></span>
           @if (message()) { <span class="muted" role="status">{{ message() }}</span> }
           @if (error()) { <span class="error" role="alert">{{ error() }}</span> }
-          @if (conflict()) { <button type="button" (click)="reload()">Neu laden (verwirft meine Änderung)</button> }
+          @if (conflict()) {
+            <button type="button" (click)="reload()">Neu laden (verwirft meine Änderung)</button>
+            <button type="button" (click)="overwrite()">Meine Fassung trotzdem speichern</button>
+          }
           <button class="primary" type="submit" [disabled]="!name.trim()">Speichern</button>
         </div>
       </form>
@@ -72,7 +77,23 @@ export class Editor {
   protected description = '';
   protected text = '';
 
-  constructor() { effect(() => { this.defId(); void this.reload(); }); }
+  /** Stand beim Laden oder letzten Speichern, um ungespeicherte Änderungen zu erkennen */
+  private stored = '';
+
+  constructor() {
+    const auth = inject(Auth);
+    effect(() => { this.defId(); untracked(() => void this.reload()); });
+    // Nach erneuter Anmeldung nur laden, wenn noch nichts da ist: Eingaben bleiben stehen.
+    effect(() => { if (auth.renewed() > 0) untracked(() => { if (!this.definition()) void this.reload(); }); });
+  }
+
+  private snapshot(): string { return JSON.stringify([this.name, this.description, this.text]); }
+  hasChanges(): boolean { return !!this.definition() && this.snapshot() !== this.stored; }
+  /** Verlassen mit ungespeicherten Änderungen nur nach Rückfrage */
+  canLeave(): boolean {
+    return !this.hasChanges() || confirm('Die Änderungen sind nicht gespeichert. Seite trotzdem verlassen?');
+  }
+  protected beforeUnload(event: BeforeUnloadEvent): void { if (this.hasChanges()) event.preventDefault(); }
 
   protected async reload(): Promise<void> {
     this.error.set(''); this.conflict.set(false); this.message.set(''); this.report.clear();
@@ -81,6 +102,7 @@ export class Editor {
       this.name = def.name; this.description = def.description;
       this.text = JSON.stringify(def.spec, null, 2);
       this.problems.set([]); this.checked.set(false);
+      this.stored = this.snapshot();
       this.definition.set(def);
     } catch (error) { this.error.set(error instanceof ApiError ? error.message : 'Nicht ladbar.'); }
   }
@@ -117,14 +139,26 @@ export class Editor {
       (await this.api.post<{ report: Report }>('/preview', { kind: def.kind, name: this.name.trim() || def.name, spec }, signal)).report);
   }
 
-  protected async save(): Promise<void> {
+  /** Bei einem Konflikt: die eigene Fassung auf den neuesten Stand setzen (überschreibt die fremde Änderung). */
+  protected async overwrite(): Promise<void> {
+    const def = this.definition();
+    if (!def) return;
+    try {
+      const current = await this.api.get<Definition>('/definitions/' + encodeURIComponent(def.id));
+      await this.save(current.version);
+    } catch (error) { this.error.set(error instanceof ApiError ? error.message : 'Speichern nicht möglich.'); }
+  }
+
+  protected async save(version?: number): Promise<void> {
     const def = this.definition();
     if (!def || !(await this.check())) return;
     this.error.set(''); this.conflict.set(false);
     try {
       const updated = await this.api.put<Definition>('/definitions/' + encodeURIComponent(def.id), {
-        version: def.version, name: this.name.trim(), description: this.description, spec: JSON.parse(this.text) });
+        version: version ?? def.version, name: this.name.trim(), description: this.description, spec: JSON.parse(this.text) });
       this.definition.set({ ...def, ...updated });
+      this.name = this.name.trim();
+      this.stored = this.snapshot();
       this.message.set('Gespeichert.');
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {

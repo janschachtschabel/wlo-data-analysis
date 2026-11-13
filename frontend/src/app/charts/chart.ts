@@ -67,6 +67,8 @@ export class Chart implements OnDestroy {
     effect(() => {
       const plan = this.plan();
       const element = this.plot().nativeElement;
+      // die Zeichenfläche erbt keine Schrift: die der Seite ausdrücklich mitgeben
+      const fontFamily = getComputedStyle(element).fontFamily;
       if (!plan.option) {
         this.chart?.clear();
         return;
@@ -76,7 +78,7 @@ export class Chart implements OnDestroy {
         this.resize.observe(element);
       }
       this.chart.resize({ height: plan.height });
-      this.chart.setOption({ animationDuration: 200, textStyle: { fontFamily: 'inherit' }, ...plan.option }, true);
+      this.chart.setOption({ animationDuration: 200, textStyle: { fontFamily }, ...plan.option }, true);
     });
   }
 

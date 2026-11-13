@@ -2,7 +2,7 @@ import { formatNumber } from '../core/format';
 import { ResultRow, ViewType } from '../core/types';
 
 export interface ChartInput {
-  columns: { id: string; label: string }[];
+  columns: { id: string; label: string; derived?: boolean }[];
   rows: ResultRow[];
 }
 export interface Palette { series: string[]; surface: string; text: string; muted: string; grid: string }
@@ -33,6 +33,15 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
   if (!rows.length || !columns.length || view === 'table' || view === 'number') {
     return { option: null, notes, height: 0 };
   }
+  if (view === 'stacked_bar' && columns.length > 1 && columns.some((c) => c.derived)) {
+    // Berechnete Spalten (Anteile, Differenzen) sind keine Teile einer Summe.
+    const counted = columns.filter((c) => !c.derived);
+    if (counted.length) {
+      notes.push('Berechnete Spalten lassen sich nicht stapeln und fehlen in dieser Grafik: '
+        + columns.filter((c) => c.derived).map((c) => c.label).join(', ') + '.');
+      columns = counted;
+    }
+  }
   if (columns.length > MAX_SERIES) {
     notes.push(`Die Grafik zeigt die ersten ${MAX_SERIES} von ${columns.length} Spalten.`);
     columns = columns.slice(0, MAX_SERIES);
@@ -50,6 +59,10 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
     const column = columns[0];
     if (input.columns.length > 1) notes.push(`Der Kreis zeigt nur die Spalte „${column.label}“.`);
     const known = rows.filter((r) => typeof r.values[column.index] === 'number' && r.values[column.index]! > 0);
+    if (known.length < rows.length) {
+      const missing = rows.length - known.length;
+      notes.push(`${missing} ${missing === 1 ? 'Zeile' : 'Zeilen'} ohne positiven Wert ${missing === 1 ? 'fehlt' : 'fehlen'} im Kreis.`);
+    }
     const sorted = [...known].sort((a, b) => b.values[column.index]! - a.values[column.index]!);
     const shown = sorted.slice(0, MAX_SLICES);
     if (sorted.length > shown.length) {
@@ -90,7 +103,7 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
       option: {
         color: palette.series, legend, tooltip: { ...tooltip, trigger: 'axis' },
         grid: { left: 8, right: 16, top: legend ? 36 : 12, bottom: 8, containLabel: true },
-        xAxis: { ...category, axisLabel: { ...axisText, formatter: (t: string) => short(t, 18), hideOverlap: true } },
+        xAxis: { ...category, axisLabel: { ...axisText, formatter: (t: string) => short(t, 18), interval: 0, rotate: rows.length > 4 ? 40 : 0 } },
         yAxis: value,
         series: columns.map((c) => ({
           name: c.label, type: 'line', lineStyle: { width: 2 }, symbol: 'circle', symbolSize: 8,
@@ -100,7 +113,7 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
       },
     };
   }
-  const stacked = view === 'stacked_bar' && columns.length > 1;
+  const stacked = view === 'stacked_bar' && columns.length > 1 && !columns.some((c) => c.derived);
   return {
     notes,
     height: Math.max(220, 60 + rows.length * (stacked || columns.length === 1 ? 30 : 14 + columns.length * 12)),

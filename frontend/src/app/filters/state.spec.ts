@@ -1,4 +1,5 @@
 import {
+  replaceValue,
   MAX_STATE_LENGTH, addValue, fieldChoices, decodeState, emptyState, encodeState, looksLikeUri, removeFilter,
   removeValue,
 } from './state';
@@ -74,5 +75,35 @@ describe('Feldauswahl', () => {
     ]);
     expect(out.map((f) => f.caption)).toEqual(
       ['Bildungsstufe', 'Fach (ccm:taxonid)', 'Fach (virtual:taxonid)', 'preview.style']);
+  });
+});
+
+describe('Link-Zustand: Prüfung', () => {
+  const link = (spec: unknown, v = 'table') =>
+    btoa(JSON.stringify({ s: spec, v })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  it('lehnt Filterwerte ab, die weder Text noch {value} sind', () => {
+    for (const values of [[1], [null], [{ uri: 'x' }], [['a']]]) {
+      expect(decodeState(link({ instance: 'i', filters: [{ property: 'p', values }] })).state).toBeNull();
+    }
+    expect(decodeState(link({ instance: 'i', filters: [{ property: 'p', values: ['a', { value: 'b' }] }] })).state).not.toBeNull();
+  });
+
+  it('lehnt zwei Filter auf demselben Feld ab', () => {
+    const filters = [{ property: 'p', values: ['a'] }, { property: 'p', values: ['b'] }];
+    expect(decodeState(link({ instance: 'i', filters })).error).toContain('beschädigt');
+  });
+
+  it('räumt Zustände auf, aus denen die Bedienung nicht herausführt', () => {
+    const noRows = decodeState(link({ instance: 'i', columns: { property: 'c' }, percent: 'row' }, 'pie')).state!;
+    expect([noRows.spec.columns, noRows.spec.percent, noRows.view]).toEqual([null, 'none', 'table']);
+    const same = decodeState(link({ instance: 'i', rows: { property: 'r' }, columns: { property: 'r' } }, 'number')).state!;
+    expect([same.spec.columns, same.view]).toEqual([null, 'table']);
+  });
+
+  it('ersetzt einen unbekannten Wert durch den Vorschlag', () => {
+    const filters = [{ property: 'p', values: ['mathe', { value: 'u2', literal: true }] }];
+    expect(replaceValue(filters, 'p', 'mathe', 'u1')).toEqual([
+      { property: 'p', values: [{ value: 'u2', literal: true }, { value: 'u1', literal: true }] }]);
   });
 });

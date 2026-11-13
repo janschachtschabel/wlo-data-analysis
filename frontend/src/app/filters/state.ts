@@ -10,6 +10,20 @@ export function valueOf(value: Value): string {
   return typeof value === 'string' ? value : value.value;
 }
 
+function isValue(value: unknown): boolean {
+  if (typeof value === 'string') return true;
+  return !!value && typeof value === 'object' && typeof (value as { value?: unknown }).value === 'string';
+}
+
+/** Ersetzt in einem Feld einen Wert durch einen anderen (Vorschlag der API statt des unbekannten Textes). */
+export function replaceValue(filters: Filter[], property: string, old: string, value: string): Filter[] {
+  return filters.map((f) => {
+    if (f.property !== property) return f;
+    const rest = f.values.filter((v) => valueOf(v) !== old && valueOf(v) !== value);
+    return { ...f, values: [...rest, { value, literal: true }] };
+  });
+}
+
 export function emptyState(instance: string): ExplorerState {
   return { spec: { instance, filters: [] }, view: 'table' };
 }
@@ -46,11 +60,23 @@ export function decodeState(text: string | null): { state: ExplorerState | null;
     if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return broken;
     if (typeof spec.instance !== 'string' || !spec.instance) return broken;
     if (spec.filters !== undefined && !Array.isArray(spec.filters)) return broken;
+    const seen = new Set<string>();
     for (const filter of spec.filters ?? []) {
-      if (!filter || typeof filter.property !== 'string' || !Array.isArray(filter.values)) return broken;
+      if (!filter || typeof filter.property !== 'string' || !filter.property) return broken;
+      if (!Array.isArray(filter.values) || !filter.values.every(isValue)) return broken;
+      if (seen.has(filter.property)) return broken; // je Feld ein Filter, sonst wären Chips doppelt
+      seen.add(filter.property);
     }
-    const view: ViewType = VIEWS.includes(data.v) ? data.v : 'table';
-    return { state: { spec: { ...spec, refresh: false }, view }, error: '' };
+    for (const axis of [spec.rows, spec.columns]) {
+      if (axis != null && (typeof axis !== 'object' || typeof axis.property !== 'string' || !axis.property)) return broken;
+    }
+    let view: ViewType = VIEWS.includes(data.v) ? data.v : 'table';
+    const clean: QuerySpec = { ...spec, refresh: false };
+    // Zustände, aus denen die Bedienung nicht herausführt, gar nicht erst annehmen
+    if (!clean.rows) { clean.rows = null; clean.columns = null; clean.percent = 'none'; view = 'table'; }
+    else if (clean.columns?.property === clean.rows.property) clean.columns = null;
+    if (view === 'number') view = 'table';
+    return { state: { spec: clean, view }, error: '' };
   } catch {
     return broken;
   }
