@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from . import __version__
 from .api import (
     auth,
+    builtin,
     definitions,
     edusharing,
     errors,
@@ -82,6 +83,7 @@ def create_app(
     protected.include_router(definitions.router)
     protected.include_router(runs.router)
     protected.include_router(export.router)
+    protected.include_router(builtin.router)
     query.register_error_handlers(app)
     errors.register_error_handlers(app)
 

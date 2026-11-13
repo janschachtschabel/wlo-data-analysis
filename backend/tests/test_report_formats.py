@@ -170,3 +170,21 @@ def test_real_run_in_all_formats(tmp_path):
     assert "## Methodik" in md and "Mundo: Handeintrag" in md and "**MINT**" in md
     with pytest.raises(ValueError):
         render(report, "docx")
+
+
+def test_wide_matrix_is_split_by_blocks_not_cut_off():
+    columns = [Column(f"b{b}.s{n}", f"S{n}") for b in range(7) for n in range(6)]
+    table = Table("m", "Breit", columns,
+                  [Row("r", "Zeile", "value", list(range(42))),
+                   Row("__total__", "Gesamt", "total", list(range(42)))],
+                  header_groups=[(f"Block {b}", 6) for b in range(7)])
+    report = sample()
+    report.blocks = [table]
+    html = to_html(report).decode()
+    assert html.count("<table") == 4 and html.count(">Zeile</td>") == 4
+    for b in range(7):
+        assert html.count(f'colspan="6">Block {b}</th>') == 1
+    for value in range(42):
+        assert html.count(f"<td>{value}</td>") == 2  # Zeile und Gesamtzeile, je einmal
+    # schmale Tabellen und Tabellen ohne Blöcke bleiben ganz
+    assert to_html(sample()).decode().count("<table") == 1

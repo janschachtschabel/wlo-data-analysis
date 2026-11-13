@@ -43,6 +43,7 @@ Minute auch die richtige Anmeldung.
 | `WDA_UPSTREAM_TIMEOUT` | `90` | Timeout für Abfragen an eine Instanz in Sekunden |
 | `WDA_UPSTREAM_CONCURRENCY` | `4` | gleichzeitige Abfragen je Instanz |
 | `WDA_RUNS_KEEP` | `500` | gespeicherte Läufe je Definition; ältere werden entfernt |
+| `WDA_OERSI_URL` | Suchschnittstelle von oersi.org | Adresse für den OERSI-Abruf in Berichten |
 | `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
@@ -150,6 +151,24 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
 - `instance` beim Lauf führt dieselbe Definition gegen eine andere Instanz aus.
 - Was noch verwendet wird, lässt sich nicht löschen (409 mit der Liste der Verwender).
 - Fehler haben überall die Form `{"detail": Satz, "kind": Art}`.
+
+## Berichte, Export und die OER-Statistik
+
+- `GET /api/runs/{id}/export?format=json|csv|md|html|pdf` liefert einen gespeicherten Lauf
+  als Datei. HTML und PDF sind in sich vollständig (Grafiken als SVG, nichts wird
+  nachgeladen); CSV ist UTF-8 mit BOM und `;` als Trenner. Jede Tabelle nennt Quelle,
+  Abrufzeitpunkt und die Hinweise zur Zählung; fehlende Werte stehen als „–", nie als 0.
+- Templates kennen neben Text, Tabelle und Grafik den Abschnitt `matrix`: Zeilen in Gruppen
+  mit Zwischensummen, Spaltenblöcke je Quelle. Eine Quelle ist eine Abfrage an die Instanz
+  (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen) oder ein Handeintrag (`manual`).
+- Texte dürfen Platzhalter tragen: `{{run.date}}`, `{{run.instance}}`,
+  `{{abschnitt.total.spalte}}`, `{{abschnitt.cell.zeile.spalte}}` (bei einer Matrix heißt
+  die Spalte `block.spalte`).
+- `GET /api/builtin` zeigt mitgelieferte Definitionen, `POST /api/builtin/oer-statistik/install`
+  legt die **OER-Statistik** an: Fächer in zehn Fächergruppen × Bildungsbereiche × Quelle ×
+  Lizenzkategorien A bis D. Die Zuordnungen (Fach → Fächergruppe, Bildungsstufe → Bereich,
+  Lizenz → Kategorie) stehen in der Definition und sind dort änderbar; erzeugt wird die
+  Datei mit `backend/scripts/build_oer_template.py`.
 
 ## Entwicklung
 

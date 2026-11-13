@@ -203,25 +203,49 @@ tr.group td { background: #f6f7f9; } tr.total td { border-top: 2px solid #555; }
 td.l1 { padding-left: 1.4em; } .derived { font-style: italic; }
 .notes { color: #444; font-size: 8.5pt; margin: .3rem 0 0; padding-left: 1.2em; }
 .failure { border: 1px solid #b8445a; background: #fbeef0; padding: .5rem; }
+table.many { table-layout: fixed; font-size: 7.5pt; } table.many th.label { width: 24%; }
+table.many th { overflow-wrap: break-word; hyphens: auto; }
+thead { display: table-header-group; }
+tr { page-break-inside: avoid; }
 svg { max-width: 100%; height: auto; }
 """
 
 
+MAX_COLUMNS_PER_PART = 12
+
+
+def _parts(table: Table) -> list[tuple[int, int, list[tuple[str, int]] | None]]:
+    """Breite Tabellen mit Spaltenblöcken werden blockweise untereinander gesetzt, damit sie
+    auf eine Seite passen: (erste Spalte, Ende, Blöcke dieses Teils)."""
+    if not table.header_groups or len(table.columns) <= MAX_COLUMNS_PER_PART:
+        return [(0, len(table.columns), table.header_groups)]
+    parts, start, pos, current = [], 0, 0, []
+    for label, span in table.header_groups:
+        if current and pos + span - start > MAX_COLUMNS_PER_PART:
+            parts.append((start, pos, current))
+            start, current = pos, []
+        current.append((label, span))
+        pos += span
+    parts.append((start, pos, current))
+    return parts
+
+
 def _table_html(table: Table) -> str:
-    out = ["<table>", "<thead>"]
-    if table.header_groups:
+    out = []
+    for start, end, groups in _parts(table):
+        out += ['<table class="many">' if end - start > 8 else "<table>", "<thead>"]
+        if groups:
+            out.append('<tr><th class="label"></th>' + "".join(
+                f'<th class="block" colspan="{span}">{escape(label)}</th>'
+                for label, span in groups) + "</tr>")
         out.append('<tr><th class="label"></th>' + "".join(
-            f'<th class="block" colspan="{span}">{escape(label)}</th>'
-            for label, span in table.header_groups) + "</tr>")
-    out.append('<tr><th class="label"></th>' + "".join(
-        f'<th class="{"derived" if c.derived else ""}">{escape(c.label)}</th>'
-        for c in table.columns) + "</tr></thead><tbody>")
-    for row in table.rows:
-        cells = "".join(f"<td>{escape(_cell(row, pos))}</td>"
-                        for pos in range(len(table.columns)))
-        out.append(f'<tr class="{escape(row.kind)}"><td class="label l{row.level}">'
-                   f"{escape(row.label)}</td>{cells}</tr>")
-    out.append("</tbody></table>")
+            f'<th class="{"derived" if c.derived else ""}">{escape(c.label)}</th>'
+            for c in table.columns[start:end]) + "</tr></thead><tbody>")
+        for row in table.rows:
+            cells = "".join(f"<td>{escape(_cell(row, pos))}</td>" for pos in range(start, end))
+            out.append(f'<tr class="{escape(row.kind)}"><td class="label l{row.level}">'
+                       f"{escape(row.label)}</td>{cells}</tr>")
+        out.append("</tbody></table>")
     items = [f"<li>{escape(n['text'])}</li>" for n in table.notes]
     items += [f"<li>Quelle: {escape(s)}</li>" for s in source_lines(table)]
     if any(c.derived for c in table.columns):

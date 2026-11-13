@@ -129,6 +129,9 @@ class MatrixRows(_Model):
     sections: list[RowSection] = Field(min_length=1, max_length=40)
     missing: bool = True
     subtotal: Literal["distinct", "none"] = "distinct"
+    # Namen für Werte, die das Metadatenset der Instanz nicht kennt (Wert → Name)
+    labels: dict[Annotated[StrictStr, Field(max_length=2000)], Label] = Field(
+        default_factory=dict, max_length=600)
 
     @model_validator(mode="after")
     def _unique(self) -> MatrixRows:
@@ -178,6 +181,9 @@ class MatrixSection(_Model):
     instance: InstanceId | None = None
     rows: MatrixRows
     series: list[Series] = Field(min_length=1, max_length=MAX_SERIES)
+    # Spalten, die erscheinen (in dieser Reihenfolge); ohne Angabe alle. Hilfsspalten, die
+    # nur eine Formel speisen, bleiben so aus der Tabelle heraus.
+    show: list[Ident] | None = Field(default=None, min_length=1, max_length=MAX_SERIES)
     blocks: list[Annotated[QueryBlock | ManualBlock | OersiBlock,
                            Field(discriminator="source")]] = Field(
         min_length=1, max_length=12)
@@ -186,6 +192,9 @@ class MatrixSection(_Model):
     def _unique(self) -> MatrixSection:
         _unique_ids([b.id for b in self.blocks], "Blöcke")
         _unique_ids([s.id for s in self.series], "Spalten")
+        unknown = set(self.show or []) - {s.id for s in self.series}
+        if unknown or len(set(self.show or [])) != len(self.show or []):
+            raise ValueError("show nennt unbekannte oder doppelte Spalten")
         return self
 
 

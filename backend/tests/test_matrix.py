@@ -251,3 +251,18 @@ def test_oersi_failure_leaves_the_repository_block(world):
     assert row(table, "__total__").values[0] is not None
     assert row(table, "__total__").values[5:] == [None] * 5
     assert any(n["text"].startswith("OERSI: ") for n in table.notes)
+
+
+def test_show_hides_helper_columns_but_placeholders_still_work(world):
+    full = build_report(run_template(world, template(matrix()))).blocks[0]
+    run = run_template(world, template(matrix(show=["d", "gesamt"])))
+    [table] = build_report(run).blocks
+    assert [c.id for c in table.columns] == ["sek1.d", "sek1.gesamt", "hs.d", "hs.gesamt",
+                                             "mundo.d", "mundo.gesamt"]
+    assert table.header_groups == [("Sekundarstufe I", 2), ("Hochschule", 2), ("Mundo", 2)]
+    for key in (M, "mint", "__total__", "__missing__"):
+        v = row(full, key).values
+        assert row(table, key).values == [v[3], v[0], v[7], v[4], v[11], v[8]]
+    for bad in (["gibtesnicht"], ["a", "a"], []):
+        with pytest.raises(InvalidDefinition):
+            parse_spec("template", template(matrix(show=bad)))

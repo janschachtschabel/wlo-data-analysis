@@ -68,6 +68,7 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
         notes=list(prov.get("notes") or []),
         sources=[{
             "label": inst.get("id") or result.get("instance"), "kind": "query",
+            "instance": inst.get("id") or result.get("instance"),
             "base_url": inst.get("base_url"), "fetched_at": prov.get("fetched_at"),
             "oldest_fetched_at": prov.get("oldest_fetched_at"),
             "queries": prov.get("queries"),
@@ -81,8 +82,8 @@ def _lookup(tables: dict[str, Table], run: dict[str, Any], path: str) -> str | N
     if path == "run.name":
         return str(run["name"])
     if path == "run.instance":
-        labels = sorted({str(s["label"]) for t in tables.values() for s in t.sources
-                         if s.get("kind") == "query" and s.get("label")})
+        labels = sorted({str(s["instance"]) for t in tables.values() for s in t.sources
+                         if s.get("kind") == "query" and s.get("instance")})
         return ", ".join(labels) if labels else None
     # <abschnitt>.total.<spalte>  oder  <abschnitt>.cell.<zeile>.<spalte>
     for key, table in tables.items():
@@ -232,7 +233,10 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
             # welche Eingabe wurde zu welcher Zeile: Reihenfolge wie in der Definition
             resolved = iter((detail.get("provenance", {}).get("rows") or {}).get("include")
                             or [])
-            labels = {row["key"]: row["label"] for row in detail["rows"]}
+            fallback = section["rows"].get("labels") or {}
+            labels = {row["key"]: (fallback.get(row["key"], row["label"])
+                                   if row["label"] == row["key"] else row["label"])
+                      for row in detail["rows"]}
             for sec in sections:
                 for _ in sec.get("values", []):
                     key = next(resolved, None)
@@ -258,6 +262,15 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
     if section["rows"].get("missing", True):
         rows.append(Row("__missing__", "ohne Wert", "missing", line("__missing__")))
     rows.append(Row("__total__", "Gesamt", "total", line("__total__")))
+    show = section.get("show")
+    if show:  # nur die gewünschten Spalten, je Block in der gewünschten Reihenfolge
+        ids = [s["id"] for s in series]
+        keep = [block_pos * width + ids.index(sid)
+                for block_pos in range(len(section["blocks"])) for sid in show]
+        columns = [columns[pos] for pos in keep]
+        header_groups = [(label, len(show)) for label, _ in header_groups]
+        for row in rows:
+            row.values = [row.values[pos] for pos in keep]
     notes.append({"code": "matrix_counting",
                   "text": "Ein Material mit mehreren Werten zählt in jeder zutreffenden Zeile. "
                           "Zwischensummen und die Gesamtzeile sind eigene Zählungen (jedes "

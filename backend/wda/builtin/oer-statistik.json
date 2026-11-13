@@ -1,0 +1,2082 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "oer-statistik",
+  "title": "OER-Statistik",
+  "description": "Materialien nach Fach, Bildungsbereich, Quelle und Lizenzkategorie, nach dem Vorbild der OER-Statistik der Referatorien."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-oer-statistik",
+   "kind": "template",
+   "name": "OER-Statistik",
+   "description": "Fächer in Fächergruppen × Bildungsbereiche × Quelle × Lizenzkategorien. Zuordnungen sind in der Definition änderbar.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "title": "OER-Statistik",
+    "instance": "wlo-prod",
+    "sections": [
+     {
+      "id": "einleitung",
+      "type": "text",
+      "markdown": "Stand {{run.date}}, Instanz {{run.instance}}.\n\nDie Tabelle zählt Bildungsmaterialien nach Fach, Bildungsbereich und Lizenzkategorie:\n\n- **A** offene Lizenzen (Public Domain, CC0, CC BY, CC BY-SA)\n- **B** andere Creative-Commons-Lizenzen mit NC oder ND\n- **C** anderer freier Zugang (Lizenz angegeben, aber weder A noch B)\n- **D** Lizenzangabe fehlt\n"
+     },
+     {
+      "id": "oer",
+      "type": "matrix",
+      "title": "Materialien nach Fach, Bereich und Lizenz",
+      "rows": {
+       "property": "ccm:taxonid",
+       "sections": [
+        {
+         "id": "geisteswissenschaften",
+         "label": "Geisteswissenschaften",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/160",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/240",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/450",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/520",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n004",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n01",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n012",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n02",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n022",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n03",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n037",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n04",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n05",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n053",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n06",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n068",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n086",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n090",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n1",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n127",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n136",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n161",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n162",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n169",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n18",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n183",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n19",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n272",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n273",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n275",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n292",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n302",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n544",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n545",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n548",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "sprache_kultur",
+         "label": "Sprache und Kultur",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/340",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20003",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20041",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20001",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20090",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20002",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/120",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/28002",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20004",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20005",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/niederdeutsch",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20006",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20009",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20007",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/20008",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n001",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n002",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n005",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n006",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n008",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n010",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n015",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n016",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n018",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n024",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n031",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n034",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n043",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n056",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n059",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n067",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n07",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n070",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n073",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n078",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n08",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n081",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n083",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n084",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n085",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n09",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n095",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n10",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n11",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n119",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n12",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n120",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n122",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n13",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n130",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n131",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n137",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n139",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n14",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n145",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n146",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n150",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n152",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n153",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n158",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n160",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n173",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n174",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n180",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n187",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n188",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n189",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n206",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n207",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n209",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n271",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n284",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "sport",
+         "label": "Sport",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/600",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n029",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n098",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n2",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n22",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "recht_wirtschaft_soziales",
+         "label": "Rechts-, Wirtschafts- und Sozialwissenschaften",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/700",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04013",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/440",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/400",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/900",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/480",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/510",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/560",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/44007",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/48005",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/44006",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/660",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04014",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/020",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/72002",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n011",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n021",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n030",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n036",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n038",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n042",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n044",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n052",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n055",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n115",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n117",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n129",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n132",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n135",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n147",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n148",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n149",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n154",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n166",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n167",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n168",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n172",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n175",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n179",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n181",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n182",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n184",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n190",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n208",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n210",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n23",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n24",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n245",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n25",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n253",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n254",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n255",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n256",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n257",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n258",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n259",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n26",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n260",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n261",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n262",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n263",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n264",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n265",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n266",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n268",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n269",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n27",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n270",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n274",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n28",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n29",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n3",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n30",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n303",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n304",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n31",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n32",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n321",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n33",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n34",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n361",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n365",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n464",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "mathematik_naturwissenschaften",
+         "label": "Mathematik, Naturwissenschaften",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/46014",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/28010",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/080",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/100",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/220",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/380",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/460",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04003",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n009",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n0128",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n014",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n019",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n025",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n026",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n032",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n039",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n049",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n050",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n065",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n066",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n096",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n105",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n110",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n111",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n118",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n124",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n126",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n178",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n186",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n276",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n282",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n283",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n300",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n312",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n36",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n37",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n385",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n39",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n4",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n40",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n41",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n42",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n43",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n44",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "medizin_gesundheit",
+         "label": "Humanmedizin, Gesundheitswissenschaften",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/260",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04010",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/72003",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n107",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n185",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n195",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n232",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n233",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n234",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n48",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n49",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n5",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n50",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "agrar_forst_ernaehrung",
+         "label": "Agrar-, Forst-, Ernährungswissenschaften",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04006",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/640",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04001",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/oeh01",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n003",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n028",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n058",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n060",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n061",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n064",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n071",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n075",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n093",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n097",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n125",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n138",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n156",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n220",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n227",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n320",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n333",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n353",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n371",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n51",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n57",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n58",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n59",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n60",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n7",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "ingenieurwissenschaften",
+         "label": "Ingenieurwissenschaften",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04007",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/320",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04005",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/50005",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/50001",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04011",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04002",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04012",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/04009",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/040",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/oeh04010",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n013",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n017",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n020",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n033",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n048",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n057",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n072",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n074",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n076",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n077",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n079",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n082",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n088",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n089",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n094",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n103",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n104",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n108",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n121",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n123",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n134",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n140",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n141",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n142",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n143",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n144",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n157",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n171",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n177",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n197",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n199",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n200",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n201",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n202",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n211",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n212",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n213",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n215",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n216",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n219",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n221",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n222",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n223",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n224",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n225",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n226",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n231",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n235",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n242",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n247",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n277",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n280",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n286",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n294",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n305",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n310",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n316",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n370",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n380",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n390",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n429",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n457",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n458",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n61",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n62",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n63",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n64",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n65",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n66",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n67",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n68",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n69",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n70",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n71",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n72",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n8",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "kunst",
+         "label": "Kunst",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/060",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/12002",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/420",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n007",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n023",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n035",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n040",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n054",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n069",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n080",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n091",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n092",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n101",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n102",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n106",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n113",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n114",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n116",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n155",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n159",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n163",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n164",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n165",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n176",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n191",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n192",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n193",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n194",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n203",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n204",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n205",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n230",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n287",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n74",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n75",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n76",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n77",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n78",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n9",
+           "literal": true
+          }
+         ]
+        },
+        {
+         "id": "allgemein",
+         "label": "Allgemein/Sonstiges",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/720",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/64018",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/44099",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/72001",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/680",
+           "literal": true
+          },
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/discipline/999",
+           "literal": true
+          }
+         ],
+         "extra": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n0",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "missing": true,
+       "subtotal": "distinct",
+       "labels": {
+        "http://w3id.org/openeduhub/vocabs/discipline/160": "Ethik",
+        "http://w3id.org/openeduhub/vocabs/discipline/240": "Geschichte",
+        "http://w3id.org/openeduhub/vocabs/discipline/450": "Philosophie",
+        "http://w3id.org/openeduhub/vocabs/discipline/520": "Religion",
+        "http://w3id.org/openeduhub/vocabs/discipline/340": "Interkulturelle Bildung",
+        "http://w3id.org/openeduhub/vocabs/discipline/20003": "Alt-Griechisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20041": "Chinesisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20001": "Englisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20090": "Esperanto",
+        "http://w3id.org/openeduhub/vocabs/discipline/20002": "Französisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/120": "Deutsch",
+        "http://w3id.org/openeduhub/vocabs/discipline/28002": "Deutsch als Zweitsprache",
+        "http://w3id.org/openeduhub/vocabs/discipline/20004": "Italienisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20005": "Latein",
+        "http://w3id.org/openeduhub/vocabs/discipline/niederdeutsch": "Niederdeutsch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20006": "Russisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20009": "Sorbisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20007": "Spanisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/20008": "Türkisch",
+        "http://w3id.org/openeduhub/vocabs/discipline/600": "Sport",
+        "http://w3id.org/openeduhub/vocabs/discipline/700": "Wirtschaftskunde",
+        "http://w3id.org/openeduhub/vocabs/discipline/04013": "Wirtschaft und Verwaltung",
+        "http://w3id.org/openeduhub/vocabs/discipline/440": "Pädagogik",
+        "http://w3id.org/openeduhub/vocabs/discipline/400": "Mediendidaktik",
+        "http://w3id.org/openeduhub/vocabs/discipline/900": "Medienbildung",
+        "http://w3id.org/openeduhub/vocabs/discipline/480": "Politik",
+        "http://w3id.org/openeduhub/vocabs/discipline/510": "Psychologie",
+        "http://w3id.org/openeduhub/vocabs/discipline/560": "Sexualerziehung",
+        "http://w3id.org/openeduhub/vocabs/discipline/44007": "Sozialpädagogik",
+        "http://w3id.org/openeduhub/vocabs/discipline/48005": "Gesellschaftskunde",
+        "http://w3id.org/openeduhub/vocabs/discipline/44006": "Sonderpädagogik",
+        "http://w3id.org/openeduhub/vocabs/discipline/660": "Verkehrserziehung",
+        "http://w3id.org/openeduhub/vocabs/discipline/04014": "Arbeitssicherheit",
+        "http://w3id.org/openeduhub/vocabs/discipline/020": "Arbeitslehre",
+        "http://w3id.org/openeduhub/vocabs/discipline/72002": "Projektmanagement",
+        "http://w3id.org/openeduhub/vocabs/discipline/46014": "Astronomie",
+        "http://w3id.org/openeduhub/vocabs/discipline/28010": "Sachunterricht",
+        "http://w3id.org/openeduhub/vocabs/discipline/080": "Biologie",
+        "http://w3id.org/openeduhub/vocabs/discipline/100": "Chemie",
+        "http://w3id.org/openeduhub/vocabs/discipline/220": "Geografie",
+        "http://w3id.org/openeduhub/vocabs/discipline/380": "Mathematik",
+        "http://w3id.org/openeduhub/vocabs/discipline/460": "Physik",
+        "http://w3id.org/openeduhub/vocabs/discipline/04003": "MINT",
+        "http://w3id.org/openeduhub/vocabs/discipline/260": "Gesundheit",
+        "http://w3id.org/openeduhub/vocabs/discipline/04010": "Körperpflege",
+        "http://w3id.org/openeduhub/vocabs/discipline/72003": "Evidenzbasierte Medizin",
+        "http://w3id.org/openeduhub/vocabs/discipline/04006": "Ernährung und Hauswirtschaft",
+        "http://w3id.org/openeduhub/vocabs/discipline/640": "Umweltgefährdung, Umweltschutz",
+        "http://w3id.org/openeduhub/vocabs/discipline/04001": "Agrarwirtschaft",
+        "http://w3id.org/openeduhub/vocabs/discipline/oeh01": "Arbeit, Ernährung, Soziales",
+        "http://w3id.org/openeduhub/vocabs/discipline/04007": "Farbtechnik und Raumgestaltung",
+        "http://w3id.org/openeduhub/vocabs/discipline/320": "Informatik",
+        "http://w3id.org/openeduhub/vocabs/discipline/04005": "Elektrotechnik",
+        "http://w3id.org/openeduhub/vocabs/discipline/50005": "Werken",
+        "http://w3id.org/openeduhub/vocabs/discipline/50001": "Hauswirtschaft",
+        "http://w3id.org/openeduhub/vocabs/discipline/04011": "Metalltechnik",
+        "http://w3id.org/openeduhub/vocabs/discipline/04002": "Bautechnik",
+        "http://w3id.org/openeduhub/vocabs/discipline/04012": "Textiltechnik und Bekleidung",
+        "http://w3id.org/openeduhub/vocabs/discipline/04009": "Holztechnik",
+        "http://w3id.org/openeduhub/vocabs/discipline/040": "Berufliche Bildung",
+        "http://w3id.org/openeduhub/vocabs/discipline/oeh04010": "Mechatronik",
+        "http://w3id.org/openeduhub/vocabs/discipline/060": "Kunst",
+        "http://w3id.org/openeduhub/vocabs/discipline/12002": "Darstellendes Spiel",
+        "http://w3id.org/openeduhub/vocabs/discipline/420": "Musik",
+        "http://w3id.org/openeduhub/vocabs/discipline/720": "Allgemein",
+        "http://w3id.org/openeduhub/vocabs/discipline/64018": "Nachhaltigkeit",
+        "http://w3id.org/openeduhub/vocabs/discipline/44099": "Open Educational Resources",
+        "http://w3id.org/openeduhub/vocabs/discipline/72001": "Zeitgemäße Bildung",
+        "http://w3id.org/openeduhub/vocabs/discipline/680": "Weiterbildung",
+        "http://w3id.org/openeduhub/vocabs/discipline/999": "Sonstiges"
+       }
+      },
+      "series": [
+       {
+        "id": "gesamt",
+        "label": "Gesamt"
+       },
+       {
+        "id": "a",
+        "label": "A: OER",
+        "filters": [
+         {
+          "property": "license",
+          "values": [
+           "OPEN",
+           "CC_BY_OPEN"
+          ]
+         }
+        ]
+       },
+       {
+        "id": "b_gruppe",
+        "label": "B ohne CC BY-SA-NC",
+        "filters": [
+         {
+          "property": "license",
+          "values": [
+           "CC_BY_RESTRICTED"
+          ]
+         }
+        ]
+       },
+       {
+        "id": "b_sa_nc",
+        "label": "CC BY-SA-NC",
+        "filters": [
+         {
+          "property": "ccm:commonlicense_key",
+          "values": [
+           {
+            "value": "CC_BY_SA_NC",
+            "literal": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "mit",
+        "label": "mit Lizenzangabe",
+        "filters": [
+         {
+          "property": "ccm:commonlicense_key",
+          "values": [
+           {
+            "value": "",
+            "literal": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "b",
+        "label": "B: CC mit NC/ND",
+        "formula": "b_gruppe + b_sa_nc"
+       },
+       {
+        "id": "c",
+        "label": "C: anderer freier Zugang",
+        "formula": "mit - a - b"
+       },
+       {
+        "id": "d",
+        "label": "D: Lizenzangabe fehlt",
+        "formula": "gesamt - mit"
+       },
+       {
+        "id": "oer_rund",
+        "label": "OER gerundet",
+        "formula": "round(a, -2)"
+       }
+      ],
+      "show": [
+       "gesamt",
+       "a",
+       "b",
+       "c",
+       "d",
+       "oer_rund"
+      ],
+      "blocks": [
+       {
+        "id": "elementar",
+        "label": "WLO: Elementarbereich",
+        "source": "query",
+        "filters": [
+         {
+          "property": "ccm:educationalcontext",
+          "values": [
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/elementarbereich",
+            "literal": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "schule",
+        "label": "WLO: Schule",
+        "source": "query",
+        "filters": [
+         {
+          "property": "ccm:educationalcontext",
+          "values": [
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/grundschule",
+            "literal": true
+           },
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/sekundarstufe_1",
+            "literal": true
+           },
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/sekundarstufe_2",
+            "literal": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "beruf_erwachsene",
+        "label": "WLO: Beruf und Erwachsene",
+        "source": "query",
+        "filters": [
+         {
+          "property": "ccm:educationalcontext",
+          "values": [
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/berufliche_bildung",
+            "literal": true
+           },
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/erwachsenenbildung",
+            "literal": true
+           },
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/fortbildung",
+            "literal": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "hochschule",
+        "label": "WLO: Hochschule",
+        "source": "query",
+        "filters": [
+         {
+          "property": "ccm:educationalcontext",
+          "values": [
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/hochschule",
+            "literal": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "oersi",
+        "label": "OERSI (direkt)",
+        "source": "oersi",
+        "counts": {
+         "gesamt": "total",
+         "mit": "licensed",
+         "a": [
+          "CC_0",
+          "PDM",
+          "CC_BY",
+          "CC_BY_SA"
+         ],
+         "b_gruppe": [
+          "CC_BY_NC",
+          "CC_BY_NC_SA",
+          "CC_BY_NC_ND",
+          "CC_BY_ND",
+          "CC_BY_SA_NC"
+         ],
+         "b_sa_nc": []
+        }
+       },
+       {
+        "id": "mundo",
+        "label": "Mundo (Handeintrag)",
+        "source": "manual",
+        "note": "noch keine Zahlen eingetragen"
+       },
+       {
+        "id": "kita_bayern",
+        "label": "Kita.bayern (Handeintrag)",
+        "source": "manual",
+        "note": "noch keine Zahlen eingetragen"
+       }
+      ]
+     },
+     {
+      "id": "lizenzen",
+      "type": "chart",
+      "title": "Lizenzangaben im Gesamtbestand",
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "query": {
+       "instance": "wlo-prod",
+       "rows": {
+        "property": "ccm:commonlicense_key",
+        "missing": true
+       }
+      }
+     },
+     {
+      "id": "methodik",
+      "type": "text",
+      "markdown": "## Methodik\n\n- Grundgesamtheit ist, was die Suche der Instanz ohne Anmeldung als Material liefert, ohne\n  Sammlungen.\n- Ein Material mit mehreren Fächern oder Bildungsstufen zählt in jeder zutreffenden Zeile und\n  in jedem zutreffenden Bereich. Die Zeilen der Fächergruppen und die Gesamtzeile sind eigene\n  Zählungen, in denen jedes Material einmal vorkommt, keine Summen.\n- Die Zeile einer Fächergruppe enthält zusätzlich die Hochschulfächer der Destatis-Systematik,\n  die zu ihr gehören.\n- Bereiche: Schule = Primarstufe, Sekundarstufe I und II. Beruf und Erwachsene = Berufliche\n  Bildung, Erwachsenenbildung, Fortbildung.\n- C ist berechnet als Materialien mit Lizenzangabe abzüglich A und B. Dazu gehören auch die\n  Angaben „eigene Lizenz“ (CUSTOM) und „keine“ (NONE). D ist die Gesamtzahl abzüglich der\n  Materialien mit Lizenzangabe.\n- „OER gerundet“ ist A, auf Hunderter gerundet.\n- OERSI wird direkt bei oersi.org abgefragt; dort gibt es keine Bildungsstufe, die Spalten\n  stehen deshalb für den gesamten Bestand. Zeilen gibt es dort nur für die Fächergruppen.\n- Mundo und Kita.bayern haben keine Schnittstelle in diesem Werkzeug; ihre Zahlen sind\n  Handeinträge in der Definition des Templates.\n"
+     }
+    ]
+   }
+  }
+ ]
+}
