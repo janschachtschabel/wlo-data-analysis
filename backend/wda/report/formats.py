@@ -53,7 +53,8 @@ def source_lines(table: Table) -> list[str]:
                 line += f"{src['base_url']}, "
             line += f"abgerufen {format_time(src.get('fetched_at'))}"
             if src.get("queries"):
-                line += f", {src['queries']} Abfragen"
+                line += (", 1 Abfrage" if src["queries"] == 1
+                         else f", {src['queries']} Abfragen")
             if src.get("filters"):
                 line += f", Filter: {src['filters']}"
         lines.append(line)

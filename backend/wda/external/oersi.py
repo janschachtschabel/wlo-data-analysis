@@ -88,6 +88,10 @@ class OersiClient:
                     name: {"terms": {"about.id": [SUBJECT_PREFIX + n for n in values]}}
                     for name, values in sections.items()}},
                 "aggs": {"license": licenses}}
+            # ohne Fach: eigene Zählung, damit „ohne Wert" nicht leer bleibt
+            body["aggs"]["no_subject"] = {
+                "filter": {"bool": {"must_not": {"exists": {"field": "about.id"}}}},
+                "aggs": {"license": licenses}}
         try:
             response = await self._http.post(
                 self.url, json=body, timeout=self._timeout,
@@ -128,6 +132,14 @@ class OersiClient:
                 if bucket["license"].get("sum_other_doc_count"):
                     raise bad
                 out["sections"][name] = {
+                    "total": count, "by_license": _by_license(bucket["license"]["buckets"])}
+            if sections:
+                bucket = aggs["no_subject"]
+                count = bucket["doc_count"]
+                if (isinstance(count, bool) or not isinstance(count, int)
+                        or bucket["license"].get("sum_other_doc_count")):
+                    raise bad
+                out["missing"] = {
                     "total": count, "by_license": _by_license(bucket["license"]["buckets"])}
         except (ValueError, KeyError, TypeError):
             raise bad from None

@@ -209,8 +209,11 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
             cells["__total__"] = _external_line(series, counts, block["counts"])
             for key, part in (counts.get("sections") or {}).items():
                 cells["group:" + key] = _external_line(series, part, block["counts"])
+            if counts.get("missing"):
+                cells["__missing__"] = _external_line(series, counts["missing"],
+                                                      block["counts"])
             sources.append({"label": block["label"], "kind": "external", "service": "OERSI",
-                            "fetched_at": counts.get("fetched_at")})
+                            "fetched_at": counts.get("fetched_at"), "queries": 1})
             continue
         detail = usable(results.get(f"{sid}/{block['id']}/rows"), block["label"])
         groups = usable(results.get(f"{sid}/{block['id']}/groups"), block["label"])
@@ -218,12 +221,22 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
             failed += 1
             sources.append({"label": block["label"], "kind": "failed"})
             continue
-        sources.append(_source(block["label"], detail or groups))  # type: ignore[arg-type]
+        source = _source(block["label"], detail or groups)  # type: ignore[arg-type]
+        counted = [r["provenance"].get("queries") for r in (detail, groups)
+                   if r is not None and r.get("provenance")]
+        source["queries"] = sum(q for q in counted if isinstance(q, int)) or None
+        sources.append(source)
         for result in (detail, groups):
             for note in (result or {}).get("provenance", {}).get("notes", []):
+                code = note.get("code")
                 # Zeilen überschneiden sich in der Matrix immer; die Tabelle sagt es einmal.
-                skip = note.get("code") in ("values_ungrouped", "rows_overlap")
-                if note not in notes and not skip:
+                # Bei den Einzelzeilen ist "nicht aufgeführt" die Regel (Zusatzwerte).
+                if code == "rows_overlap" or (code == "values_ungrouped"
+                                              and result is not groups):
+                    continue
+                if code == "values_ungrouped":  # je Block andere Werte: Block nennen
+                    note = {"code": code, "text": f"{block['label']}: {note['text']}"}
+                if note not in notes:
                     notes.append(note)
         if detail is not None:
             cells["__total__"] = [c.get("total") for c in detail["columns"]]

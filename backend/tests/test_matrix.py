@@ -118,7 +118,19 @@ def test_matrix_numbers_match_brute_force(world):
     assert table.sources[0]["filters"] == f"{LVL} = Sekundarstufe I"
     codes = [n["code"] for n in table.notes]
     assert "matrix_counting" in codes and "prefix_empty" in codes
-    assert len(codes) == len(set(codes))  # je Hinweis einmal, nicht je Block
+    once = [c for c in codes if c != "values_ungrouped"]
+    assert len(once) == len(set(once))  # je Hinweis einmal, nicht je Block
+
+
+def test_values_outside_all_groups_are_named_per_block(world):
+    # sonst deckten Gruppen plus „ohne Wert" den Bestand unbemerkt nicht ab
+    section = matrix()
+    section["rows"]["sections"] = section["rows"]["sections"][:1]
+    section["blocks"] = section["blocks"][:2]
+    [table] = build_report(run_template(world, template(section))).blocks
+    loose = [n["text"] for n in table.notes if n["code"] == "values_ungrouped"]
+    assert len(loose) == 2 and loose[0].startswith("Sekundarstufe I: ")
+    assert loose[1].startswith("Hochschule: ") and "stehen in keiner Gruppe" in loose[1]
 
 
 def test_placeholders_reach_into_the_matrix(world):
@@ -236,8 +248,12 @@ def test_oersi_block_fills_totals_and_subject_groups(world):
     assert row(table, "mint").values[5:] == [100, 60, 60, 40, 100]
     assert row(table, "geist").values[5:] == [None] * 5
     assert row(table, M).values[5:] == [None] * 5
+    assert row(table, "__missing__").values[5:] == [70, 10, 10, 60, 0]
     assert table.sources[1] == {"label": "OERSI", "kind": "external", "service": "OERSI",
-                                "fetched_at": table.sources[1]["fetched_at"]}
+                                "fetched_at": table.sources[1]["fetched_at"], "queries": 1}
+    # die Quelle nennt alle Abfragen des Blocks, Fachzeilen und Zwischensummen
+    parts = {r["key"]: r["result"]["provenance"]["queries"] for r in run["results"][:2]}
+    assert table.sources[0]["queries"] == sum(parts.values()) > parts["oer/sek1/rows"]
     assert build_report(world.go(world.runner.get_run(run["id"]))) == build_report(run)
 
 

@@ -62,6 +62,9 @@ class Oersi:
                     {"key": "https://creativecommons.org/licenses/by/4.0/",
                      "doc_count": 60 * pos}]}}
                 for pos, name in enumerate(wanted["filters"]["filters"], 1)}}
+        if "no_subject" in self.bodies[-1]["aggs"]:
+            aggs["no_subject"] = {"doc_count": 70, "license": {"buckets": [
+                {"key": "https://creativecommons.org/licenses/by/4.0/", "doc_count": 10}]}}
         return httpx.Response(200, json={"hits": {"total": {"value": 900}},
                                          "aggregations": aggs})
 
@@ -84,6 +87,10 @@ def test_counts_only_aggregations_never_hits():
     assert result["by_license"] == {"CC_BY": 650, "CC_BY_NC_SA": 200, "CUSTOM": 30,
                                     NO_LICENSE: 20}
     assert result["sections"] == {"mint": {"total": 100, "by_license": {"CC_BY": 60}}}
+    # „ohne Wert": Einträge ohne Fach, als eigene Zählung
+    assert body["aggs"]["no_subject"]["filter"] == {
+        "bool": {"must_not": {"exists": {"field": "about.id"}}}}
+    assert result["missing"] == {"total": 70, "by_license": {"CC_BY": 10}}
     assert result["cached"] is False
 
 
