@@ -9,6 +9,7 @@ from .config import Settings
 from .edusharing.client import EduSharingClient
 from .edusharing.vocab import VocabStore
 from .instances import InstanceRegistry
+from .store.db import Database
 
 
 class Services:
@@ -25,6 +26,14 @@ class Services:
         self.cache = TTLCache(ttl=settings.cache_ttl)
         self._clients: dict[str, EduSharingClient] = {}
         self._vocabs: dict[str, VocabStore] = {}
+        self._db: Database | None = None
+
+    @property
+    def db(self) -> Database:
+        """Wird beim ersten Zugriff geöffnet; wirft ``ConfigError``, wenn das nicht geht."""
+        if self._db is None:
+            self._db = Database(self._settings.data_dir / "store.sqlite3")
+        return self._db
 
     def _http_client(self) -> httpx.AsyncClient:
         if self._http is None:
@@ -58,3 +67,6 @@ class Services:
         if self._http is not None:
             await self._http.aclose()
             self._http = None
+        if self._db is not None:
+            self._db.close()
+            self._db = None
