@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError, Latest } from '../core/api';
 import { Auth } from '../core/auth';
 import { Definition, Report } from '../core/types';
 import { Instances } from '../core/instances';
+import { Leave } from '../core/leave';
 import { ReportView } from '../runs/report-view';
 import { SpecForm } from './spec-form';
 
@@ -70,8 +71,9 @@ import { SpecForm } from './spec-form';
       <p class="error card" role="alert">{{ error() }}</p>
     } @else { <p class="muted">Lade …</p> }`,
   styles: `
-    .form { display: grid; gap: 8px; margin: var(--gap) 0; }
-    .form label { display: grid; gap: 4px; }
+    .form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: var(--gap) 0; }
+    .form label { display: grid; gap: 4px; min-width: 0; } .form input { min-width: 0; width: 100%; }
+    .form { min-width: 0; } details { min-width: 0; }
     #spec { font: 13px/1.45 var(--mono); width: 100%; resize: vertical; tab-size: 2; margin-top: 8px; }
     .problems { margin: 0; padding-left: 18px; } .ok { color: var(--ok); } .top { margin-top: 20px; }
   `,
@@ -104,12 +106,24 @@ export class Editor {
 
   /** Stand beim Laden oder letzten Speichern, um ungespeicherte Änderungen zu erkennen */
   private stored = '';
+  private agreed = false;
 
   constructor() {
     const auth = inject(Auth);
     effect(() => { this.defId(); untracked(() => void this.reload()); });
     // Nach erneuter Anmeldung nur laden, wenn noch nichts da ist: Eingaben bleiben stehen.
-    effect(() => { if (auth.renewed() > 0) untracked(() => { if (!this.definition()) void this.reload(); }); });
+    effect(() => {
+      if (auth.renewed() > 0) untracked(() => {
+        if (!this.definition()) void this.reload();
+        else { this.problems.set([]); this.checked.set(false); this.error.set(''); } // „Nicht angemeldet“ ist überholt
+      });
+    });
+    // Abmelden fragt hier nach; wer zugestimmt hat, wird beim Verlassen nicht noch einmal gefragt.
+    inject(DestroyRef).onDestroy(inject(Leave).register(() => {
+      const ok = this.canLeave();
+      if (ok) this.agreed = true;
+      return ok;
+    }));
   }
 
   private snapshot(): string { return JSON.stringify([this.name, this.description, this.text()]); }
@@ -118,7 +132,7 @@ export class Editor {
   hasChanges(): boolean { return !!this.definition() && this.snapshot() !== this.stored; }
   /** Verlassen mit ungespeicherten Änderungen nur nach Rückfrage */
   canLeave(): boolean {
-    return !this.hasChanges() || confirm('Die Änderungen sind nicht gespeichert. Seite trotzdem verlassen?');
+    return this.agreed || !this.hasChanges() || confirm('Die Änderungen sind nicht gespeichert. Seite trotzdem verlassen?');
   }
   protected beforeUnload(event: BeforeUnloadEvent): void { if (this.hasChanges()) event.preventDefault(); }
 

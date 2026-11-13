@@ -7,14 +7,14 @@ import { Instance } from '../core/types';
 
 interface Form {
   id: string; name: string; base_url: string; search_url: string; repository: string; metadataset: string;
-  query: string; username: string; password: string; facet_fields: string; keep: boolean;
+  query: string; username: string; password: string; keep: boolean;
 }
 interface Probe { reachable: boolean; total?: number; version?: string; error?: { detail: string } }
 
 const SOURCE: Record<string, string> = { preset: 'mitgeliefert', config: 'aus der Konfiguration', stored: 'hier angelegt' };
 const EMPTY: Form = {
   id: '', name: '', base_url: '', search_url: '', repository: '-home-', metadataset: 'mds_oeh', query: 'ngsearch',
-  username: '', password: '', facet_fields: '', keep: false,
+  username: '', password: '', keep: false,
 };
 
 /** edu-sharing-Instanzen ansehen, prüfen, anlegen und ändern. Zugangsdaten gehen nur hinein. */
@@ -84,8 +84,6 @@ const EMPTY: Form = {
             <label>Repositorium <input name="repository" [(ngModel)]="f.repository" maxlength="100" /></label>
             <label>Metadatenset <input name="metadataset" [(ngModel)]="f.metadataset" maxlength="100" /></label>
             <label>Suchabfrage <input name="query" [(ngModel)]="f.query" maxlength="100" /></label>
-            <label>Zusätzliche Felder zum Aufschlüsseln <span class="muted small">Felder ohne Werteliste, durch Komma getrennt; leer = Vorgabe</span>
-              <input name="facet_fields" [(ngModel)]="f.facet_fields" /></label>
           </div>
         </details>
         <div class="row">
@@ -134,7 +132,7 @@ export class InstancesPage {
     this.form.set({
       ...EMPTY, id: inst.id, name: inst.name, base_url: inst.base_url, search_url: inst.search_url ?? '',
       repository: inst.repository ?? EMPTY.repository, metadataset: inst.metadataset ?? EMPTY.metadataset,
-      query: inst.query ?? EMPTY.query, keep: inst.has_credentials, facet_fields: (inst.facet_fields ?? []).join(', '),
+      query: inst.query ?? EMPTY.query, keep: inst.has_credentials,
     });
   }
 
@@ -152,12 +150,11 @@ export class InstancesPage {
   protected async save(): Promise<void> {
     const f = this.form();
     if (!f) return;
-    const fields = f.facet_fields.split(',').map((s) => s.trim()).filter(Boolean);
     const body: Record<string, unknown> = {
       name: f.name, base_url: f.base_url.trim(), search_url: f.search_url.trim() || null,
       repository: f.repository.trim() || null, metadataset: f.metadataset.trim() || null, query: f.query.trim() || null,
       username: f.keep ? null : f.username.trim() || null, password: f.keep ? null : f.password || null,
-      keep_credentials: f.keep, facet_fields: fields.length ? fields : null,
+      keep_credentials: f.keep,
     };
     this.busy.set(true); this.formError.set(''); this.error.set('');
     try {

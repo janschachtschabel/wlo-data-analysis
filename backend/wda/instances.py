@@ -65,7 +65,13 @@ class Instance(BaseModel):
     def _http_url(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        parts = urlsplit(value)
+        if re.search(r"[\s\x00-\x1f\x7f]", value):
+            raise ValueError("darf keine Leer- oder Steuerzeichen enthalten")
+        try:
+            parts = urlsplit(value)
+            _ = parts.port
+        except ValueError:
+            raise ValueError("muss eine http(s)-URL mit Hostnamen sein") from None
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise ValueError("muss eine http(s)-URL mit Hostnamen sein")
         if parts.username or parts.password or "@" in parts.netloc:

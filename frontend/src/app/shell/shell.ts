@@ -3,13 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { ApiError } from '../core/api';
 import { Auth } from '../core/auth';
+import { Leave } from '../core/leave';
 import { Instances } from '../core/instances';
 
 @Component({
   selector: 'app-shell',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule],
   template: `
-    <header>
+    <header [attr.inert]="auth.expired() ? '' : null">
       <strong>WLO-Daten</strong>
       <nav aria-label="Hauptnavigation">
         <a routerLink="/" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">Explorer</a>
@@ -28,14 +29,14 @@ import { Instances } from '../core/instances';
       <button type="button" (click)="logout()">Abmelden</button>
     </header>
     @if (loadError()) { <p class="error bar" role="alert">{{ loadError() }}</p> }
-    <main><router-outlet /></main>
+    <main [attr.inert]="auth.expired() ? '' : null"><router-outlet /></main>
     @if (auth.expired()) {
       <div class="veil">
         <form class="card" role="dialog" aria-modal="true" aria-labelledby="relogin-title" (ngSubmit)="relogin()">
           <h2 id="relogin-title">Die Sitzung ist abgelaufen</h2>
-          <p class="muted">Bitte neu anmelden. Die Seite und deine Eingaben bleiben erhalten; die letzte Aktion danach noch einmal auslösen.</p>
+          <p class="muted">Bitte neu anmelden. Die Seite und alle Eingaben bleiben erhalten; die letzte Aktion danach noch einmal auslösen.</p>
           <label for="relogin-pw">Passwort</label>
-          <input id="relogin-pw" type="password" name="password" autocomplete="current-password" [(ngModel)]="password" required autofocus />
+          <input id="relogin-pw" type="password" name="password" autocomplete="current-password" [(ngModel)]="password" required />
           @if (reloginError()) { <p class="error" role="alert">{{ reloginError() }}</p> }
           <button class="primary" type="submit" [disabled]="!password">Anmelden</button>
         </form>
@@ -62,12 +63,17 @@ export class Shell {
   protected readonly reloginError = signal('');
   protected password = '';
   private readonly router = inject(Router);
+  private readonly leave = inject(Leave);
 
   constructor() {
     this.instances.load().catch((error) =>
       this.loadError.set(error instanceof ApiError ? error.message : 'Instanzen nicht ladbar.'));
     effect(() => {
       if (this.auth.renewed() > 0) untracked(() => { this.loadError.set(''); void this.instances.load().catch(() => undefined); });
+    });
+    // Die Überlagerung ist ein Dialog: Der Fokus gehört ins Passwortfeld, die Seite dahinter ruht.
+    effect(() => {
+      if (this.auth.expired()) setTimeout(() => document.getElementById('relogin-pw')?.focus());
     });
     const saved = localStorage.getItem('wda-theme'); // nur eine Darstellungsvorliebe
     if (saved === 'dark' || saved === 'light') document.documentElement.dataset['theme'] = saved;
@@ -93,6 +99,7 @@ export class Shell {
   }
 
   async logout(): Promise<void> {
+    if (!this.leave.allowed()) return; // ungespeicherte Eingaben: erst fragen, dann abmelden
     await this.auth.logout().catch(() => undefined);
     await this.router.navigate(['/login']);
   }

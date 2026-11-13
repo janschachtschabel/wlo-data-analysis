@@ -64,23 +64,26 @@ export class Runs {
 
   constructor() {
     const auth = inject(Auth);
-    effect(() => { auth.renewed(); this.kindFilter(); this.statusFilter(); untracked(() => { this.runs.set([]); this.error.set(''); void this.load(); }); });
+    effect(() => { auth.renewed(); this.kindFilter(); this.statusFilter(); untracked(() => { this.runs.set([]); this.error.set(''); void this.load(true); }); });
   }
 
-  protected async load(): Promise<void> {
+  private turn = 0;
+
+  protected async load(fresh = false): Promise<void> {
+    const turn = fresh ? ++this.turn : this.turn;
     this.loading.set(true);
     try {
       const last = this.runs().at(-1)?.seq;
       const kind = this.kindFilter(), status = this.statusFilter();
       const page = await this.api.get<RunHead[]>(`/runs?limit=${PAGE}${last ? '&before=' + last : ''}` +
         (kind ? '&kind=' + kind : '') + (status ? '&status=' + status : ''));
-      if (kind !== this.kindFilter() || status !== this.statusFilter()) return; // Auswahl inzwischen geändert
+      if (turn !== this.turn) return; // Auswahl inzwischen geändert
       this.runs.update((runs) => [...runs, ...page]);
       this.more.set(page.length === PAGE);
     } catch (error) {
       this.error.set(error instanceof ApiError ? error.message : 'Läufe nicht ladbar.');
     } finally {
-      this.loading.set(false);
+      if (turn === this.turn) this.loading.set(false);
     }
   }
 

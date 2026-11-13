@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Definition, Instance } from '../core/types';
 import { SectionSpec, TileSpec, WIDTHS, flowLayout, freeId, move } from './spec-edit';
@@ -41,6 +41,10 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
       </fieldset>
     }
 
+    @if (broken()) {
+      <p class="notice" role="status">Der Baukasten ruht: {{ broken() }} Bitte unten in der Spezifikation berichtigen.</p>
+    }
+    <span class="sr-only" role="status">{{ moved() }}</span>
     <ol class="items" [attr.aria-label]="kind() === 'dashboard' ? 'Kacheln' : 'Abschnitte'">
       @for (item of items(); track item.id; let i = $index; let last = $last) {
         <li class="item" [class.over]="over() === i" draggable="true"
@@ -66,7 +70,7 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
                   </select>
                 </label>
                 <label>Darstellung
-                  <select [name]="'view-' + item.id" [attr.name]="'view-' + item.id" [ngModel]="item.view?.type ?? ''" (ngModelChange)="set(i, { view: $event ? { type: $event } : null })">
+                  <select [name]="'view-' + item.id" [attr.name]="'view-' + item.id" [ngModel]="item.view?.type ?? ''" (ngModelChange)="set(i, { view: $event ? { ...(item.view ?? {}), type: $event } : null })">
                     @for (view of views; track view[0]) {
                       @if (view[0] || item.metric_id) { <option [value]="view[0]">{{ view[1] }}</option> }
                     }
@@ -84,16 +88,17 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
             }
           </div>
           <div class="tools">
-            <button type="button" (click)="shift(i, -1)" [disabled]="i === 0" [attr.aria-label]="'Nach oben: ' + name(item)">↑</button>
-            <button type="button" (click)="shift(i, 1)" [disabled]="last" [attr.aria-label]="'Nach unten: ' + name(item)">↓</button>
+            <button type="button" (click)="shift(i, -1)" [disabled]="i === 0" [attr.data-move]="item.id + ':-1'" [attr.aria-label]="'Nach oben: ' + name(item)">↑</button>
+            <button type="button" (click)="shift(i, 1)" [disabled]="last" [attr.data-move]="item.id + ':1'" [attr.aria-label]="'Nach unten: ' + name(item)">↓</button>
             <button type="button" (click)="remove(i)" [attr.aria-label]="'Entfernen: ' + name(item)">✕</button>
           </div>
         </li>
       } @empty {
-        <li class="muted empty">{{ kind() === 'dashboard' ? 'Noch keine Kacheln.' : 'Noch keine Abschnitte.' }}</li>
+        @if (!broken()) { <li class="muted empty">{{ kind() === 'dashboard' ? 'Noch keine Kacheln.' : 'Noch keine Abschnitte.' }}</li> }
       }
     </ol>
 
+    @if (!broken()) {
     <div class="row add">
       @if (metrics().length) {
         <label>{{ kind() === 'dashboard' ? 'Kachel' : 'Tabelle oder Grafik' }} aus Kennzahl
@@ -112,18 +117,20 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
         <span class="muted">Es gibt noch keine Kennzahlen. Im Explorer eine Abfrage „Als Kennzahl speichern“, dann lässt sie sich hier einsetzen.</span>
       }
       @if (kind() === 'template') { <button type="button" (click)="addText()">Text hinzufügen</button> }
-    </div>`,
+    </div>
+    }`,
   styles: `
-    :host { display: grid; gap: 10px; }
+    :host { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    select { max-width: 100%; } .body label { min-width: 0; }
     label { display: grid; gap: 4px; } .small { font-size: 12px; }
     fieldset { border: 1px solid var(--border); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; }
     label.check { display: flex; gap: 6px; align-items: center; }
     .items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-    .item { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--border); border-radius: 6px;
+    .item { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; border: 1px solid var(--border); border-radius: 6px;
             padding: 8px 10px; background: var(--surface-2); }
     .item.over { outline: 2px dashed var(--accent); outline-offset: 1px; }
     .grip { cursor: grab; color: var(--muted); padding-top: 4px; user-select: none; }
-    .body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
+    .body { flex: 1 1 200px; min-width: 0; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
     .wide { flex: 1 1 260px; } .wide input, textarea { width: 100%; }
     .tag { align-self: center; font-size: 12px; font-weight: 600; background: var(--surface); border-radius: 10px; padding: 1px 8px; }
     .tools { display: flex; gap: 4px; } .tools button { padding: 3px 8px; }
@@ -145,10 +152,24 @@ export class SpecForm {
   private dragged = -1;
 
   private readonly key = computed(() => (this.kind() === 'dashboard' ? 'tiles' : 'sections'));
+  /** Warum der Baukasten die Liste nicht anfasst: Er würde sonst Einträge verlieren oder verwechseln. */
+  protected readonly broken = computed(() => {
+    const list = this.spec()[this.key()];
+    const what = this.kind() === 'dashboard' ? 'Kacheln' : 'Abschnitte';
+    if (list === undefined) return '';
+    if (!Array.isArray(list)) return `„${this.key()}“ ist keine Liste.`;
+    const ids = list.map((item) => (item && typeof item === 'object' && !Array.isArray(item) ? item.id : undefined));
+    if (ids.some((id) => typeof id !== 'string' || !id)) return `Nicht alle ${what} haben eine Kennung („id“).`;
+    if (new Set(ids).size !== ids.length) return `Zwei ${what} haben dieselbe Kennung („id“).`;
+    return '';
+  });
   protected readonly items = computed<any[]>(() => {
     const list = this.spec()[this.key()];
-    return Array.isArray(list) ? list.filter((item) => item && typeof item === 'object' && typeof item.id === 'string') : [];
+    return Array.isArray(list) && !this.broken() ? list : [];
   });
+  protected readonly moved = signal('');
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
+  private readonly injector = inject(Injector);
   protected readonly filterIds = computed<string[]>(() => {
     const ids = this.spec()['filter_ids'];
     return Array.isArray(ids) ? ids : [];
@@ -188,7 +209,19 @@ export class SpecForm {
     this.setItems(this.items().map((item, i) => (i === index ? { ...item, layout: { ...(item.layout ?? { x: 0, y: 0, h: 4 }), w } } : item)));
   }
 
-  protected shift(index: number, by: number): void { this.setItems(move(this.items(), index, index + by)); }
+  protected shift(index: number, by: number): void {
+    const items = this.items();
+    const item = items[index];
+    const target = index + by;
+    if (!item || target < 0 || target >= items.length) return;
+    this.setItems(move(items, index, target));
+    this.moved.set(`„${this.name(item)}“ steht jetzt an Stelle ${target + 1} von ${items.length}.`);
+    // Der Fokus bleibt beim verschobenen Eintrag (am Rand auf dem Knopf der Gegenrichtung).
+    afterNextRender(() => {
+      const find = (dir: number) => this.host.nativeElement.querySelector<HTMLButtonElement>(`[data-move="${CSS.escape(item.id)}:${dir}"]:not(:disabled)`);
+      (find(by) ?? find(-by))?.focus();
+    }, { injector: this.injector });
+  }
   protected remove(index: number): void { this.setItems(this.items().filter((_, i) => i !== index)); }
 
   protected toggleFilter(id: string, on: boolean): void {
@@ -214,9 +247,9 @@ export class SpecForm {
 
   // Ordnen durch Ziehen; dasselbe geht mit den Pfeilen.
   protected dragStart(index: number, event: DragEvent): void {
-    const target = event.target as HTMLElement | null;
+    const target = event.target;
     // nur am Eintrag selbst ziehen, nicht beim Markieren von Text in einem Feld
-    if (target?.closest('input, textarea, select')) { event.preventDefault(); return; }
+    if (!(target instanceof Element) || target.closest('input, textarea, select')) { event.preventDefault(); return; }
     this.dragged = index;
     event.dataTransfer?.setData('text/plain', String(index));
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';

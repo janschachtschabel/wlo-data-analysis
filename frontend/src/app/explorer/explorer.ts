@@ -250,6 +250,7 @@ export class Explorer {
 
   protected run(refresh: boolean): void {
     const spec = { ...this.spec(), refresh };
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     this.waiting.set(false);
     void this.result.run((signal) => this.api.post<QueryResult>('/query', spec, signal));
   }

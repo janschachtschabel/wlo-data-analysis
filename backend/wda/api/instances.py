@@ -30,8 +30,9 @@ class InstanceBody(BaseModel):
     password: SecretStr | None = Field(default=None, max_length=500)
     # Die Oberfläche kennt den Benutzernamen nicht: So bleibt die gespeicherte Anmeldung.
     keep_credentials: bool = False
-    facet_fields: list[Short] | None = Field(default=None, max_length=100)
-    prefix_fields: list[Short] | None = Field(default=None, max_length=100)
+    # facet_fields und prefix_fields fehlen hier mit Absicht: Welche Felder ohne Werteliste
+    # sich aufschlüsseln lassen, entscheidet der Betrieb (WDA_INSTANCES), nicht die
+    # Oberfläche. Sonst ließe sich über ein Feld wie den Titel eine Datensatzliste abrufen.
 
 
 class InstanceCreate(InstanceBody):
@@ -72,6 +73,9 @@ def _build(instance_id: str, body: InstanceBody, previous: Instance | None) -> I
             raise _Invalid("Ungültig: 'password' – für eine andere Adresse muss das Passwort "
                            "neu eingegeben werden.")
         password = kept
+    if previous is not None:  # Freigaben und Zählweise der bisherigen Fassung bleiben
+        data["facet_fields"] = previous.facet_fields
+        data["prefix_fields"] = previous.prefix_fields
     try:
         return Instance(id=instance_id, username=username, password=password, **data)
     except ValidationError as exc:

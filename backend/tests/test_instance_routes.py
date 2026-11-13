@@ -104,7 +104,11 @@ def test_override_of_a_configured_instance_keeps_its_password_when_omitted(admin
     ({"id": "Groß"}, "id"),
     ({"unbekannt": 1}, "unbekannt"),
     ({"name": "  "}, "name"),
-    ({"facet_fields": ["a b"]}, "facet_fields"),
+    ({"facet_fields": ["cclom:title"]}, "facet_fields"),
+    ({"prefix_fields": ["ccm:x"]}, "prefix_fields"),
+    ({"base_url": "https://x.example:abc"}, "base_url"),
+    ({"base_url": "https://x.exa\tmple"}, "base_url"),
+    ({"base_url": " https://x.example"}, "base_url"),
 ])
 def test_invalid_input_is_explained_without_echoing_secrets(admin, change, where):
     r = admin.post("/api/instances", json={**NEW, **change})
@@ -149,3 +153,39 @@ def test_limit_on_number_of_instances(admin):
         if r.status_code != 201:
             break
     assert r.status_code == 409 and "höchstens" in r.json()["detail"]
+
+
+def test_surface_cannot_widen_what_may_be_broken_down(admin, settings):
+    """Die Freigabe von Feldern ohne Werteliste (Titel, URL …) wäre eine Datensatzliste; sie
+    bleibt Sache der Betriebskonfiguration und übersteht jede Änderung in der Oberfläche."""
+    registry = admin.app.state.services.registry
+    before = registry.get("wlo-prod")
+    r = admin.put("/api/instances/wlo-prod", json={
+        "name": "X", "base_url": "https://redaktion.openeduhub.net",
+        "facet_fields": ["cclom:title"]})
+    assert r.status_code == 422
+    assert admin.put("/api/instances/wlo-prod", json={
+        "name": "X", "base_url": "https://redaktion.openeduhub.net"}).status_code == 200
+    after = registry.get("wlo-prod")
+    assert (after.facet_fields, after.prefix_fields) == (before.facet_fields,
+                                                         before.prefix_fields)
+
+
+def test_configured_fields_survive_an_edit(settings):
+    import json as _json
+    custom = settings.model_copy(update={"instances": _json.dumps([{
+        "id": "eigene", "name": "E", "base_url": "https://edu.example.org",
+        "facet_fields": [], "prefix_fields": ["ccm:x", "ccm:y"]}])})
+    client = TestClient(create_app(custom))
+    assert client.post("/api/auth/login", json={"password": ADMIN_PASSWORD}).status_code == 204
+    assert client.put("/api/instances/eigene", json={
+        "name": "E2", "base_url": "https://edu.example.org"}).status_code == 200
+    inst = client.app.state.services.registry.get("eigene")
+    assert (inst.name, inst.facet_fields, inst.prefix_fields) == ("E2", (), ("ccm:x", "ccm:y"))
+
+
+def test_limit_is_exactly_max_stored(admin):
+    from wda.instances import MAX_STORED
+    codes = [admin.post("/api/instances", json={**NEW, "id": f"i{n}"}).status_code
+             for n in range(MAX_STORED + 1)]
+    assert codes == [201] * MAX_STORED + [409]

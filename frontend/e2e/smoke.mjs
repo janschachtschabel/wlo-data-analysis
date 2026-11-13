@@ -12,7 +12,8 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const problems = [];
 page.on('console', (m) => m.type() === 'error' && problems.push(m.text()));
 page.on('pageerror', (e) => problems.push(String(e)));
-page.on('dialog', (d) => d.accept());
+let keep = false; // true: Rückfragen ablehnen
+page.on('dialog', (d) => (keep ? d.dismiss() : d.accept()));
 
 // Anmeldung führt zurück zur gewünschten Seite
 await page.goto(base + '/bibliothek');
@@ -100,6 +101,8 @@ await page.locator('select[name=w-k2]').selectOption({ label: 'ganze Breite' });
 await page.locator('input[name=title-k2]').fill('Zweite Kachel');
 await page.click('[aria-label="Nach oben: Zweite Kachel"]');
 await page.waitForFunction(() => document.querySelector('app-spec-form .item input')?.value === 'Zweite Kachel');
+// der Fokus bleibt beim verschobenen Eintrag
+await page.waitForFunction(() => document.activeElement?.getAttribute('data-move') === 'k2:1');
 await page.click('summary:has-text("Spezifikation")');
 const built = JSON.parse(await page.inputValue('#spec'));
 assert.deepEqual(built.tiles.map((t) => [t.id, t.layout.x, t.layout.y, t.layout.w]), [['k2', 0, 0, 12], ['k1', 0, 4, 6]]);
@@ -145,6 +148,9 @@ await page.fill('#spec', draft);
 await page.context().clearCookies();
 await page.click('text=Prüfen');
 await page.waitForSelector('[role=dialog] >> text=Die Sitzung ist abgelaufen');
+// ein echter Dialog: Fokus im Passwortfeld, die Seite dahinter ruht
+await page.waitForFunction(() => document.activeElement?.id === 'relogin-pw');
+assert.equal(await page.evaluate(() => document.querySelector('header').inert && document.querySelector('main').inert), true);
 await page.fill('#relogin-pw', 'falsch');
 await page.click('[role=dialog] button[type=submit]');
 await page.waitForSelector('[role=dialog] [role=alert]');
@@ -169,6 +175,18 @@ for (const path of ['/', '/bibliothek', '/laeufe', '/instanzen']) {
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(wide <= 1, `${path} ist bei 390 px um ${wide} px zu breit`);
 }
+await page.goto(base + '/bibliothek');
+await page.click('section:has-text("Dashboards") >> text=Bearbeiten');
+await page.waitForSelector('app-spec-form .item');
+const editorWide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+assert.ok(editorWide <= 1, `Editor ist bei 390 px um ${editorWide} px zu breit`);
+// Abmelden mit ungespeicherter Änderung: Ablehnen der Rückfrage lässt angemeldet
+await page.fill('input[name=name]', 'geändert, nicht gespeichert');
+keep = true;
+await page.click('text=Abmelden');
+await page.waitForTimeout(300);
+assert.equal(await page.evaluate(async () => (await fetch('/api/definitions')).status), 200);
+keep = false;
 await page.setViewportSize({ width: 1400, height: 900 });
 
 // Abmelden sperrt die API wieder
