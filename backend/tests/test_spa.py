@@ -8,7 +8,7 @@ from wda.main import create_app
 def site(settings, tmp_path):
     static = tmp_path / "site"
     (static / "media").mkdir(parents=True)
-    (static / "index.html").write_text("<!doctype html><title>Oberfläche</title>")
+    (static / "index.html").write_text("<!doctype html><title>Oberfläche</title>", encoding="utf-8")
     (static / "main-AB12CD34.js").write_text("console.log(1)")
     (static / "styles-XY98ZW76.css").write_text("body{}")
     (static / "favicon.ico").write_bytes(b"\x00\x01")

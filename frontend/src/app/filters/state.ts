@@ -1,4 +1,4 @@
-import { Filter, QuerySpec, Value, ViewType } from '../core/types';
+import { FieldInfo, Filter, QuerySpec, Value, ViewType } from '../core/types';
 
 /** Arbeitszustand des Explorers; steht vollständig in der Adresse, Ergebnisse nie. */
 export interface ExplorerState { spec: QuerySpec; view: ViewType }
@@ -78,4 +78,19 @@ export function removeFilter(filters: Filter[], property: string): Filter[] {
 /** Sieht die Eingabe wie eine URI aus (eingefügter Vokabularwert)? */
 export function looksLikeUri(text: string): boolean {
   return /^https?:\/\/\S+$/i.test(text.trim());
+}
+
+/**
+ * Felder zur Auswahl: nur solche mit Werten, eigentliche Felder vor virtuellen und technischen.
+ * Tragen mehrere denselben Namen, steht die Kennung dabei, damit man sie unterscheiden kann.
+ */
+export function fieldChoices(fields: FieldInfo[]): FieldInfo[] {
+  const rank = (f: FieldInfo) =>
+    !f.caption || f.caption === f.property ? 2 : /^(ccm|cclom|cm):/.test(f.property) ? 0 : 1;
+  const usable = fields.filter((f) => f.value_count > 0);
+  const seen = new Map<string, number>();
+  for (const f of usable) seen.set(f.caption, (seen.get(f.caption) ?? 0) + 1);
+  return usable
+    .map((f) => ({ ...f, caption: f.caption && (seen.get(f.caption) ?? 0) > 1 ? `${f.caption} (${f.property})` : f.caption }))
+    .sort((a, b) => rank(a) - rank(b) || (a.caption || a.property).localeCompare(b.caption || b.property, 'de'));
 }

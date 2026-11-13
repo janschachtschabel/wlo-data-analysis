@@ -10,7 +10,7 @@ const KINDS: { id: Kind; label: string; plural: string }[] = [
   { id: 'dashboard', label: 'Dashboard', plural: 'Dashboards' }, { id: 'template', label: 'Template', plural: 'Templates' },
   { id: 'metric', label: 'Kennzahl', plural: 'Kennzahlen' }, { id: 'filter', label: 'Filter', plural: 'Filter' },
 ];
-interface Builtin { id: string; name: string; description?: string; definitions: { id: string; name: string; installed: boolean }[] }
+interface Builtin { id: string; title: string; description?: string; definitions: { id: string; name: string; installed: boolean }[] }
 
 /** Alles Gespeicherte: Gruppen, Suche, Öffnen, Duplizieren, Verschieben, Löschen, Import/Export. */
 @Component({
@@ -44,7 +44,8 @@ interface Builtin { id: string; name: string; description?: string; definitions:
         @if (builtin().length) {
           <h2 class="top">Mitgeliefert</h2>
           @for (bundle of builtin(); track bundle.id) {
-            <p>{{ bundle.name }}<br />
+            <p><strong>{{ bundle.title }}</strong><br />
+              @if (bundle.description) { <span class="muted small">{{ bundle.description }}</span><br /> }
               @if (installed(bundle)) { <span class="muted">installiert</span> }
               @else { <button type="button" (click)="install(bundle)">Installieren</button> }</p>
           }
@@ -185,7 +186,7 @@ export class Library {
     return this.act(async () => { await this.api.delete('/definitions/' + encodeURIComponent(item.id)); return `„${item.name}“ gelöscht.`; }, 'Löschen nicht möglich.');
   }
   protected install(bundle: Builtin): Promise<void> {
-    return this.act(async () => { await this.api.post(`/builtin/${encodeURIComponent(bundle.id)}/install`); return `„${bundle.name}“ installiert.`; }, 'Installieren nicht möglich.');
+    return this.act(async () => { await this.api.post(`/builtin/${encodeURIComponent(bundle.id)}/install`); return `„${bundle.title}“ installiert.`; }, 'Installieren nicht möglich.');
   }
 
   protected exportAll(): Promise<void> { return this.download(null, 'wlo-definitionen'); }

@@ -1,5 +1,5 @@
 import {
-  MAX_STATE_LENGTH, addValue, decodeState, emptyState, encodeState, looksLikeUri, removeFilter,
+  MAX_STATE_LENGTH, addValue, fieldChoices, decodeState, emptyState, encodeState, looksLikeUri, removeFilter,
   removeValue,
 } from './state';
 
@@ -62,5 +62,17 @@ describe('Filter', () => {
     expect(looksLikeUri(' http://w3id.org/openeduhub/vocabs/discipline/380 ')).toBe(true);
     expect(looksLikeUri('Mathematik')).toBe(false);
     expect(looksLikeUri('http://a b')).toBe(false);
+  });
+});
+
+describe('Feldauswahl', () => {
+  it('zeigt nur Felder mit Werten, eigentliche zuerst, gleiche Namen mit Kennung', () => {
+    const field = (property: string, caption: string, value_count = 5) => ({ property, caption, type: '', value_count });
+    const out = fieldChoices([
+      field('virtual:taxonid', 'Fach'), field('preview.style', 'preview.style'), field('ccm:taxonid', 'Fach'),
+      field('ccm:leer', 'Leer', 0), field('ccm:educationalcontext', 'Bildungsstufe'),
+    ]);
+    expect(out.map((f) => f.caption)).toEqual(
+      ['Bildungsstufe', 'Fach (ccm:taxonid)', 'Fach (virtual:taxonid)', 'preview.style']);
   });
 });

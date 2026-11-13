@@ -7,7 +7,7 @@ import { formatNumber, formatTime } from '../core/format';
 import { Instances } from '../core/instances';
 import { Definition, FieldInfo, Filter, QueryResult, QuerySpec, ViewType } from '../core/types';
 import { FilterBar } from '../filters/filter-bar';
-import { ExplorerState, decodeState, emptyState, encodeState } from '../filters/state';
+import { ExplorerState, decodeState, emptyState, encodeState, fieldChoices } from '../filters/state';
 import { ResultTable } from '../shared/result-table';
 
 const VIEWS: { id: ViewType; label: string }[] = [
@@ -154,8 +154,7 @@ export class Explorer {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private fromUrl = false;
 
-  protected readonly facetFields = computed(() =>
-    this.fields().filter((f) => f.value_count > 0).sort((a, b) => a.caption.localeCompare(b.caption, 'de')));
+  protected readonly facetFields = computed(() => fieldChoices(this.fields()));
   protected readonly rowTitle = computed(() => {
     const property = this.spec().rows?.property;
     return this.fields().find((f) => f.property === property)?.caption || property || '';
