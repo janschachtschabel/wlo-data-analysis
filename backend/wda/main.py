@@ -22,6 +22,7 @@ from .api import (
     errors,
     export,
     health,
+    history,
     instances,
     query,
     report,
@@ -94,6 +95,7 @@ def create_app(
     protected.include_router(query.router)
     protected.include_router(definitions.router)
     protected.include_router(runs.router)
+    protected.include_router(history.router)
     protected.include_router(export.router)
     protected.include_router(report.router)
     protected.include_router(builtin.router)
