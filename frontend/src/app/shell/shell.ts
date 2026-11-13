@@ -23,7 +23,7 @@ import { Instances } from '../core/instances';
           <option [value]="inst.id">{{ inst.name }}</option>
         }
       </select>
-      <button type="button" (click)="toggleTheme()" title="Hell oder dunkel">◐</button>
+      <button type="button" (click)="toggleTheme()" >Hell/Dunkel</button>
       <button type="button" (click)="logout()">Abmelden</button>
     </header>
     <main><router-outlet /></main>`,
