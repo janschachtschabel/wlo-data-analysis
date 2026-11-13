@@ -32,9 +32,31 @@ LICENSE_GROUPS = {
 }
 SOURCES = ["oersi_spider", "youtube_spider", "bpb_spider"]
 KNOWN = {"ccm:taxonid", "ccm:educationalcontext", "ccm:commonlicense_key", "license",
-         "ccm:replicationsource", "ngsearchword", "ccm:editorial_checklist"}
+         "ccm:replicationsource", "ngsearchword", "ccm:editorial_checklist",
+         "ccm:oeh_lrt_aggregated", "cclom:general_language", "ccm:oeh_publisher_combined",
+         "ccm:educationalintendedenduserrole", "ccm:curriculum", "ccm:oeh_widgets"}
 # Wie live gemessen: als Facette zählbar, als Kriterium abgelehnt
-FACET_ONLY = {"ccm:price", "ccm:oeh_buffet_criteria", "virtual:kita_search"}
+FACET_ONLY = {"ccm:price", "ccm:oeh_buffet_criteria", "virtual:kita_search",
+              "ccm:conditionsOfAccess", "ccm:containsAdvertisement",
+              "ccm:dataProtectionConformity", "ccm:fskRating", "ccm:oeh_quality_login"}
+# weitere Felder mit Werteliste: (Bezeichnung, Widget-Art, Werte, Anteil gefüllt)
+MORE = {
+    "ccm:oeh_lrt_aggregated": ("Materialart", "multivalueTree",
+                               ["Video", "Arbeitsblatt", "Bild", "Kurs", "Audio"], 0.75),
+    "cclom:general_language": ("Sprache", "multivalueBadges", ["de", "en", "fr"], 0.75),
+    "ccm:educationalintendedenduserrole": ("Zielgruppe", "multivalueFixedBadges",
+                                           ["teacher", "learner", "parent"], 0.5),
+    "ccm:curriculum": ("Lehrplanthema", "multivalueTree", ["thema-1", "thema-2"], 0.08),
+    "ccm:oeh_widgets": ("Widget-Typ", "multioption", ["erklaervideo", "worksheet"], 0.06),
+    "ccm:conditionsOfAccess": ("Zugang", "singleoption",
+                               ["no_login", "login", "login_for_additional_features"], 0.4),
+    "ccm:containsAdvertisement": ("Werbung", "singleoption", ["no", "yes"], 0.27),
+    "ccm:dataProtectionConformity": ("Datenschutz", "singleoption",
+                                     ["DSGVO-konform", "nicht konform"], 0.03),
+    "ccm:fskRating": ("Altersfreigabe", "singleoption", ["0", "6", "12"], 0.01),
+    "ccm:oeh_quality_login": ("Qualität: Login", "singleoption", ["0", "1"], 0.1),
+}
+PUBLISHERS = ["bpb", "Youtube", "OERSI", "Serlo"]
 PRICES = ["no", "yes", "yes_for_additional"]
 BUFFET = ["speech_valid", "content_valid", "medial_relevant"]
 
@@ -55,6 +77,10 @@ MDS = {"id": "oeh", "widgets": [
      "values": [{"id": v, "caption": v} for v in ("2", "9")]},
     {"id": "virtual:kita_search", "caption": "Kita", "type": "singleoption",
      "values": [{"id": "1", "caption": "ja"}]},
+    {"id": "ccm:oeh_publisher_combined", "caption": "Bezugsquelle", "type": "text"},
+    *[{"id": prop, "caption": caption, "type": kind,
+       "values": [{"id": v, "caption": v} for v in values]}
+      for prop, (caption, kind, values, _) in MORE.items()],
 ]}
 
 Doc = dict[str, list[str]]
@@ -79,6 +105,12 @@ def make_docs(n: int = 400, seed: int = 7) -> list[Doc]:
         doc["ccm:price"] = [extra.choice(PRICES)] if extra.random() < 0.5 else []
         doc["ccm:oeh_buffet_criteria"] = extra.sample(BUFFET, extra.choice([0, 0, 2, 3]))
         doc["ccm:editorial_checklist"] = [extra.choice(["2", "9"])] if extra.random() < 0.1 else []
+    for doc in docs:
+        doc["ccm:oeh_publisher_combined"] = (
+            [extra.choice(PUBLISHERS)] if extra.random() < 0.95 else [])
+        for prop, (_, kind, values, share) in MORE.items():
+            many = 2 if kind.startswith("multi") and extra.random() < 0.3 else 1
+            doc[prop] = extra.sample(values, many) if extra.random() < share else []
     return docs
 
 

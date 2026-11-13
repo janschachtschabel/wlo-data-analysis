@@ -153,7 +153,7 @@ def test_five_hundred_runs_are_read_fast(api):
 
 
 def test_columns_of_blocks_side_by_side_carry_the_block_name(api):
-    bundle = api.get("/api/builtin").json()[0]
+    bundle = api.get("/api/builtin").json()[1]
     assert api.post(f"/api/builtin/{bundle['id']}/install").status_code in (200, 201)
     template = next(d for d in api.get("/api/definitions").json() if d["kind"] == "template")
     run(api, template["id"])

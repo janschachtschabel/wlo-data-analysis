@@ -79,13 +79,14 @@ def api(settings):
 
 def test_list_install_run_and_export(api):
     listed = api.get("/api/builtin").json()
-    assert [b["id"] for b in listed] == ["oer-statistik"]
+    assert [b["id"] for b in listed] == ["datenqualitaet", "oer-statistik"]
+    listed = listed[1:]
     assert listed[0]["definitions"] == [{"id": "builtin-oer-statistik", "kind": "template",
                                          "name": "OER-Statistik", "installed": False,
                                          "changed": False}]
     r = api.post("/api/builtin/oer-statistik/install")
     assert r.status_code == 200 and r.json()["definitions"][0]["action"] == "created"
-    assert api.get("/api/builtin").json()[0]["definitions"][0]["installed"] is True
+    assert api.get("/api/builtin").json()[1]["definitions"][0]["installed"] is True
     # eigene Änderungen überleben ein erneutes Installieren
     api.put("/api/definitions/builtin-oer-statistik", json={"version": 1, "name": "Meine"})
     again = api.post("/api/builtin/oer-statistik/install").json()
@@ -136,3 +137,65 @@ def test_list_install_run_and_export(api):
     from wda.report.formats import pdf_available
     for fmt in ("csv", "md", "html") + (("pdf",) if pdf_available() else ()):
         assert api.get(f"/api/runs/{run['id']}/export?format={fmt}").status_code == 200
+
+
+# ---- Dashboard „Datenqualität“ ---------------------------------------------------------
+
+# Felder, die WLO Produktion als Facette annimmt (gemessen, docs/edu-sharing-api-erkenntnisse.md)
+MEASURED = {
+    "ccm:taxonid", "ccm:educationalcontext", "ccm:oeh_lrt_aggregated", "ccm:commonlicense_key",
+    "cclom:general_language", "ccm:educationalintendedenduserrole", "ccm:replicationsource",
+    "ccm:oeh_publisher_combined", "ccm:price", "ccm:conditionsOfAccess",
+    "ccm:containsAdvertisement", "ccm:dataProtectionConformity", "ccm:fskRating",
+    "ccm:oeh_quality_login", "ccm:editorial_checklist", "ccm:oeh_buffet_criteria",
+    "ccm:curriculum", "ccm:oeh_widgets"}
+# davon nicht als Filter zählbar: weder „ohne Wert“ noch „Übrige“ als Zeile
+FACET_ONLY = {"ccm:price", "ccm:conditionsOfAccess", "ccm:containsAdvertisement",
+              "ccm:dataProtectionConformity", "ccm:fskRating", "ccm:oeh_quality_login",
+              "ccm:oeh_buffet_criteria", "ccm:editorial_checklist"}
+
+
+def quality():
+    return bundles()["datenqualitaet"]["definitions"][0]
+
+
+def test_quality_dashboard_uses_only_measured_fields():
+    entry = quality()
+    parsed = parse_spec("dashboard", entry["spec"])
+    assert len(parsed.tiles) >= 12
+    for tile in parsed.tiles:
+        query = tile.query
+        assert query is not None and query.instance == "wlo-prod" and not query.filters
+        used = {f.property for f in query.fill.fields} if query.fill else set()
+        if query.rows:
+            used.add(query.rows.property)
+            if query.rows.property in FACET_ONLY:
+                assert not query.rows.missing and not query.rows.other, tile.id
+        assert used and used <= MEASURED, tile.id
+        assert tile.layout.x + tile.layout.w <= 12
+    cells = set()
+    for tile in parsed.tiles:  # keine Kachel liegt auf einer anderen
+        area = {(x, y) for x in range(tile.layout.x, tile.layout.x + tile.layout.w)
+                for y in range(tile.layout.y, tile.layout.y + tile.layout.h)}
+        assert not area & cells, tile.id
+        cells |= area
+
+
+def test_quality_dashboard_installs_and_runs(api):
+    r = api.post("/api/builtin/datenqualitaet/install")
+    assert r.status_code == 200 and r.json()["definitions"][0]["action"] == "created"
+    run = api.post("/api/definitions/builtin-datenqualitaet/run").json()
+    results = {r["key"]: r for r in run["results"]}
+    # der Testbestand kennt nicht jedes Feld von WLO; was er kennt, muss stimmen
+    docs = api.repo.docs
+    lic = results["lizenzen"]["result"]
+    assert lic is not None and results["lizenzen"]["error"] is None
+    rows = {r["key"]: r["values"][0] for r in lic["rows"]}
+    assert rows["__missing__"] == sum(1 for d in docs if not d["ccm:commonlicense_key"])
+    price = results["kosten"]["result"]
+    assert {r["key"]: r["values"][0] for r in price["rows"]} == {
+        v: sum(1 for d in docs if v in d["ccm:price"]) for v in ("no", "yes", "yes_for_additional")}
+    assert results["buffet"]["error"] is None and results["erschliessung"]["error"] is None
+    report = api.get(f"/api/runs/{run['id']}/report").json()
+    assert len(report["blocks"]) == len(run["results"])
+    assert api.get(f"/api/runs/{run['id']}/export?format=csv").status_code == 200

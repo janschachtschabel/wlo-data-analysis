@@ -95,8 +95,8 @@ assert.equal(await page.getAttribute('.views button:has-text("Füllgrade")', 'ar
 // Bibliothek: der HTML-Name bleibt Text; mitgelieferte Vorlage installieren und ansehen
 await page.goto(base + '/bibliothek');
 await page.waitForSelector(`text=${EVIL}`);
-await page.click('text=Installieren');
-await page.waitForSelector('aside >> text=installiert');
+await page.click('aside p:has(strong:text-is("OER-Statistik")) button:has-text("Installieren")');
+await page.waitForSelector('aside p:has(strong:text-is("OER-Statistik")) >> text=installiert');
 await page.click('section a:has-text("OER-Statistik")');
 await page.waitForSelector('app-report-view table', { timeout: 60000 });
 assert.ok((await page.locator('app-report-view tr.group').count()) >= 10);
@@ -264,6 +264,17 @@ await page.waitForTimeout(300);
 assert.equal(await page.evaluate(async () => (await fetch('/api/definitions')).status), 200);
 keep = false;
 await page.setViewportSize({ width: 1400, height: 900 });
+
+// Zweite mitgelieferte Vorlage: Dashboard „Datenqualität“ installieren und ansehen
+keep = false;
+await page.goto(base + '/bibliothek');
+await page.click('aside p:has(strong:text-is("Datenqualität")) button:has-text("Installieren")');
+await page.waitForSelector('aside p:has(strong:text-is("Datenqualität")) >> text=installiert');
+await page.click('section a:has-text("Datenqualität")');
+await page.waitForSelector('app-report-view table', { timeout: 60000, state: 'attached' });
+await page.waitForSelector('app-report-view canvas');
+assert.ok((await page.locator('app-report-view h2, app-report-view h3').count()) >= 12, 'Kacheln des Dashboards');
+await page.screenshot({ path: process.env.SHOT ?? '/dev/null', fullPage: true }).catch(() => undefined);
 
 // Abmelden sperrt die API wieder
 await page.click('text=Abmelden');

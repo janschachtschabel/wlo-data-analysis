@@ -1,0 +1,482 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "datenqualitaet",
+  "title": "Datenqualität",
+  "description": "Wie vollständig sind die Metadaten? Füllgrade der wichtigsten Felder insgesamt und je Quelle, fehlende Angaben, Verteilungen von Lizenzen, Quellen und Kennzeichen der Redaktion. Alles aus Zählungen, ohne einzelne Datensätze."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-datenqualitaet",
+   "kind": "dashboard",
+   "name": "Datenqualität",
+   "description": "Füllgrade insgesamt und je Quelle, fehlende Angaben, Verteilungen. „Ohne Wert“ ist immer berechnet (Gesamtzahl minus Materialien mit Wert). Gemessen an WLO Produktion; andere Instanzen kennen womöglich nicht alle Felder.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "fuellgrade",
+      "title": "Füllgrade der wichtigsten Felder",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         },
+         {
+          "property": "ccm:replicationsource",
+          "label": "Quelle"
+         },
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "stacked_bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 6
+      }
+     },
+     {
+      "id": "fuellgrade-weitere",
+      "title": "Füllgrade weiterer Angaben (Zugang, Recht, Redaktion)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:price",
+          "label": "Kosten"
+         },
+         {
+          "property": "ccm:conditionsOfAccess",
+          "label": "Zugang (Anmeldung)"
+         },
+         {
+          "property": "ccm:containsAdvertisement",
+          "label": "Werbung"
+         },
+         {
+          "property": "ccm:dataProtectionConformity",
+          "label": "Datenschutz"
+         },
+         {
+          "property": "ccm:fskRating",
+          "label": "Altersfreigabe"
+         },
+         {
+          "property": "ccm:oeh_quality_login",
+          "label": "Qualität: Login"
+         },
+         {
+          "property": "ccm:editorial_checklist",
+          "label": "Erschließungsstatus"
+         },
+         {
+          "property": "ccm:oeh_buffet_criteria",
+          "label": "Buffet-Kriterien"
+         },
+         {
+          "property": "ccm:curriculum",
+          "label": "Lehrplanthema"
+         },
+         {
+          "property": "ccm:oeh_widgets",
+          "label": "Widget-Typ"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 6,
+       "w": 12,
+       "h": 6
+      }
+     },
+     {
+      "id": "fuellgrad-je-quelle",
+      "title": "Füllgrad je Quelle in Prozent (25 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 25
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         }
+        ],
+        "show": "rate"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 12,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "fehlend-je-quelle",
+      "title": "Fehlende Angaben je Quelle: Materialien ohne Wert (25 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 25
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         }
+        ],
+        "show": "missing"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 22,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "lizenzen",
+      "title": "Lizenzen, mit „ohne Wert“",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:commonlicense_key",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 32,
+       "w": 6,
+       "h": 6
+      }
+     },
+     {
+      "id": "quellen",
+      "title": "Materialien je Quelle (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 25,
+        "other": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 32,
+       "w": 6,
+       "h": 6
+      }
+     },
+     {
+      "id": "bezugsquellen",
+      "title": "Materialien je Bezugsquelle (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25,
+        "other": true
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 38,
+       "w": 6,
+       "h": 6
+      }
+     },
+     {
+      "id": "bildungsstufen",
+      "title": "Bildungsstufen",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:educationalcontext"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 38,
+       "w": 6,
+       "h": 6
+      }
+     },
+     {
+      "id": "materialarten",
+      "title": "Materialarten (25 häufigste)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 25
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 44,
+       "w": 6,
+       "h": 6
+      }
+     },
+     {
+      "id": "sprachen",
+      "title": "Sprachen (15 häufigste)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "cclom:general_language",
+        "top": 15
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 44,
+       "w": 6,
+       "h": 6
+      }
+     },
+     {
+      "id": "kosten",
+      "title": "Kosten",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:price"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 50,
+       "w": 4,
+       "h": 4
+      }
+     },
+     {
+      "id": "zugang",
+      "title": "Zugang (Anmeldung nötig?)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:conditionsOfAccess"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 4,
+       "y": 50,
+       "w": 4,
+       "h": 4
+      }
+     },
+     {
+      "id": "datenschutz",
+      "title": "Datenschutz",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:dataProtectionConformity"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 8,
+       "y": 50,
+       "w": 4,
+       "h": 4
+      }
+     },
+     {
+      "id": "erschliessung",
+      "title": "Erschließungsstatus der Redaktion",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:editorial_checklist"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 54,
+       "w": 4,
+       "h": 4
+      }
+     },
+     {
+      "id": "buffet",
+      "title": "Buffet-Kriterien der Redaktion",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_buffet_criteria"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 4,
+       "y": 54,
+       "w": 4,
+       "h": 4
+      }
+     },
+     {
+      "id": "werbung",
+      "title": "Werbung",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:containsAdvertisement"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 8,
+       "y": 54,
+       "w": 4,
+       "h": 4
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

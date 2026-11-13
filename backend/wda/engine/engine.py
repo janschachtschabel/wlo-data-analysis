@@ -391,11 +391,19 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
                 f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern; für Füllgrade bitte "
                 "eines von beiden weglassen.")
     # Erst alles prüfen, dann fragen: Kein Aufruf für ein Feld, das nicht freigegeben ist.
+    # Ein solches Feld bleibt unbekannt, damit eine gespeicherte Definition auch auf einer
+    # Instanz läuft, die nicht jedes ihrer Felder kennt.
+    closed: set[str] = set()
     for item in fill.fields:
         if item.property == row_prop:
             raise QueryError(
                 f"'{item.property}' ist das Zeilenfeld; dort hat jede Zeile einen Wert.")
-        await vocab.check_facet(item.property)
+        try:
+            await vocab.check_facet(item.property)
+        except EduSharingError as exc:
+            if exc.kind != "invalid_query":
+                raise
+            closed.add(item.property)
     ids = [_field_id(f.property) for f in fill.fields]
     if len(set(ids)) != len(ids) or "count" in ids:
         raise QueryError("Zwei der Felder unterscheiden sich nur in Sonderzeichen.")
@@ -414,6 +422,9 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
     async def measure(prop: str) -> Aggregate | int | bool | None:
         """Materialien mit Wert: eine Zählung (mit Zeilenfacette), eine Zahl (nur insgesamt
         bekannt), ``True``: alle, ``False``: keines, ``None``: nicht bestimmbar."""
+        if prop in closed:
+            reasons[prop] = "closed"
+            return None
         if prop in base_props:
             return True
         if prop in prefix_fields:
@@ -475,6 +486,10 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
         notes.add("fill_virtual",
                   f"Nicht bestimmbar: {named('virtual')} (Suchhilfe des Repositoriums, kein "
                   "gespeichertes Feld).")
+    if named("closed"):
+        notes.add("fill_closed",
+                  f"Nicht bestimmbar: {named('closed')} (auf dieser Instanz kein Feld mit "
+                  "Werteliste und nicht freigegeben; es wird nichts abgefragt).")
     if named("refused"):
         notes.add("fill_refused",
                   f"Nicht bestimmbar: {named('refused')} (das Repositorium zählt dieses Feld "

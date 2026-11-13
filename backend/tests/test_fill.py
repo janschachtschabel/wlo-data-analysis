@@ -1,5 +1,7 @@
 """Füllgrade: wie oft ein Feld gefüllt ist, insgesamt und je Zeile, gegen rohe Zählung."""
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -117,7 +119,7 @@ def test_unknown_when_too_many_values(repo, tmp_path, monkeypatch):
 
 def test_rejections(repo, tmp_path):
     with pytest.raises(EduSharingError, match="nicht als Facette freigegeben"):
-        query(repo, tmp_path, fill=fields("cclom:title"))
+        query(repo, tmp_path, rows={"property": "cclom:title"}, fill=fields(TAX))
     with pytest.raises(QueryError, match="Zeilenfeld"):
         query(repo, tmp_path, rows={"property": TAX}, fill=fields(TAX))
     with pytest.raises(QueryError, match="Gruppen"):
@@ -137,10 +139,14 @@ def test_rejections(repo, tmp_path):
 
 
 def test_no_facet_on_unreleased_field_is_ever_sent(repo, tmp_path):
-    with pytest.raises(EduSharingError):
-        query(repo, tmp_path, fill=fields(TAX, "cclom:title"))
-    asked = {f["property"] for body in repo.searches for f in body.get("facets", [])}
-    assert "cclom:title" not in asked
+    """Ein nicht freigegebenes Feld bleibt unbekannt (damit eine Definition auch auf einer
+    Instanz läuft, die das Feld nicht kennt); gefragt wird danach nie."""
+    result = query(repo, tmp_path, fill=fields(TAX, "cclom:title", "gibt:esnicht"))
+    assert [r["values"][0] is None for r in result["rows"]] == [False, True, True]
+    text = next(n["text"] for n in result["provenance"]["notes"] if n["code"] == "fill_closed")
+    assert "Titel" in text and "gibt:esnicht" in text
+    sent = json.dumps(repo.searches)
+    assert "cclom:title" not in sent and "gibt:esnicht" not in sent
 
 
 def test_fill_metric_through_run_report_history_and_export(settings):

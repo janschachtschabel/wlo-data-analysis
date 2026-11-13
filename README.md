@@ -130,6 +130,26 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   Besonderheit der Zählung (gekürzte Wertelisten, Summen-Gruppen,
   berechnete Spalten).
 
+### Füllgrade (Datenqualität)
+
+`fill` zählt je Feld, wie viele Materialien dort mindestens einen Wert haben:
+
+```json
+{"instance": "wlo-prod", "filters": [],
+ "rows": {"property": "ccm:replicationsource", "top": 25},
+ "fill": {"fields": [{"property": "ccm:taxonid"}, {"property": "ccm:commonlicense_key"}],
+          "show": "rate"}}
+```
+
+Ohne `rows` gibt es eine Zeile je Feld (mit Wert, ohne Wert, Füllgrad in Prozent), mit
+`rows` eine Spalte je Feld (`show`: `rate`, `missing` oder `filled`). „Ohne Wert“ ist immer
+berechnet. Was sich nicht verlässlich zählen lässt, bleibt leer und steht mit Grund in den
+Hinweisen: Felder mit zu vielen Werten, Suchhilfen (`virtual:*`), nicht freigegebene Felder
+und mehrwertige Felder, die das Repositorium nicht als Filter zählt (dann mit Spanne).
+Füllgrade von Feldern ohne Werteliste (Titel, Beschreibung) kommen erst mit dem Abgleich
+der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibliothek,
+„Mitgeliefert“).
+
 ## Verwaltung und Läufe
 
 Vier Arten von Definitionen liegen in einer SQLite-Datei im Datenverzeichnis
