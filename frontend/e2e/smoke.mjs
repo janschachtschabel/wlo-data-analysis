@@ -86,6 +86,25 @@ assert.match(csv[1], /text\/csv/);
 await page.goto(base + '/laeufe');
 await page.waitForSelector('table.data a:has-text("OER-Statistik")');
 
+// Instanzen: anlegen (Passwort geht nur hinein), ändern mit behaltener Anmeldung, entfernen
+await page.goto(base + '/instanzen');
+await page.click('text=Instanz anlegen');
+await page.fill('input[name=id]', 'probe');
+await page.fill('input[name=name]', 'Probe ' + EVIL);
+await page.fill('input[name=base_url]', 'https://probe.example.org');
+await page.click('summary:has-text("Anmeldung")');
+await page.fill('input[name=username]', 'nutzer');
+await page.fill('input[name=password]', 'instanz-geheim');
+await page.click('form.form button[type=submit]');
+await page.waitForSelector('tr:has-text("probe") >> text=hier angelegt');
+assert.ok(!(await page.content()).includes('instanz-geheim'));
+await page.click('tr:has-text("probe.example.org") >> text=Ändern');
+await page.fill('input[name=name]', 'Probe zwei');
+await page.click('form.form button[type=submit]');
+await page.waitForSelector('tr:has-text("Probe zwei") >> td:text-is("ja")');
+await page.click('tr:has-text("Probe zwei") >> text=Entfernen');
+await page.waitForSelector('tr:has-text("Probe zwei")', { state: 'detached' });
+
 // Editor: Prüfung nennt die Fehler mit Ort, nichts wird gespeichert
 await page.goto(base + '/bibliothek');
 await page.click('section:has-text("Templates") >> text=Bearbeiten');
@@ -117,7 +136,7 @@ assert.equal(await page.locator('[role=dialog]').count(), 0);
 
 // Schmales Fenster: die Seite selbst rollt nicht seitwärts
 await page.setViewportSize({ width: 390, height: 800 });
-for (const path of ['/', '/bibliothek', '/laeufe']) {
+for (const path of ['/', '/bibliothek', '/laeufe', '/instanzen']) {
   await page.goto(base + path);
   await page.waitForSelector('main h1', { state: 'attached' });
   await page.waitForTimeout(400);

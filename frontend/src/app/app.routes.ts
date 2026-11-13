@@ -14,6 +14,7 @@ export const routes: Routes = [
         canDeactivate: [(editor: { canLeave(): boolean }) => editor.canLeave()] },
       { path: 'ansicht/:defId', title: 'Ansicht – WLO-Daten', loadComponent: () => import('./runs/run-page').then((m) => m.RunPage) },
       { path: 'lauf/:runId', title: 'Lauf – WLO-Daten', loadComponent: () => import('./runs/run-page').then((m) => m.RunPage) },
+      { path: 'instanzen', title: 'Instanzen – WLO-Daten', loadComponent: () => import('./instances/instances-page').then((m) => m.InstancesPage) },
       { path: 'laeufe', title: 'Läufe – WLO-Daten', loadComponent: () => import('./runs/runs').then((m) => m.Runs) },
     ],
   },

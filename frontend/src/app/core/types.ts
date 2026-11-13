@@ -29,6 +29,8 @@ export interface QueryResult {
 export interface Instance {
   id: string; name: string; base_url: string; search_url?: string | null;
   has_credentials: boolean;
+  repository?: string; metadataset?: string; query?: string; facet_fields?: string[];
+  source?: 'preset' | 'config' | 'stored'; overridden?: boolean;
 }
 export interface FieldInfo { property: string; caption: string; type: string; value_count: number }
 export interface VocabValue { id: string; caption: string; parent?: string | null }

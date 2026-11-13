@@ -15,6 +15,7 @@ import { Instances } from '../core/instances';
         <a routerLink="/" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">Explorer</a>
         <a routerLink="/bibliothek" routerLinkActive="on">Bibliothek</a>
         <a routerLink="/laeufe" routerLinkActive="on">Läufe</a>
+        <a routerLink="/instanzen" routerLinkActive="on">Instanzen</a>
       </nav>
       <span class="grow"></span>
       <label class="sr-only" for="instance">Instanz</label>
@@ -48,7 +49,7 @@ import { Instances } from '../core/instances';
     header { display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; padding: 8px 16px;
              background: var(--surface); border-bottom: 1px solid var(--border);
              position: sticky; top: 0; z-index: 5; }
-    nav { display: flex; gap: 4px; }
+    nav { display: flex; gap: 4px; flex-wrap: wrap; }
     nav a { padding: 6px 10px; border-radius: 6px; text-decoration: none; color: var(--text); }
     nav a.on { background: var(--surface-2); font-weight: 600; }
     main { padding: 16px; max-width: 1500px; margin: 0 auto; }

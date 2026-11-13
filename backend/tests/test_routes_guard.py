@@ -27,7 +27,8 @@ def all_routes(routes):
 # (und damit die Prüfung unten) einmal nichts mehr findet.
 PROTECTED = {
     "/api/runs/{run_id}/report", "/api/preview", "/api/check",
-    "/api", "/api/{rest:path}", "/api/instances", "/api/settings", "/api/query",
+    "/api", "/api/{rest:path}", "/api/instances", "/api/instances/{instance_id}",
+    "/api/settings", "/api/query",
     "/api/instances/{instance_id}/about", "/api/instances/{instance_id}/fields",
     "/api/instances/{instance_id}/vocab", "/api/instances/{instance_id}/aggregate",
     "/api/groups", "/api/groups/{group_id}", "/api/definitions", "/api/definitions/export",

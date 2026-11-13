@@ -35,6 +35,13 @@ export class Instances {
     ));
   }
 
+  /** Nach einer Änderung an den Instanzen: Liste und gemerkte Felder neu holen. */
+  reload(): Promise<void> {
+    this.loaded = null;
+    this.fieldLists.clear();
+    return this.load();
+  }
+
   name(id: string): string {
     return this.list().find((i) => i.id === id)?.name ?? id;
   }

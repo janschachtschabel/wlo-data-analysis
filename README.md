@@ -70,6 +70,7 @@ Datensätze und wird abgelehnt.
 | `POST /api/auth/logout` | nein | löscht das Cookie |
 | `GET /api/auth/status` | nein | ob angemeldet |
 | `GET /api/instances` | ja | Instanzen ohne Zugangsdaten |
+| `POST /api/instances`, `PUT`/`DELETE /api/instances/{id}` | ja | Instanz anlegen, ändern, entfernen (Seite „Instanzen“). Zugangsdaten gehen nur hinein; sie liegen in der Datenbank im Datenverzeichnis (Dateirechte 0600). Eine Änderung an einer festen Instanz überschreibt sie, Entfernen stellt sie wieder her. |
 | `GET /api/settings` | ja | KI-Basis-URL, Modell, ob ein Schlüssel gesetzt ist |
 | `GET /api/instances/{id}/about` | ja | Erreichbarkeit, Version und Gesamtzahl der Instanz |
 | `GET /api/instances/{id}/fields` | ja | Felder des Metadatensets mit Anzahl der Vokabularwerte |

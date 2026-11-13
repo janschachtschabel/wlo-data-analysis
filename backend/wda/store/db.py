@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS run_results (
     key TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL,
     query TEXT, result TEXT, error TEXT,
     PRIMARY KEY (run_id, key));
+-- in der Oberfläche angelegte Instanzen; data ist das Instanz-Objekt samt Zugangsdaten
+CREATE TABLE IF NOT EXISTS instances (
+    id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL);
 """
 
 
@@ -111,6 +114,10 @@ class Database:
                         con.execute("ROLLBACK")
                 raise
             return result
+
+    def read_now(self, fn: Callable[[sqlite3.Connection], T]) -> T:
+        """Kurzes Lesen ohne Thread-Wechsel (beim Start und für Winziges)."""
+        return self._run(fn, False)
 
     async def read(self, fn: Callable[[sqlite3.Connection], T]) -> T:
         return await asyncio.to_thread(self._run, fn, False)

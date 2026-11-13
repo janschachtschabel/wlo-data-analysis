@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -24,17 +25,19 @@ DEFAULT_FACET_FIELDS: tuple[str, ...] = (
     "cclom:general_language",
 )
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_FIELD_NAME = re.compile(r"^[A-Za-z0-9_:.\-]{1,200}$")
+MAX_STORED = 30  # in der Oberfläche angelegte Instanzen
 
 
 class Instance(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$", max_length=64)
-    name: str = Field(min_length=1)
-    base_url: str
-    repository: str = "-home-"
-    metadataset: str = "mds_oeh"
-    query: str = "ngsearch"
-    search_url: str | None = None
-    username: str | None = None
+    name: str = Field(min_length=1, max_length=200)
+    base_url: str = Field(max_length=500)
+    repository: str = Field(default="-home-", min_length=1, max_length=100)
+    metadataset: str = Field(default="mds_oeh", min_length=1, max_length=100)
+    query: str = Field(default="ngsearch", min_length=1, max_length=100)
+    search_url: str | None = Field(default=None, max_length=500)
+    username: str | None = Field(default=None, max_length=200)
     password: SecretStr | None = None
     # Felder ohne Werteliste im Metadatenset, die trotzdem als Facette erlaubt sind.
     # Alles andere ohne Werteliste (Titel, URL, …) wäre eine Datensatzliste.
@@ -42,6 +45,20 @@ class Instance(BaseModel):
     # Einwertige Felder, bei denen ein Kriterium als Präfix trifft und nur einen Wert
     # annimmt (gemessen: der Lizenzschlüssel, "CC_BY" zählt alle "CC_BY…").
     prefix_fields: tuple[str, ...] = ("ccm:commonlicense_key",)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("darf nicht leer sein")
+        return value.strip()
+
+    @field_validator("facet_fields", "prefix_fields")
+    @classmethod
+    def _field_names(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(value) > 100 or not all(_FIELD_NAME.match(name) for name in value):
+            raise ValueError("erwartet höchstens 100 Feldnamen wie 'ccm:commonlicense_key'")
+        return value
 
     @field_validator("base_url", "search_url")
     @classmethod
@@ -92,10 +109,41 @@ PRESETS: tuple[Instance, ...] = (
 
 
 class InstanceRegistry:
+    """Feste Instanzen (mitgeliefert oder aus ``WDA_INSTANCES``) und solche, die in der
+    Oberfläche angelegt wurden. Eine angelegte mit der ID einer festen überschreibt sie."""
+
     def __init__(self, extra_json: str | None) -> None:
-        self._items: dict[str, Instance] = {i.id: i for i in PRESETS}
+        self._fixed: dict[str, Instance] = {i.id: i for i in PRESETS}
+        self._source: dict[str, str] = {i.id: "preset" for i in PRESETS}
         for inst in self._parse(extra_json):
-            self._items[inst.id] = inst
+            self._fixed[inst.id] = inst
+            self._source[inst.id] = "config"
+        self._stored: dict[str, Instance] = {}
+
+    def set_stored(self, items: list[Instance]) -> None:
+        self._stored = {inst.id: inst for inst in items}
+
+    def put(self, inst: Instance) -> None:
+        self._stored[inst.id] = inst
+
+    def remove(self, instance_id: str) -> None:
+        self._stored.pop(instance_id, None)
+
+    def is_stored(self, instance_id: str) -> bool:
+        return instance_id in self._stored
+
+    def is_fixed(self, instance_id: str) -> bool:
+        return instance_id in self._fixed
+
+    def stored_count(self) -> int:
+        return len(self._stored)
+
+    def describe(self, inst: Instance) -> dict[str, Any]:
+        """Für die Oberfläche: ohne Zugangsdaten, mit Herkunft."""
+        stored = inst.id in self._stored
+        return {**inst.public(),
+                "source": "stored" if stored else self._source[inst.id],
+                "overridden": stored and inst.id in self._fixed}
 
     @staticmethod
     def _parse(extra_json: str | None) -> list[Instance]:
@@ -125,7 +173,10 @@ class InstanceRegistry:
         return result
 
     def list(self) -> list[Instance]:
-        return list(self._items.values())
+        fixed = [self._stored.get(key, inst) for key, inst in self._fixed.items()]
+        return fixed + [inst for key, inst in self._stored.items() if key not in self._fixed]
 
     def get(self, instance_id: str) -> Instance:
-        return self._items[instance_id]
+        """Wirft ``KeyError`` bei unbekannter Instanz."""
+        found = self._stored.get(instance_id)
+        return found if found is not None else self._fixed[instance_id]
