@@ -10,6 +10,7 @@ dependencies = [
     "pydantic-settings>=2.4",
     "itsdangerous>=2.2",
     "httpx>=0.27",
+    "weasyprint>=66",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +24,7 @@ build-backend = "setuptools.build_meta"
 include = ["wda*"]
 
 [tool.setuptools.package-data]
-wda = ["static/*"]
+wda = ["static/*", "builtin/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

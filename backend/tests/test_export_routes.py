@@ -1,0 +1,62 @@
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+
+from wda.api.export import file_name
+from wda.main import create_app
+
+from .conftest import ADMIN_PASSWORD
+from .esdata import DataRepo
+from .test_definition_routes import QUERY, make
+
+
+@pytest.fixture
+def api(settings):
+    with TestClient(create_app(settings, transport=DataRepo().transport())) as client:
+        assert client.post("/api/auth/login",
+                           json={"password": ADMIN_PASSWORD}).status_code == 204
+        yield client
+
+
+def test_file_names_are_harmless():
+    assert file_name("Fächer & Größen: Ü/1", "2026-11-13T19:50:15Z", "pdf") == (
+        "Facher-Groen-U-1-2026-11-13.pdf")
+    assert file_name('../../etc/passwd"\r\nX: y', "kaputt", "csv") == "etc-passwd-X-y-lauf.csv"
+    assert file_name("日本語", "2026-01-01", "md") == "bericht-2026-01-01.md"
+    assert len(file_name("x" * 500, "2026-01-01", "html")) < 80
+
+
+def test_export_in_every_format(api):
+    m = make(api, "metric", 'Fächer "nach" Fach', {"query": QUERY, "view": {"type": "bar"}})
+    run = api.post(f"/api/definitions/{m['id']}/run").json()
+    expected = {"json": "application/json", "csv": "text/csv", "md": "text/markdown",
+                "html": "text/html", "pdf": "application/pdf"}
+    for fmt, media in expected.items():
+        r = api.get(f"/api/runs/{run['id']}/export", params={"format": fmt})
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"].startswith(media)
+        disposition = r.headers["content-disposition"]
+        day = run["started_at"][:10]
+        assert disposition.startswith(f'attachment; filename="Facher-nach-Fach-{day}.')
+        assert "sandbox" in r.headers["content-security-policy"]
+        assert r.headers["cache-control"] == "no-store"
+    assert api.get(f"/api/runs/{run['id']}/export").headers["content-type"].startswith(
+        "text/html")
+    data = json.loads(api.get(f"/api/runs/{run['id']}/export?format=json").content)
+    assert data["blocks"][0]["rows"][-1] == {
+        "key": "__total__", "label": "Gesamt", "kind": "total", "values": [400], "level": 0,
+        "percent": None}
+    assert api.get(f"/api/runs/{run['id']}/export?format=pdf").content.startswith(b"%PDF")
+    inline = api.get(f"/api/runs/{run['id']}/export", params={"download": "false"})
+    assert inline.headers["content-disposition"].startswith("inline")
+
+
+def test_export_errors_and_login(api):
+    assert api.get("/api/runs/gibt-es-nicht/export").status_code == 404
+    m = make(api, "metric", "M", {"query": QUERY})
+    run = api.post(f"/api/definitions/{m['id']}/run").json()
+    r = api.get(f"/api/runs/{run['id']}/export", params={"format": "docx"})
+    assert r.status_code == 422 and r.json()["kind"] == "invalid_request"
+    api.cookies.clear()
+    assert api.get(f"/api/runs/{run['id']}/export").status_code == 401

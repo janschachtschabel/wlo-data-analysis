@@ -10,14 +10,22 @@ anyio==4.16.0
     #   httpx
     #   starlette
     #   watchfiles
+brotli==1.2.1
+    # via fonttools
 certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
+cffi==2.1.1
+    # via weasyprint
 click==8.5.1
     # via uvicorn
+cssselect2==0.10.1
+    # via weasyprint
 fastapi==0.162.7
     # via wda (pyproject.toml)
+fonttools==4.68.0
+    # via weasyprint
 h11==0.16.0
     # via
     #   httpcore
@@ -36,6 +44,10 @@ itsdangerous==2.2.0
     # via wda (pyproject.toml)
 opentelemetry-api==1.45.2
     # via fastapi
+pillow==13.0.0
+    # via weasyprint
+pycparser==3.12
+    # via cffi
 pydantic==2.14.3
     # via
     #   wda (pyproject.toml)
@@ -45,6 +57,10 @@ pydantic-core==2.50.4
     # via pydantic
 pydantic-settings==2.16.3
     # via wda (pyproject.toml)
+pydyf==0.13.0
+    # via weasyprint
+pyphen==0.18.1
+    # via weasyprint
 python-dotenv==1.2.4
     # via
     #   pydantic-settings
@@ -53,6 +69,12 @@ pyyaml==6.0.3
     # via uvicorn
 starlette==1.10.0
     # via fastapi
+tinycss2==1.5.1
+    # via
+    #   cssselect2
+    #   weasyprint
+tinyhtml5==2.1.0
+    # via weasyprint
 typing-extensions==4.16.0
     # via
     #   anyio
@@ -74,5 +96,14 @@ uvloop==0.23.0
     # via uvicorn
 watchfiles==1.3.0
     # via uvicorn
+weasyprint==70.0
+    # via wda (pyproject.toml)
+webencodings==0.6.1
+    # via
+    #   cssselect2
+    #   tinycss2
+    #   tinyhtml5
 websockets==17.4
     # via uvicorn
+zopfli==0.4.3
+    # via fonttools

@@ -12,7 +12,17 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from . import __version__
-from .api import auth, definitions, edusharing, errors, health, instances, query, runs
+from .api import (
+    auth,
+    definitions,
+    edusharing,
+    errors,
+    export,
+    health,
+    instances,
+    query,
+    runs,
+)
 from .api import settings as settings_api
 from .config import Settings, load_settings
 from .deps import AdminGate, require_admin
@@ -71,6 +81,7 @@ def create_app(
     protected.include_router(query.router)
     protected.include_router(definitions.router)
     protected.include_router(runs.router)
+    protected.include_router(export.router)
     query.register_error_handlers(app)
     errors.register_error_handlers(app)
 

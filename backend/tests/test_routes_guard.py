@@ -33,6 +33,7 @@ PROTECTED = {
     "/api/definitions/import", "/api/definitions/{def_id}",
     "/api/definitions/{def_id}/duplicate", "/api/definitions/{def_id}/run",
     "/api/definitions/{def_id}/runs", "/api/runs", "/api/runs/{run_id}",
+    "/api/runs/{run_id}/export",
 }
 OUTSIDE_API = {"/{rest:path}"}  # nur die Oberfläche
 

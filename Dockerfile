@@ -9,6 +9,11 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt \
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 WDA_DATA_DIR=/data
 COPY --from=build /install /usr/local
+# Schrift und Satz für den PDF-Export
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 \
+       libharfbuzz-subset0 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin wda \
     && mkdir /data && chown wda:wda /data
 USER wda
