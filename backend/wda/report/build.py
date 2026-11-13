@@ -126,9 +126,126 @@ def _block_for(item: dict[str, Any]) -> Table | Failure:
     return table_from_result(item["key"], item["title"], item["result"], item.get("view"))
 
 
+def _source(label: str, result: dict[str, Any]) -> dict[str, Any]:
+    prov = result.get("provenance", {})
+    inst = prov.get("instance") or {}
+    return {"label": label, "kind": "query", "instance": inst.get("id"),
+            "base_url": inst.get("base_url"), "fetched_at": prov.get("fetched_at"),
+            "oldest_fetched_at": prov.get("oldest_fetched_at"), "queries": prov.get("queries"),
+            "filters": describe_filters(prov.get("filters") or [])}
+
+
+def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
+                 ) -> Table | Failure:
+    """Setzt die Abfragen der Blöcke und die Handeinträge zu einer gegliederten Tabelle
+    zusammen: je Zeilengruppe die Zwischensumme und darunter ihre Einzelzeilen."""
+    sid, series = section["id"], section["series"]
+    sections = section["rows"]["sections"]
+    width = len(series)
+    columns: list[Column] = []
+    header_groups: list[tuple[str, int]] = []
+    notes: list[dict[str, str]] = []
+    sources: list[dict[str, Any]] = []
+    # je Block: Zelle(zeilen_key) -> Werte der Spalten; Sonderschlüssel für Gruppe/Gesamt
+    per_block: list[dict[str, list[Any]]] = []
+    child_keys: dict[str, list[tuple[str, str]]] = {s["id"]: [] for s in sections}
+    failed = 0
+
+    def usable(item: dict[str, Any] | None, label: str) -> dict[str, Any] | None:
+        if item is None:
+            return None
+        if item.get("error") is not None or item.get("result") is None:
+            detail = (item.get("error") or {}).get("detail") or "Kein Ergebnis."
+            note = {"code": "block_failed", "text": f"{label}: {detail}"}
+            if note not in notes:
+                notes.append(note)
+            return None
+        if item["result"].get("schema_version") != SCHEMA_VERSION:
+            notes.append({"code": "unsupported_result",
+                          "text": f"{label}: Ergebnis in einem anderen Format; den Lauf "
+                                  "bitte neu ausführen."})
+            return None
+        return item["result"]
+
+    for block in section["blocks"]:
+        header_groups.append((block["label"], width))
+        columns += [Column(f"{block['id']}.{s['id']}", s["label"], s.get("formula") is not None)
+                    for s in series]
+        cells: dict[str, list[Any]] = {}
+        per_block.append(cells)
+        if block["source"] == "manual":
+            def pick(values: dict[str, Any] | None) -> list[Any]:
+                return [(values or {}).get(s["id"]) for s in series]
+            cells["__total__"] = pick(block.get("totals"))
+            for key, values in (block.get("sections") or {}).items():
+                cells["group:" + key] = pick(values)
+            for key, values in (block.get("cells") or {}).items():
+                cells["row:" + key] = pick(values)
+            sources.append({"label": block["label"], "kind": "manual",
+                            "as_of": block.get("as_of"), "note": block.get("note")})
+            continue
+        detail = usable(results.get(f"{sid}/{block['id']}/rows"), block["label"])
+        groups = usable(results.get(f"{sid}/{block['id']}/groups"), block["label"])
+        if detail is None and groups is None:
+            failed += 1
+            sources.append({"label": block["label"], "kind": "failed"})
+            continue
+        sources.append(_source(block["label"], detail or groups))  # type: ignore[arg-type]
+        for result in (detail, groups):
+            for note in (result or {}).get("provenance", {}).get("notes", []):
+                # Zeilen überschneiden sich in der Matrix immer; die Tabelle sagt es einmal.
+                skip = note.get("code") in ("values_ungrouped", "rows_overlap")
+                if note not in notes and not skip:
+                    notes.append(note)
+        if detail is not None:
+            cells["__total__"] = [c.get("total") for c in detail["columns"]]
+            for row in detail["rows"]:
+                cells[("__missing__" if row["kind"] == "missing" else "row:" + row["key"])
+                      ] = list(row["values"])
+            # welche Eingabe wurde zu welcher Zeile: Reihenfolge wie in der Definition
+            resolved = iter((detail.get("provenance", {}).get("rows") or {}).get("include")
+                            or [])
+            labels = {row["key"]: row["label"] for row in detail["rows"]}
+            for sec in sections:
+                for _ in sec.get("values", []):
+                    key = next(resolved, None)
+                    if key is not None and (key, labels.get(key, key)) not in child_keys[
+                            sec["id"]]:
+                        child_keys[sec["id"]].append((key, labels.get(key, key)))
+        if groups is not None:
+            cells.setdefault("__total__", [c.get("total") for c in groups["columns"]])
+            for row in groups["rows"]:
+                cells["group:" + row["key"]] = list(row["values"])
+
+    if failed == len(section["blocks"]):
+        return Failure(sid, section["title"], "; ".join(n["text"] for n in notes)
+                       or "Kein Block lieferte ein Ergebnis.", "block_failed")
+    def line(key: str) -> list[Any]:
+        return [v for cells in per_block for v in cells.get(key, [None] * width)]
+
+    rows: list[Row] = []
+    for sec in sections:
+        rows.append(Row(sec["id"], sec["label"], "group", line("group:" + sec["id"]), level=0))
+        for key, label in child_keys[sec["id"]]:
+            rows.append(Row(key, label, "value", line("row:" + key), level=1))
+    if section["rows"].get("missing", True):
+        rows.append(Row("__missing__", "ohne Wert", "missing", line("__missing__")))
+    rows.append(Row("__total__", "Gesamt", "total", line("__total__")))
+    notes.append({"code": "matrix_counting",
+                  "text": "Ein Material mit mehreren Werten zählt in jeder zutreffenden Zeile. "
+                          "Zwischensummen und die Gesamtzeile sind eigene Zählungen (jedes "
+                          "Material einmal), keine Summen der Zeilen."})
+    return Table(sid, section["title"], columns, rows, header_groups=header_groups,
+                 notes=notes, sources=sources)
+
+
 def build_report(run: dict[str, Any]) -> Report:
     results = {item["key"]: item for item in run.get("results", [])}
-    built: dict[str, Table | Failure] = {key: _block_for(item) for key, item in results.items()}
+    built: dict[str, Table | Failure] = {
+        key: _block_for(item) for key, item in results.items() if "/" not in key}
+    for section in (run.get("spec") or {}).get("sections", []):
+        if section.get("type") == "matrix":
+            built[section["id"]] = build_matrix(section, results)
     tables = {key: b for key, b in built.items() if isinstance(b, Table)}
     notes: list[dict[str, str]] = []
     blocks: list[Block] = []

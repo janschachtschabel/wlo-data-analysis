@@ -8,9 +8,9 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, model_validator
 
 from ..engine.formula import compile_formula
-from ..engine.spec import Label, QuerySpec
+from ..engine.spec import MAX_SERIES, Ident, Label, QuerySpec, Series
 from ..errors import QueryError, describe_validation
-from ..filters import FilterIn
+from ..filters import FilterIn, Name, ValueIn
 
 KINDS = ("filter", "metric", "dashboard", "template")
 KIND_LABELS = {"filter": "Filter", "metric": "Kennzahl", "dashboard": "Dashboard",
@@ -105,11 +105,83 @@ class DataSection(_Sourced):
     title: Label
 
 
+Cell = int | float | None
+
+
+class RowSection(_Model):
+    """Zeilengruppe einer Matrix. ``values`` erscheinen als eigene Zeilen, ``extra`` zählt nur
+    in der Zwischensumme mit."""
+
+    id: Ident
+    label: Label
+    values: list[ValueIn] = Field(default_factory=list, max_length=300)
+    extra: list[ValueIn] = Field(default_factory=list, max_length=1700)
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> RowSection:
+        if not self.values and not self.extra:
+            raise ValueError("eine Zeilengruppe braucht mindestens einen Wert")
+        return self
+
+
+class MatrixRows(_Model):
+    property: Name
+    sections: list[RowSection] = Field(min_length=1, max_length=40)
+    missing: bool = True
+    subtotal: Literal["distinct", "none"] = "distinct"
+
+    @model_validator(mode="after")
+    def _unique(self) -> MatrixRows:
+        _unique_ids([s.id for s in self.sections], "Zeilengruppen")
+        return self
+
+
+class QueryBlock(_Model):
+    id: Ident
+    label: Label
+    source: Literal["query"]
+    filters: list[FilterIn] = Field(default_factory=list, max_length=20)
+
+
+class ManualBlock(_Model):
+    """Von Hand eingetragene Zahlen, z. B. für eine Quelle ohne Schnittstelle."""
+
+    id: Ident
+    label: Label
+    source: Literal["manual"]
+    as_of: Annotated[StrictStr, Field(max_length=40)] | None = None
+    note: Annotated[StrictStr, Field(max_length=500)] | None = None
+    totals: dict[Ident, Cell] = Field(default_factory=dict, max_length=MAX_SERIES)
+    sections: dict[Ident, dict[Ident, Cell]] = Field(default_factory=dict, max_length=40)
+    cells: dict[Annotated[StrictStr, Field(max_length=2000)], dict[Ident, Cell]] = Field(
+        default_factory=dict, max_length=2000)
+
+
+class MatrixSection(_Model):
+    """Tabelle mit gegliederten Zeilen und einem Spaltenblock je Quelle."""
+
+    id: Ident
+    type: Literal["matrix"]
+    title: Label
+    instance: InstanceId | None = None
+    rows: MatrixRows
+    series: list[Series] = Field(min_length=1, max_length=MAX_SERIES)
+    blocks: list[Annotated[QueryBlock | ManualBlock, Field(discriminator="source")]] = Field(
+        min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def _unique(self) -> MatrixSection:
+        _unique_ids([b.id for b in self.blocks], "Blöcke")
+        _unique_ids([s.id for s in self.series], "Spalten")
+        return self
+
+
 class TemplateSpec(_Model):
     instance: InstanceId | None = None
     filter_ids: list[DefId] = Field(default_factory=list, max_length=10)
     title: Label
-    sections: list[Annotated[TextSection | DataSection, Field(discriminator="type")]] = Field(
+    sections: list[Annotated[TextSection | DataSection | MatrixSection,
+                             Field(discriminator="type")]] = Field(
         default_factory=list, max_length=60)
 
     @model_validator(mode="after")
@@ -149,14 +221,20 @@ def parse_spec(kind: str, data: Any) -> Spec:
         spec = model.model_validate(data)
     except ValidationError as exc:
         raise InvalidDefinition(describe_validation(exc.errors())) from None
+    all_series = []
     for query in queries_of(spec):
         query.refresh = False
-        for series in query.series:
-            if series.formula is not None:
-                try:
-                    compile_formula(series.formula)
-                except QueryError as exc:
-                    raise InvalidDefinition(f"Spalte '{series.label}': {exc}") from None
+        all_series += query.series
+    if isinstance(spec, TemplateSpec):
+        for section in spec.sections:
+            if isinstance(section, MatrixSection):
+                all_series += section.series
+    for series in all_series:
+        if series.formula is not None:
+            try:
+                compile_formula(series.formula)
+            except QueryError as exc:
+                raise InvalidDefinition(f"Spalte '{series.label}': {exc}") from None
     if len(dump_spec(spec).encode()) > MAX_SPEC_BYTES:
         raise InvalidDefinition("Die Definition ist zu groß (mehr als 256 KB).")
     return spec  # type: ignore[return-value]

@@ -113,6 +113,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
     mode = "facet"
     groups: list[_Row] = []
     include: list[dict[str, str]] | None = None
+    include_map: list[str] | None = None
     if rows_spec:
         await vocab.check_facet(rows_spec.property)
         if rows_spec.groups:
@@ -133,6 +134,9 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                     "Namen der Gruppe).")
         if rows_spec.include:
             include = await resolve_values(vocab, rows_spec.property, rows_spec.include)
+            # je Eingabe der aufgelöste Wert, damit Aufrufer ihre Liste zuordnen können
+            include_map = [(await resolve_values(vocab, rows_spec.property, [item]))[0]["value"]
+                           for item in rows_spec.include]
         if row_prop in base_props:
             # Die Facette ignoriert den Filter auf dem eigenen Feld.
             if groups or rows_spec.missing or rows_spec.other:
@@ -331,7 +335,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             "instance": {"id": inst.id, "base_url": inst.base_url, "repository": inst.repository,
                          "metadataset": inst.metadataset, "query": inst.query},
             "spec": spec.model_dump(mode="json", exclude={"refresh"}),
-            "rows": ({"property": row_prop, "mode": mode,
+            "rows": ({"property": row_prop, "mode": mode, "include": include_map,
                       "groups": [{"key": g.key, "label": g.label, "values": list(g.members)}
                                  for g in groups]} if rows_spec else None),
             "filters": base_described,

@@ -16,7 +16,7 @@ from ..edusharing.client import EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore
 from ..engine.engine import run_query
-from ..engine.spec import QuerySpec
+from ..engine.spec import Group, QuerySpec, Rows
 from ..errors import QueryError
 from ..filters import FilterIn
 from .db import Database
@@ -26,7 +26,9 @@ from .specs import (
     DataSection,
     FilterSpec,
     InvalidDefinition,
+    MatrixSection,
     MetricSpec,
+    QueryBlock,
     TemplateSpec,
     View,
     parse_spec,
@@ -115,9 +117,13 @@ class Runner:
             items = list(spec.tiles)
         else:
             assert isinstance(spec, TemplateSpec)
-            items = [s for s in spec.sections if isinstance(s, DataSection)]
+            items = [s for s in spec.sections if isinstance(s, DataSection | MatrixSection)]
         plan = []
         for item in items:
+            if isinstance(item, MatrixSection):
+                plan += Runner._plan_matrix(item, instance or spec.instance or item.instance,
+                                            list(spec.filter_ids), build)
+                continue
             query, filter_ids, view = item.query, list(spec.filter_ids), item.view
             if item.metric_id:
                 try:
@@ -131,6 +137,39 @@ class Runner:
                 filter_ids = metric.filter_ids + filter_ids
             assert query is not None
             plan.append(build(item.id, item.title, query, filter_ids, view or View()))
+        return plan
+
+    @staticmethod
+    def _plan_matrix(section: MatrixSection, instance: str | None, filter_ids: list[str],
+                     build: Callable[..., Planned]) -> list[Planned]:
+        """Je Abfrage-Block zwei Abfragen: die Einzelzeilen als Facette und die
+        Zwischensummen als Gruppen (jedes Material einmal je Gruppe)."""
+        plan = []
+        rows = section.rows
+        listed = [v for s in rows.sections for v in s.values]
+        for block in section.blocks:
+            if not isinstance(block, QueryBlock):
+                continue  # Handeinträge stehen in der Definition, es gibt nichts abzurufen
+            prefix = f"{section.id}/{block.id}"
+            title = f"{section.title} – {block.label}"
+            if instance is None:
+                plan.append(Planned(prefix + "/rows", title, View().model_dump(mode="json"),
+                                    error=_error("invalid_query",
+                                                 "Für diese Tabelle ist keine Instanz "
+                                                 "angegeben (am Template oder beim Lauf).")))
+                continue
+            detail = QuerySpec(
+                instance=instance, filters=block.filters, series=section.series,
+                rows=Rows(property=rows.property, include=listed or None, sort="given",
+                          missing=rows.missing) if listed or rows.missing else None)
+            plan.append(build(prefix + "/rows", title, detail, filter_ids, View()))
+            if rows.subtotal == "distinct":
+                groups = QuerySpec(
+                    instance=instance, filters=block.filters, series=section.series,
+                    rows=Rows(property=rows.property, sort="given", groups=[
+                        Group(id=s.id, label=s.label, values=s.values + s.extra)
+                        for s in rows.sections]))
+                plan.append(build(prefix + "/groups", title, groups, filter_ids, View()))
         return plan
 
     # ---- Ausführung ------------------------------------------------------------

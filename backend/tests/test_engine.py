@@ -542,7 +542,7 @@ def test_result_carries_what_a_stored_run_needs(repo, tmp_path):
                                 "repository": "-home-", "metadataset": "mds_oeh",
                                 "query": "ngsearch"}
     assert "refresh" not in prov["spec"] and prov["spec"]["rows"]["property"] == TAX
-    assert prov["rows"] == {"property": TAX, "mode": "distinct", "groups": [
+    assert prov["rows"] == {"property": TAX, "mode": "distinct", "include": None, "groups": [
         {"key": "g_mint_f_cher", "label": "MINT Fächer", "values": sorted([M, P])},
         {"key": "deutsch", "label": "Deutsch", "values": [D]}]}
     assert all(set(n) == {"code", "text"} for n in prov["notes"])
@@ -556,3 +556,10 @@ def test_result_carries_what_a_stored_run_needs(repo, tmp_path):
     with pytest.raises(QueryError, match="eindeutig"):
         query(repo, tmp_path, rows={"property": TAX, "groups": [
             {"label": "A b", "values": [M]}, {"label": "a-B", "values": [P]}]})
+
+
+def test_include_map_tells_which_input_became_which_row(repo, tmp_path):
+    r = query(repo, tmp_path, rows={"property": TAX, "sort": "given",
+                                    "include": ["Physik", M, "Mathematik", "Deutsch"]})
+    assert r["provenance"]["rows"]["include"] == [P, M, M, D]
+    assert [x["key"] for x in r["rows"]] == [P, M, D]
