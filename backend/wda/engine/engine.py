@@ -99,6 +99,8 @@ async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore
 
 async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore, run: _Run
                    ) -> dict[str, Any]:
+    if spec.fill is not None:
+        return await _execute_fill(spec, client, vocab, run)
     notes = Notes()
     prefix_fields = set(client.instance.prefix_fields)
     base_list, base_described = await resolve_filters(vocab, spec.filters)
@@ -343,6 +345,209 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                          "formula": c.formula.text if c.formula else None} for c in columns],
         },
     }
+
+
+def _rate(filled: Number | None, total: Number | None) -> float | None:
+    if filled is None or not total:
+        return None
+    return round(100 * filled / total, 1)
+
+
+def _field_id(prop: str) -> str:
+    """Spalten-ID aus dem Feldnamen: gleich über alle Läufe."""
+    return (re.sub(r"[^a-z0-9]+", "_", prop.casefold()).strip("_") or "feld")[:40]
+
+
+async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
+                        run: _Run) -> dict[str, Any]:
+    """Füllgrade. Je Feld wird gezählt, wie viele Dokumente dort mindestens einen Wert haben:
+    bei einem Präfix-Feld mit dem leeren Wert als Kriterium, sonst mit allen vorkommenden
+    Werten als ein Kriterium. „Ohne Wert“ ist die Differenz zur Gesamtzahl."""
+    fill = spec.fill
+    assert fill is not None
+    notes = Notes()
+    prefix_fields = set(client.instance.prefix_fields)
+    base_list, base_described = await resolve_filters(vocab, spec.filters)
+    base = tuple(base_list)
+    base_props = {c.property for c in base}
+    rows_spec = spec.rows
+    row_prop = rows_spec.property if rows_spec else None
+    if rows_spec:
+        if rows_spec.groups or rows_spec.other or rows_spec.missing:
+            raise QueryError(
+                "Füllgrade je Zeile gehen nicht zusammen mit Gruppen, „Übrige“ oder der "
+                "Zeile „ohne Wert“.")
+        await vocab.check_facet(rows_spec.property)
+        if row_prop in base_props:
+            raise QueryError(
+                f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern; für Füllgrade bitte "
+                "eines von beiden weglassen.")
+    # Erst alles prüfen, dann fragen: Kein Aufruf für ein Feld, das nicht freigegeben ist.
+    for item in fill.fields:
+        if item.property == row_prop:
+            raise QueryError(
+                f"'{item.property}' ist das Zeilenfeld; dort hat jede Zeile einen Wert.")
+        await vocab.check_facet(item.property)
+    ids = [_field_id(f.property) for f in fill.fields]
+    if len(set(ids)) != len(ids) or "count" in ids:
+        raise QueryError("Zwei der Felder unterscheiden sich nur in Sonderzeichen.")
+    check_prefix_shape(base, prefix_fields)
+
+    async def occurring(prop: str):
+        return (await run.call((), prop)).facets[prop]
+
+    await check_prefix_values(occurring, list(base), prefix_fields, notes)
+
+    async def criterion(prop: str) -> Criterion | None | bool:
+        """Das Kriterium „hat einen Wert“; ``True``: gilt ohnehin, ``False``: nie,
+        ``None``: nicht bestimmbar."""
+        if prop in base_props:
+            return True
+        if prop in prefix_fields:
+            return Criterion(prop, ("",))
+        facet = await occurring(prop)
+        if facet.truncated or len(facet.values) > MAX_VALUES:
+            return None
+        if not facet.values:
+            return False
+        return Criterion(prop, tuple(v.value for v in facet.values))
+
+    main_task = run.call(base, row_prop)
+    wanted = await asyncio.gather(*[criterion(f.property) for f in fill.fields])
+    main = await main_task
+    counted = await asyncio.gather(*[
+        run.call(base + (crit,), row_prop) for crit in wanted if isinstance(crit, Criterion)])
+    answers = iter(counted)
+    by_field: list[Aggregate | bool | None] = [
+        next(answers) if isinstance(crit, Criterion) else crit for crit in wanted]
+
+    labels = []
+    for item in fill.fields:
+        known = await vocab.field(item.property)
+        labels.append(item.label or (known.caption if known and known.caption else item.property))
+    unknown = [label for label, got in zip(labels, by_field, strict=True) if got is None]
+    if unknown:
+        notes.add("fill_unknown",
+                  "Nicht bestimmbar (zu viele verschiedene Werte oder gekürzte Werteliste): "
+                  f"{', '.join(unknown)}.")
+    filtered = [label for label, got in zip(labels, by_field, strict=True) if got is True]
+    if filtered:
+        notes.add("fill_filtered",
+                  f"{', '.join(filtered)}: steht in den Filtern, jedes gefilterte Material "
+                  "hat dort einen Wert.")
+    capped = False
+
+    def filled_of(got: Aggregate | bool | None, total: int | None,
+                  row: str | None, row_cut: bool) -> int | None:
+        nonlocal capped
+        if got is None or total is None:
+            return None
+        if got is True:
+            return total
+        if got is False:
+            return 0
+        if row is None:
+            value: int | None = got.total
+        else:
+            facet = got.facets[row_prop]
+            found = {v.value: v.count for v in facet.values}
+            value = found.get(row, None if facet.truncated or row_cut else 0)
+        if value is not None and value > total:
+            capped, value = True, total
+        return value
+
+    def shown(filled: int | None, total: int | None) -> Number | None:
+        if fill.show == "filled":
+            return filled
+        if fill.show == "missing":
+            return None if filled is None or total is None else total - filled
+        return _rate(filled, total)
+
+    provenance_rows = None
+    if rows_spec is None:
+        columns = [{"id": "filled", "label": "mit Wert", "derived": False, "total": None},
+                   {"id": "missing", "label": "ohne Wert", "derived": True, "total": None},
+                   {"id": "rate", "label": "Füllgrad %", "derived": True, "total": None}]
+        out_rows = []
+        for item, label, got in zip(fill.fields, labels, by_field, strict=True):
+            filled = filled_of(got, main.total, None, False)
+            out_rows.append({
+                "key": item.property, "label": label, "kind": "value",
+                "values": [filled, None if filled is None else main.total - filled,
+                           _rate(filled, main.total)]})
+        notes.add("fill_base", f"Grundgesamtheit: {main.total} Materialien.")
+        column_notes = [{"id": c["id"], "filters": [], "formula": None} for c in columns]
+    else:
+        facet = main.facets[rows_spec.property]
+        counts = {v.value: v.count for v in facet.values}
+        if facet.truncated:
+            notes.add("facet_truncated",
+                      f"Die Werteliste von '{row_prop}' wurde vom Repositorium gekürzt; "
+                      "seltene Werte fehlen.")
+        include = None
+        if rows_spec.include:
+            include = await resolve_values(vocab, rows_spec.property, rows_spec.include)
+            keys = [item["value"] for item in include]
+        else:
+            keys = list(counts)
+        rows = [_Row(k, await vocab.label(rows_spec.property, k), "value") for k in keys]
+        count_column = _Column("count", "Anzahl")
+        for row in rows:
+            count_column.cells[row.key] = counts.get(row.key, None if facet.truncated else 0)
+        rows = _sort_rows(rows, [count_column], rows_spec, include, False)
+        if rows_spec.top is not None and len(rows) > rows_spec.top:
+            notes.add("rows_top",
+                      f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
+            rows = rows[: rows_spec.top]
+        derived = fill.show != "filled"
+        suffix = {"rate": " %", "missing": ": ohne Wert", "filled": ""}[fill.show]
+        columns = [{"id": "count", "label": "Anzahl", "derived": False, "total": main.total}]
+        for item_id, label, got in zip(ids, labels, by_field, strict=True):
+            columns.append({"id": item_id, "label": label + suffix, "derived": derived,
+                            "total": shown(filled_of(got, main.total, None, False),
+                                           main.total)})
+        out_rows = []
+        for row in rows:
+            total = count_column.cells[row.key]
+            out_rows.append({
+                "key": row.key, "label": row.label, "kind": "value",
+                "values": [total, *[shown(filled_of(got, total, row.key, facet.truncated), total)
+                                    for got in by_field]]})
+        if len(rows) > 1:
+            notes.add("rows_overlap",
+                      f"Ein Dokument kann mehrere Werte von '{row_prop}' tragen und steht dann "
+                      "in mehreren Zeilen.")
+        provenance_rows = {"property": row_prop, "mode": "facet",
+                           "include": [i["value"] for i in include] if include else None,
+                           "groups": []}
+        column_notes = [{"id": c["id"], "filters": [], "formula": None} for c in columns]
+    notes.add("fill_derived",
+              "„Ohne Wert“ und Füllgrad sind berechnet: Gesamtzahl minus Materialien mit "
+              "mindestens einem Wert im Feld.")
+    if capped:
+        notes.add("fill_capped",
+                  "Das Repositorium zählte für ein Feld mehr Materialien mit Wert als "
+                  "insgesamt; der Wert ist auf die Gesamtzahl begrenzt.")
+    fetched = [r.fetched_at for r in run.results]
+    inst = client.instance
+    result: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION, "instance": spec.instance,
+        "columns": columns, "rows": out_rows,
+        "provenance": {
+            "fetched_at": max(fetched) if fetched else None,
+            "oldest_fetched_at": min(fetched) if fetched else None,
+            "cached": bool(run.results) and all(r.cached for r in run.results),
+            "queries": len(run.results), "notes": list(notes),
+            "instance": {"id": inst.id, "base_url": inst.base_url, "repository": inst.repository,
+                         "metadataset": inst.metadataset, "query": inst.query},
+            "spec": spec.model_dump(mode="json", exclude={"refresh"}),
+            "rows": provenance_rows, "filters": base_described, "columns": column_notes,
+        },
+    }
+    if rows_spec is None:
+        result["total_row"] = False
+        result["base_total"] = main.total
+    return result
 
 
 def _slug(label: str) -> str:

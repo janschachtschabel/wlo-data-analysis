@@ -1,0 +1,184 @@
+"""Füllgrade: wie oft ein Feld gefüllt ist, insgesamt und je Zeile, gegen rohe Zählung."""
+
+import pytest
+from pydantic import ValidationError
+
+from wda.edusharing.errors import EduSharingError
+from wda.engine.formula import QueryError
+from wda.engine.spec import QuerySpec
+
+from .esdata import DataRepo
+from .test_engine import HS, LIC, LVL, SRC, TAX, M, query
+
+
+@pytest.fixture
+def repo():
+    return DataRepo()
+
+
+def fields(*props):
+    return {"fields": [{"property": p} for p in props]}
+
+
+def has(doc, prop):
+    return bool(doc.get(prop))
+
+
+def test_fill_per_field_matches_brute_count(repo, tmp_path):
+    result = query(repo, tmp_path, fill=fields(TAX, LVL, LIC, SRC))
+    total = len(repo.docs)
+    assert result["total_row"] is False and result["base_total"] == total
+    assert [c["id"] for c in result["columns"]] == ["filled", "missing", "rate"]
+    assert [c["derived"] for c in result["columns"]] == [False, True, True]
+    assert [r["key"] for r in result["rows"]] == [TAX, LVL, LIC, SRC]
+    assert [r["label"] for r in result["rows"]][:3] == ["Fach", "Bildungsstufe", "Lizenz"]
+    for row in result["rows"]:
+        filled = sum(1 for d in repo.docs if has(d, row["key"]))
+        assert row["values"] == [filled, total - filled, round(100 * filled / total, 1)]
+        assert row["kind"] == "value"
+    # die Lizenz ist nicht überall gesetzt, sonst prüft der Test nichts
+    lic = next(r for r in result["rows"] if r["key"] == LIC)
+    assert 0 < lic["values"][1] < total
+    codes = [n["code"] for n in result["provenance"]["notes"]]
+    assert "fill_base" in codes and "fill_derived" in codes
+    # je Feld höchstens zwei Aufrufe und einer für die Grundgesamtheit
+    assert result["provenance"]["queries"] <= 1 + 2 * 4
+
+
+def test_fill_respects_base_filters_and_own_label(repo, tmp_path):
+    result = query(repo, tmp_path, filters=[{"property": LVL, "values": [HS]}],
+                   fill={"fields": [{"property": LIC, "label": "Lizenzangabe"},
+                                    {"property": TAX}, {"property": LVL}]})
+    docs = [d for d in repo.docs if HS in d.get(LVL, [])]
+    rows = {r["key"]: r for r in result["rows"]}
+    assert rows[LIC]["label"] == "Lizenzangabe"
+    for prop in (LIC, TAX):
+        filled = sum(1 for d in docs if has(d, prop))
+        assert rows[prop]["values"][:2] == [filled, len(docs) - filled]
+    # das gefilterte Feld selbst: jedes gefilterte Material hat dort einen Wert
+    assert rows[LVL]["values"] == [len(docs), 0, 100.0]
+    assert "fill_filtered" in [n["code"] for n in result["provenance"]["notes"]]
+
+
+def test_fill_per_row(repo, tmp_path):
+    for show in ("rate", "missing", "filled"):
+        result = query(repo, tmp_path, rows={"property": SRC},
+                       fill={**fields(TAX, LIC), "show": show})
+        assert "total_row" not in result or result["total_row"] is True
+        assert [c["id"] for c in result["columns"]] == [
+            "count", "ccm_taxonid", "ccm_commonlicense_key"]
+        assert [c["derived"] for c in result["columns"]] == [
+            False, show != "filled", show != "filled"]
+        assert len(result["rows"]) > 1
+        for row in result["rows"]:
+            docs = [d for d in repo.docs if row["key"] in d.get(SRC, [])]
+            expected = [len(docs)]
+            for prop in (TAX, LIC):
+                filled = sum(1 for d in docs if has(d, prop))
+                expected.append({"rate": round(100 * filled / len(docs), 1),
+                                 "missing": len(docs) - filled, "filled": filled}[show])
+            assert row["values"] == expected, (show, row["label"])
+        # Gesamtzeile: über alle Materialien
+        total = len(repo.docs)
+        filled = sum(1 for d in repo.docs if has(d, LIC))
+        assert result["columns"][0]["total"] == total
+        assert result["columns"][2]["total"] == {
+            "rate": round(100 * filled / total, 1), "missing": total - filled,
+            "filled": filled}[show]
+
+
+def test_fill_per_row_with_top_and_sort(repo, tmp_path):
+    result = query(repo, tmp_path, rows={"property": SRC, "top": 2}, fill=fields(LIC))
+    assert len(result["rows"]) == 2
+    counts = [r["values"][0] for r in result["rows"]]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_field_without_any_value_and_empty_base(repo, tmp_path):
+    for doc in repo.docs:
+        doc.pop(SRC, None)
+    result = query(repo, tmp_path, fill=fields(SRC, TAX))
+    assert result["rows"][0]["values"] == [0, len(repo.docs), 0.0]
+    empty = query(repo, tmp_path, filters=[{"property": LVL, "values": [
+        {"value": "gibtesnichtxyz", "literal": True}]}], fill=fields(TAX))
+    assert empty["base_total"] == 0
+    assert empty["rows"][0]["values"] == [0, 0, None]
+
+
+def test_unknown_when_too_many_values(repo, tmp_path, monkeypatch):
+    monkeypatch.setattr("wda.engine.engine.MAX_VALUES", 2)
+    result = query(repo, tmp_path, fill=fields(TAX, LIC))
+    rows = {r["key"]: r for r in result["rows"]}
+    assert rows[TAX]["values"] == [None, None, None]
+    assert rows[LIC]["values"][0] is not None  # einwertig: braucht keine Werteliste
+    note = next(n for n in result["provenance"]["notes"] if n["code"] == "fill_unknown")
+    assert "Fach" in note["text"]
+
+
+def test_rejections(repo, tmp_path):
+    with pytest.raises(EduSharingError, match="nicht als Facette freigegeben"):
+        query(repo, tmp_path, fill=fields("cclom:title"))
+    with pytest.raises(QueryError, match="Zeilenfeld"):
+        query(repo, tmp_path, rows={"property": TAX}, fill=fields(TAX))
+    with pytest.raises(QueryError, match="Gruppen"):
+        query(repo, tmp_path, fill=fields(LIC),
+              rows={"property": TAX, "groups": [{"label": "G", "values": [M]}]})
+    for bad in ({"fields": []}, {"fields": [{"property": TAX}, {"property": TAX}]},
+                {"fields": [{"property": TAX}], "show": "alles"},
+                {"fields": [{"property": f"f{i}"} for i in range(31)]}):
+        with pytest.raises(ValidationError):
+            QuerySpec(instance="t", fill=bad)
+    with pytest.raises(ValidationError):
+        QuerySpec(instance="t", fill=fields(TAX), series=[{"id": "a", "label": "A"}])
+    with pytest.raises(ValidationError):
+        QuerySpec(instance="t", fill=fields(TAX), columns={"property": LVL})
+    with pytest.raises(ValidationError):
+        QuerySpec(instance="t", fill=fields(TAX), percent="column")
+
+
+def test_no_facet_on_unreleased_field_is_ever_sent(repo, tmp_path):
+    with pytest.raises(EduSharingError):
+        query(repo, tmp_path, fill=fields(TAX, "cclom:title"))
+    asked = {f["property"] for body in repo.searches for f in body.get("facets", [])}
+    assert "cclom:title" not in asked
+
+
+def test_fill_metric_through_run_report_history_and_export(settings):
+    from fastapi.testclient import TestClient
+
+    from wda.main import create_app
+
+    from .conftest import ADMIN_PASSWORD
+    from .test_definition_routes import make
+
+    data = DataRepo()
+    with TestClient(create_app(settings, transport=data.transport())) as api:
+        api.post("/api/auth/login", json={"password": ADMIN_PASSWORD})
+        direct = api.post("/api/query", json={"instance": "wlo-prod", "fill": fields(TAX, LIC)})
+        assert direct.status_code == 200, direct.text
+        m = make(api, "metric", "Füllgrade", {
+            "query": {"instance": "wlo-prod", "fill": fields(TAX, LIC)},
+            "view": {"type": "stacked_bar"}})
+        first = api.post(f"/api/definitions/{m['id']}/run", json={}).json()
+        assert first["status"] == "ok"
+        for doc in data.docs[:50]:
+            doc.pop(LIC, None)
+        second = api.post(f"/api/definitions/{m['id']}/run", json={"refresh": True}).json()
+
+        report = api.get(f"/api/runs/{second['id']}/report?compare=previous").json()
+        table = report["blocks"][0]
+        assert [r["kind"] for r in table["rows"]] == ["value", "value"]  # keine Gesamtzeile
+        lic = next(r for r in table["rows"] if r["key"] == LIC)
+        assert lic["previous"][0] > lic["values"][0]
+        assert any(n["code"] == "fill_base" for n in table["notes"])
+
+        keys = api.get(f"/api/definitions/{m['id']}/history/keys").json()["blocks"][0]
+        assert [r["key"] for r in keys["rows"]] == ["value:" + TAX, "value:" + LIC]
+        hist = api.get(f"/api/definitions/{m['id']}/history").json()
+        assert [s["label"] for s in hist["series"]] == ["mit Wert", "ohne Wert", "Füllgrad %"]
+        assert len(hist["points"]) == 2 and hist["points"][0]["values"][0] is not None
+
+        csv = api.get(f"/api/runs/{second['id']}/export?format=csv").text
+        assert "Füllgrad %" in csv and "Gesamt;" not in csv
+        assert api.get(f"/api/runs/{second['id']}/export?format=html").status_code == 200
+        assert api.get(f"/api/runs/{second['id']}/export?format=md").status_code == 200

@@ -65,6 +65,29 @@ class Columns(_Model):
     top: int = Field(default=12, ge=1, le=MAX_SERIES)
 
 
+MAX_FILL_FIELDS = 30
+
+
+class FillField(_Model):
+    property: Name
+    label: Label | None = None
+
+
+class Fill(_Model):
+    """Füllgrade: je Feld die Zahl der Dokumente mit mindestens einem Wert. Ohne ``rows``
+    eine Zeile je Feld; mit ``rows`` je Feld eine Spalte, ``show`` sagt, was in ihr steht."""
+
+    fields: list[FillField] = Field(min_length=1, max_length=MAX_FILL_FIELDS)
+    show: Literal["rate", "missing", "filled"] = "rate"
+
+    @model_validator(mode="after")
+    def _unique(self) -> Fill:
+        props = [f.property for f in self.fields]
+        if len(props) != len(set(props)):
+            raise ValueError("jedes Feld nur einmal")
+        return self
+
+
 class QuerySpec(_Model):
     instance: Annotated[StrictStr, Field(min_length=1, max_length=64)]
     content_type: StrictStr = "FILES"
@@ -72,6 +95,7 @@ class QuerySpec(_Model):
     rows: Rows | None = None
     series: list[Series] = Field(default_factory=list, max_length=MAX_SERIES)
     columns: Columns | None = None
+    fill: Fill | None = None
     percent: Literal["none", "column", "row"] = "none"
     refresh: bool = False
 
@@ -79,6 +103,9 @@ class QuerySpec(_Model):
     def _consistent(self) -> QuerySpec:
         if self.series and self.columns:
             raise ValueError("series und columns schließen sich aus")
+        if self.fill and (self.series or self.columns or self.percent != "none"):
+            raise ValueError("fill (Füllgrade) geht nicht zusammen mit series, columns "
+                             "oder percent")
         ids = [s.id for s in self.series]
         if len(ids) != len(set(ids)):
             raise ValueError("Spalten-IDs müssen eindeutig sein")

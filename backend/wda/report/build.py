@@ -62,7 +62,9 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
     rows = [Row(r["key"], r["label"], r["kind"], list(r["values"]),
                 percent=r.get("percent")) for r in result["rows"]]
     # Gesamtzeile: die Zählung über alle Materialien, keine Summe der Zeilen
-    rows.append(Row("__total__", "Gesamt", "total", [c.get("total") for c in result["columns"]]))
+    if result.get("total_row", True):
+        rows.append(
+            Row("__total__", "Gesamt", "total", [c.get("total") for c in result["columns"]]))
     prov = result.get("provenance", {})
     inst = prov.get("instance") or {}
     return _checked(Table(
