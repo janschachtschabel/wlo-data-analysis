@@ -79,7 +79,7 @@ def test_resolve(tmp_path):
         r = await store.resolve("license", "OPEN")
         assert r.how == "literal"
         r = await store.resolve("ccm:commonlicense_key", "")
-        assert (r.value, r.how) == ("", "literal")
+        assert (r.value, r.label, r.how) == ("", "", "literal")
 
     run(scenario())
 
@@ -116,7 +116,7 @@ def test_label_lookup(tmp_path):
     async def scenario():
         assert await store.label("ccm:taxonid", DISC + "460") == "Physik"
         assert await store.label("ccm:educationalcontext", "political") == "political"
-        assert await store.label("ccm:educationalcontext", "") == ""
+        assert await store.label("ccm:educationalcontext", "") == "(leer)"
         assert await store.label("gibt:es:nicht", "x") == "x"
         assert await store.field("gibt:es:nicht") is None
 

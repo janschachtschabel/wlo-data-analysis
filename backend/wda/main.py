@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from . import __version__
-from .api import auth, edusharing, health, instances
+from .api import auth, edusharing, health, instances, query
 from .api import settings as settings_api
 from .config import Settings, load_settings
 from .deps import require_admin
@@ -65,6 +65,8 @@ def create_app(
     protected.include_router(settings_api.router)
     protected.include_router(edusharing.router)
     edusharing.register_error_handlers(app)
+    protected.include_router(query.router)
+    query.register_error_handlers(app)
 
     app.include_router(public)
     app.include_router(protected)

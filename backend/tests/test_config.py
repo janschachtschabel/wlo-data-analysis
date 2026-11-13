@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from wda.config import ConfigError, load_settings
@@ -11,7 +13,7 @@ def test_defaults(monkeypatch):
     assert s.admin_password.get_secret_value() == "geheim"
     assert s.llm_base_url == "https://api.openai.com/v1"
     assert s.llm_model == "gpt-6-luna"
-    assert str(s.data_dir) == "/data"
+    assert s.data_dir == Path("/data")
     assert s.cookie_secure is True
     assert s.session_max_age == 43200
 

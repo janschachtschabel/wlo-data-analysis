@@ -8,7 +8,7 @@ gespeicherten Templates Dashboards und Zahlen-Dokumente.
 Datensätze aus einem Cache, und alles außer Anmeldung und Health-Check verlangt die
 Admin-Anmeldung.
 
-Stand: Paket 2 von 10 (Grundgerüst und edu-sharing-Client). Design und Paketfolge stehen in
+Stand: Paket 3 von 10 (Grundgerüst, edu-sharing-Client, Abfrage-Engine). Design und Paketfolge stehen in
 [`docs/superpowers/specs/`](docs/superpowers/specs/), die Umsetzungspläne in
 [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
@@ -71,6 +71,7 @@ Datensätze und wird abgelehnt.
 | `GET /api/instances/{id}/fields` | ja | Felder des Metadatensets mit Anzahl der Vokabularwerte |
 | `GET /api/instances/{id}/vocab?property=…&q=…` | ja | Werte eines Feldes (URI, Label, Oberbegriff), durchsuchbar |
 | `POST /api/instances/{id}/aggregate` | ja | Gesamtzahl und Facetten für Filter; Werte als Label oder URI |
+| `POST /api/query` | ja | Tabelle aus einer Abfrage-Beschreibung: Zeilen, Spalten, Gruppen, Formeln, Anteile |
 
 Beispiel für eine Aggregat-Abfrage (offene Lizenzen in der Sekundarstufe I nach Fach):
 
@@ -87,6 +88,34 @@ mit Vorschlägen ab. Ein Wert, den das Vokabular nicht kennt (etwa ein Facettenw
 URI), lässt sich als `{"value": "…", "literal": true}` unverändert übergeben. Die Abfragen fordern beim Repositorium nie Datensätze an
 (`maxItems=0`). Das gemessene Verhalten der edu-sharing-Suche steht in
 [`docs/edu-sharing-api-erkenntnisse.md`](docs/edu-sharing-api-erkenntnisse.md).
+
+## Abfragen
+
+`POST /api/query` ist das Format, in dem Kennzahlen, Dashboards und Templates Zahlen
+anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile „ohne Wert".
+
+```json
+{"instance": "wlo-prod",
+ "filters": [{"property": "ccm:educationalcontext", "values": ["Hochschule"]}],
+ "rows": {"property": "ccm:taxonid", "missing": true, "top": 20},
+ "series": [
+   {"id": "gesamt", "label": "Gesamt"},
+   {"id": "oer", "label": "OER",
+    "filters": [{"property": "license", "values": ["OPEN", "CC_BY_OPEN"]}]},
+   {"id": "anteil", "label": "OER-Anteil in %", "formula": "round(oer / gesamt * 100, 1)"}]}
+```
+
+- `rows`: Aufschlüsselung nach einem Feld, wahlweise mit `include` (bestimmte Werte),
+  `groups` (benannte Wertegruppen), `top`/`other`, `sort` und `missing` („ohne Wert").
+- `series`: Spalten mit eigenen Zusatzfiltern oder einer `formula` über andere Spalten
+  (`+ - * /`, Klammern, `round`, `max`, `min`). Alternativ erzeugt `columns` eine Spalte je
+  Wert eines Feldes.
+- `percent`: Anteile je Spalte oder je Zeile.
+- Jede Spalte nennt ihre echte Gesamtzahl (jedes Dokument einmal). Bei mehrwertigen
+  Feldern ist das weniger als die Summe der Zeilen.
+- `provenance` nennt Abrufzeitpunkt, Zahl der Einzelabfragen, die aufgelösten Filter und
+  in `notes` jede Besonderheit der Zählung (gekürzte Wertelisten, Summen-Gruppen,
+  berechnete Spalten).
 
 ## Entwicklung
 

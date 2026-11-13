@@ -5,20 +5,16 @@ Keine dieser Routen kann Datensätze liefern; der Client fordert nur Zählungen 
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
-from ..edusharing.client import (
-    MAX_FACET_LIMIT,
-    MAX_VALUE_LENGTH,
-    Criterion,
-    EduSharingClient,
-)
+from ..edusharing.client import MAX_FACET_LIMIT, EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore, _norm
+from ..filters import FilterIn, Name, resolve_filters
 
 router = APIRouter(prefix="/instances/{instance_id}")
 
@@ -46,24 +42,6 @@ def _services(request: Request, instance_id: str) -> tuple[EduSharingClient, Voc
         return services.client(instance_id), services.vocab(instance_id)
     except KeyError:
         raise HTTPException(404, "Instanz nicht gefunden") from None
-
-
-Name = Annotated[StrictStr, Field(min_length=1, max_length=200, pattern=r"^\S+$")]
-Value = Annotated[StrictStr, Field(max_length=MAX_VALUE_LENGTH)]
-
-
-class LiteralValue(BaseModel):
-    """Wert, der unverändert als Filter gilt, ohne Abgleich mit dem Vokabular."""
-
-    model_config = ConfigDict(extra="forbid")
-    value: Value
-    literal: Literal[True]
-
-
-class FilterIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    property: Name
-    values: list[Value | LiteralValue] = Field(min_length=1, max_length=2000)
 
 
 class AggregateIn(BaseModel):
@@ -127,26 +105,7 @@ async def vocabulary(
 @router.post("/aggregate")
 async def aggregate(instance_id: str, body: AggregateIn, request: Request) -> dict[str, Any]:
     client, vocab = _services(request, instance_id)
-    seen: set[str] = set()
-    criteria: list[Criterion] = []
-    resolved_filters: list[dict[str, Any]] = []
-    for flt in body.filters:
-        if flt.property in seen:
-            raise EduSharingError(
-                "invalid_query",
-                f"Das Feld '{flt.property}' kommt in mehreren Filtern vor. "
-                "Mehrere Werte gehören in einen Filter.")
-        seen.add(flt.property)
-        resolved: dict[str, dict[str, str]] = {}
-        for item in flt.values:
-            if isinstance(item, LiteralValue):
-                res = await vocab.resolve(flt.property, item.value, literal=True)
-            else:
-                res = await vocab.resolve(flt.property, item)
-            resolved.setdefault(res.value, {"value": res.value, "label": res.label,
-                                            "how": res.how})
-        criteria.append(Criterion(flt.property, tuple(resolved)))
-        resolved_filters.append({"property": flt.property, "values": list(resolved.values())})
+    criteria, resolved_filters = await resolve_filters(vocab, body.filters)
 
     facet_props = list(dict.fromkeys(body.facets))
     for prop in facet_props:

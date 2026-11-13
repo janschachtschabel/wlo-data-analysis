@@ -1,3 +1,4 @@
+import os
 import stat
 
 from fastapi.testclient import TestClient
@@ -142,7 +143,8 @@ def test_session_secret_persisted(tmp_path):
     first = resolve_session_secret(s)
     assert first == resolve_session_secret(s)
     secret_file = tmp_path / "session.secret"
-    assert stat.S_IMODE(secret_file.stat().st_mode) == 0o600
+    if os.name == "posix":  # Windows kennt keine POSIX-Dateirechte
+        assert stat.S_IMODE(secret_file.stat().st_mode) == 0o600
     assert len(first) >= 32
 
 

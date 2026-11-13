@@ -18,6 +18,7 @@ from .errors import EduSharingError
 
 log = logging.getLogger("wda.vocab")
 _FORMAT = 1
+EMPTY_LABEL = "(leer)"  # Anzeige für den leeren Wert, der in Facetten vorkommt
 MAX_SUGGESTIONS = 8
 FAILURE_TTL = 30.0
 MAX_FUZZY_LABELS = 3000
@@ -161,7 +162,9 @@ class VocabStore:
     async def label(self, property: str, value: str) -> str:
         await self.fields()
         known = self._by_id.get(property, {}).get(value)
-        return known.caption if known else value
+        if known:
+            return known.caption
+        return value if value.strip() else EMPTY_LABEL
 
     async def check_facet(self, property: str) -> None:
         """Erlaubt Facetten nur auf Feldern mit Werteliste oder aus der Freigabeliste der
