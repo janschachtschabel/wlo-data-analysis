@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS refs (
     PRIMARY KEY (source, target));
 CREATE INDEX IF NOT EXISTS refs_target ON refs(target);
 CREATE TABLE IF NOT EXISTS runs (
-    id TEXT PRIMARY KEY,
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,  -- Reihenfolge; wird nie wiederverwendet
+    id TEXT NOT NULL UNIQUE,
     definition_id TEXT REFERENCES definitions(id) ON DELETE SET NULL,
     kind TEXT NOT NULL, name TEXT NOT NULL, definition_version INTEGER NOT NULL,
     spec TEXT NOT NULL, status TEXT NOT NULL,
@@ -53,29 +54,42 @@ class Database:
         self.path = Path(path)
         self._lock = threading.Lock()  # eine Verbindung, ein Zugriff zur Zeit
         self._con: sqlite3.Connection | None = None
+        con: sqlite3.Connection | None = None
+        newer: str | None = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            if not self.path.exists():
+                # Vorab mit engen Rechten anlegen; SQLite übernimmt sie für -wal und -shm.
+                os.close(os.open(self.path, os.O_CREAT | os.O_WRONLY, 0o600))
             con = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
             con.row_factory = sqlite3.Row
-            con.execute("PRAGMA journal_mode=WAL")
-            con.execute("PRAGMA foreign_keys=ON")
-            con.execute("PRAGMA busy_timeout=5000")
-            con.execute("BEGIN IMMEDIATE")
-            con.executescript(_SCHEMA)  # beendet die Transaktion selbst
-            row = con.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+            # Erst die Version lesen: Eine fremde Datenbank wird nicht angefasst.
+            has_meta = con.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").fetchone()
+            row = (con.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+                   if has_meta else None)
+            if row is not None and not (str(row["value"]).isdigit()
+                                        and int(row["value"]) <= SCHEMA_VERSION):
+                newer = str(row["value"])[:20]
+            else:
+                con.execute("PRAGMA journal_mode=WAL")
+                con.execute("PRAGMA foreign_keys=ON")
+                con.execute("PRAGMA busy_timeout=5000")
+                con.executescript(_SCHEMA)
+                if row is None:
+                    con.execute("INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
+                                (str(SCHEMA_VERSION),))
         except (sqlite3.Error, OSError) as exc:
+            if con is not None:
+                con.close()
             raise ConfigError(
                 f"Die Datenbank {self.path} lässt sich nicht öffnen ({type(exc).__name__}). "
                 "Datei und Rechte im Datenverzeichnis prüfen.") from None
-        found = int(row["value"]) if row and str(row["value"]).isdigit() else None
-        if row is None:
-            con.execute("INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
-                        (str(SCHEMA_VERSION),))
-        elif found is None or found > SCHEMA_VERSION:
+        if newer is not None:
             con.close()
             raise ConfigError(
                 f"Die Datenbank {self.path} stammt von einer neueren Version dieser Anwendung "
-                f"(Schema {row['value']}, bekannt bis {SCHEMA_VERSION}). Sie wird nicht "
+                f"(Schema {newer}, bekannt bis {SCHEMA_VERSION}). Sie wird nicht "
                 "verändert; bitte die Anwendung aktualisieren.")
         with contextlib.suppress(OSError):
             os.chmod(self.path, 0o600)
@@ -89,10 +103,13 @@ class Database:
             con.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             try:
                 result = fn(con)
+                con.execute("COMMIT")
             except BaseException:
-                con.execute("ROLLBACK")
+                # Auch ein gescheitertes COMMIT darf die Verbindung nicht blockieren.
+                if con.in_transaction:
+                    with contextlib.suppress(sqlite3.Error):
+                        con.execute("ROLLBACK")
                 raise
-            con.execute("COMMIT")
             return result
 
     async def read(self, fn: Callable[[sqlite3.Connection], T]) -> T:

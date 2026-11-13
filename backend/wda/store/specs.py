@@ -235,7 +235,13 @@ def parse_spec(kind: str, data: Any) -> Spec:
                 compile_formula(series.formula)
             except QueryError as exc:
                 raise InvalidDefinition(f"Spalte '{series.label}': {exc}") from None
-    if len(dump_spec(spec).encode()) > MAX_SPEC_BYTES:
+    try:
+        size = len(dump_spec(spec).encode("utf-8"))
+    except UnicodeEncodeError:
+        raise InvalidDefinition("Die Definition enthält ungültige Zeichen.") from None
+    if "\\u0000" in dump_spec(spec):
+        raise InvalidDefinition("Die Definition enthält ungültige Zeichen.")
+    if size > MAX_SPEC_BYTES:
         raise InvalidDefinition("Die Definition ist zu groß (mehr als 256 KB).")
     return spec  # type: ignore[return-value]
 

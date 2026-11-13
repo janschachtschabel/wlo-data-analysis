@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -33,6 +34,8 @@ from .specs import (
     View,
     parse_spec,
 )
+
+log = logging.getLogger(__name__)
 
 
 class ServicesLike(Protocol):
@@ -200,10 +203,21 @@ class Runner:
                                   suggestions=exc.suggestions)
         except EduSharingError as exc:
             out["error"] = _error(exc.kind, exc.message, upstream_status=exc.status)
+        except Exception:
+            # Der Lauf wird in jedem Fall gespeichert; eine Kachel reißt die anderen nicht mit.
+            log.exception("Unerwarteter Fehler in Kachel %s", planned.key)
+            out["error"] = _error("internal", "Unerwarteter Fehler bei dieser Abfrage.")
         return out
 
     async def run(self, def_id: str, *, refresh: bool = False, instance: str | None = None,
                   save: bool = True) -> dict[str, Any]:
+        if instance is not None:
+            try:
+                self._services.client(instance)
+            except KeyError:
+                raise InvalidDefinition(
+                    f"Die Instanz '{instance[:64]}' gibt es nicht.") from None
+
         def prepare(con: sqlite3.Connection) -> tuple[Definition, list[Planned]]:
             definition = fetch(con, def_id)
             return definition, self._plan(con, definition, instance)
@@ -245,8 +259,8 @@ class Runner:
              for pos, r in enumerate(run["results"])])
         if run["definition_id"] is not None:
             con.execute(
-                "DELETE FROM runs WHERE definition_id=? AND rowid NOT IN ("
-                " SELECT rowid FROM runs WHERE definition_id=? ORDER BY rowid DESC LIMIT ?)",
+                "DELETE FROM runs WHERE definition_id=? AND seq NOT IN ("
+                " SELECT seq FROM runs WHERE definition_id=? ORDER BY seq DESC LIMIT ?)",
                 (run["definition_id"], run["definition_id"], self._keep))
 
     # ---- Lesen -----------------------------------------------------------------
@@ -263,23 +277,24 @@ class Runner:
         """Neueste zuerst, ohne Ergebnisse. ``before`` ist das ``seq`` des letzten Eintrags
         der vorigen Seite."""
         where, args = [], []
-        if definition_id is not None:
+        if definition_id == "":
+            where.append("definition_id IS NULL")  # Läufe, deren Definition gelöscht ist
+        elif definition_id is not None:
             where.append("definition_id=?")
             args.append(definition_id)
         if before is not None:
-            where.append("rowid < ?")
+            where.append("seq < ?")
             args.append(before)
-        sql = ("SELECT rowid AS seq, * FROM runs"  # noqa: S608
+        sql = ("SELECT * FROM runs"  # noqa: S608
                + (" WHERE " + " AND ".join(where) if where else "")
-               + " ORDER BY rowid DESC LIMIT ?")
+               + " ORDER BY seq DESC LIMIT ?")
         args.append(max(1, min(limit, 500)))
         return await self._db.read(
             lambda con: [self._head(r) for r in con.execute(sql, args)])
 
     async def get_run(self, run_id: str) -> dict[str, Any]:
         def fn(con: sqlite3.Connection) -> dict[str, Any]:
-            row = con.execute("SELECT rowid AS seq, * FROM runs WHERE id=?",
-                              (run_id,)).fetchone()
+            row = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
             if row is None:
                 raise NotFound("Den Lauf gibt es nicht.")
             run = self._head(row)

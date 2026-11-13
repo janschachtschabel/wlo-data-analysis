@@ -13,6 +13,9 @@ def is_admin(request: Request) -> bool:
     return request.app.state.signer.valid(request.cookies.get(COOKIE_NAME))
 
 
+MAX_BODY_BYTES = 6 * 1024 * 1024  # der Import erlaubt 5 MB, sonst braucht nichts so viel
+
+
 class AdminGate:
     """Sperrt alles unter ``/api`` außer den öffentlichen Pfaden, bevor eine Route gewählt
     wird. Eine Route kann den Schutz damit nicht vergessen; ``require_admin`` an den Routen
@@ -31,6 +34,12 @@ class AdminGate:
                 await send({"type": "websocket.close", "code": 1008})
             return
         path = scope["path"]
+        length = dict(scope["headers"]).get(b"content-length", b"")
+        if length.isdigit() and int(length) > MAX_BODY_BYTES:
+            response = JSONResponse(
+                {"detail": "Die Anfrage ist zu groß.", "kind": "too_large"}, status_code=413)
+            await response(scope, receive, send)
+            return
         if (path == "/api" or path.startswith("/api/")) and path not in self.public_paths:
             request = Request(scope)
             if not is_admin(request):

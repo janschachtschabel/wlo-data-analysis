@@ -47,8 +47,12 @@ async def all_runs(
     request: Request,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     before: Annotated[int | None, Query(ge=1)] = None,
+    definition: Annotated[str | None, Query(max_length=64)] = None,
 ) -> list[dict[str, Any]]:
-    return await _runner(request).runs(limit=limit, before=before)
+    """``definition=<id>`` nur Läufe dieser Definition (auch einer gelöschten nicht mehr:
+    deren Läufe liefert ``definition=none``). Weniger Einträge als ``limit`` heißt: Ende."""
+    wanted = "" if definition == "none" else definition
+    return await _runner(request).runs(wanted, limit=limit, before=before)
 
 
 @router.get("/runs/{run_id}")

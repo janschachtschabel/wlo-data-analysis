@@ -39,6 +39,9 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Die Ablage beim Start öffnen: Eine unbrauchbare oder neuere Datenbank bricht den
+        # Start mit Meldung ab, statt später jede Anfrage scheitern zu lassen.
+        _ = app.state.services.db
         yield
         await app.state.services.aclose()
 

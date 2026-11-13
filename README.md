@@ -142,7 +142,7 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
 | `POST /api/definitions/{id}/duplicate` | Kopie anlegen |
 | `POST /api/definitions/export`, `POST /api/definitions/import?mode=skip\|replace\|copy` | Definitionen als JSON aus- und einführen |
 | `POST /api/definitions/{id}/run` (`refresh`, `instance`, `save`) | alle Abfragen ausführen, Ergebnis speichern |
-| `GET /api/definitions/{id}/runs`, `GET /api/runs`, `GET/DELETE /api/runs/{id}` | gespeicherte Läufe |
+| `GET /api/definitions/{id}/runs`, `GET /api/runs` (`definition=<id>` oder `none`), `GET/DELETE /api/runs/{id}` | gespeicherte Läufe |
 
 - Ein Lauf speichert die Ergebnis-Tabellen samt Abfrage, Instanz und Zeitpunkt, also nur
   Zählungen. Er bleibt lesbar, auch wenn die Definition später geändert oder gelöscht wird.

@@ -66,10 +66,21 @@ def new_id() -> str:
     return secrets.token_urlsafe(9)
 
 
+def _check_text(text: str, what: str) -> None:
+    """Text, den die Datenbank nicht speichern kann oder der Anzeigen stört."""
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        raise InvalidDefinition(f"{what} enthält ungültige Zeichen.") from None
+    if "\x00" in text:
+        raise InvalidDefinition(f"{what} enthält ungültige Zeichen.")
+
+
 def clean_name(name: Any, what: str = "Der Name") -> str:
     if not isinstance(name, str) or not name.strip():
         raise InvalidDefinition(f"{what} fehlt.")
     name = " ".join(name.split())
+    _check_text(name, what)
     if len(name) > MAX_NAME:
         raise InvalidDefinition(f"{what} ist zu lang (höchstens {MAX_NAME} Zeichen).")
     return name
@@ -81,6 +92,7 @@ def clean_description(text: Any) -> str:
     if not isinstance(text, str) or len(text) > MAX_DESCRIPTION:
         raise InvalidDefinition(
             f"Die Beschreibung ist zu lang (höchstens {MAX_DESCRIPTION} Zeichen).")
+    _check_text(text, "Die Beschreibung")
     return text.strip()
 
 
@@ -95,7 +107,7 @@ def _row(row: sqlite3.Row) -> Definition:
 def fetch(con: sqlite3.Connection, def_id: str) -> Definition:
     row = con.execute("SELECT * FROM definitions WHERE id=?", (def_id,)).fetchone()
     if row is None:
-        raise NotFound(f"Die Definition '{def_id}' gibt es nicht.")
+        raise NotFound(f"Die Definition '{str(def_id)[:40]}' gibt es nicht.")
     return _row(row)
 
 

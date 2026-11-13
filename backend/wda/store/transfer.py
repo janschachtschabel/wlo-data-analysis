@@ -148,8 +148,7 @@ class Transfer:
                 "Das ist keine Export-Datei dieser Anwendung (format 'wda-definitions' fehlt).")
         if data.get("version") != VERSION:
             raise InvalidDefinition(
-                f"Die Export-Datei hat Version {data.get('version')!r}; gelesen wird nur "
-                f"Version {VERSION}.")
+                f"Die Export-Datei hat eine andere Version; gelesen wird nur Version {VERSION}.")
         raw_groups, raw_defs = data.get("groups") or [], data.get("definitions")
         if not isinstance(raw_groups, list) or not isinstance(raw_defs, list):
             raise InvalidDefinition("'groups' und 'definitions' müssen Listen sein.")
@@ -167,7 +166,9 @@ class Transfer:
             if not isinstance(raw, dict):
                 raise InvalidDefinition(f"Eintrag {pos}: kein Objekt.")
             name = raw.get("name") if isinstance(raw.get("name"), str) else "?"
-            label = f"Eintrag {pos} ('{name[:60]}')"
+            shown = "".join(ch if ch.isprintable() else "?" for ch in name[:60])
+            shown = shown.encode("utf-8", "replace").decode("utf-8")
+            label = f"Eintrag {pos} ('{shown}')"
             def_id, kind = raw.get("id"), raw.get("kind")
             if not isinstance(def_id, str) or not ID_PATTERN.fullmatch(def_id):
                 raise InvalidDefinition(f"{label}: Die ID fehlt oder ist ungültig.")

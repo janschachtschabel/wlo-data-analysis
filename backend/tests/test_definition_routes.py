@@ -195,12 +195,47 @@ def test_database_file_is_never_served(api, settings):
         assert b"SQLite format" not in r.content
 
 
-def test_unusable_data_dir_gives_a_clear_error(settings, repo, tmp_path):
+def test_unusable_data_dir_aborts_the_start(settings, repo, tmp_path):
+    from wda.config import ConfigError
     blocker = tmp_path / "datei"
     blocker.write_text("x")
     settings.data_dir = blocker / "unterordner"
-    with TestClient(create_app(settings, transport=repo.transport())) as client:
-        client.post("/api/auth/login", json={"password": ADMIN_PASSWORD})
-        r = client.get("/api/definitions")
-        assert r.status_code == 503 and r.json()["kind"] == "storage_unavailable"
-        assert client.get("/api/health").status_code == 200
+    with pytest.raises(ConfigError, match="lässt sich nicht öffnen"):
+        with TestClient(create_app(settings, transport=repo.transport())):
+            pass
+
+
+def test_review_findings_of_package_4(api):
+    m = make(api, "metric", "M", {"query": QUERY})
+    # Tippfehler bei der Instanz: abgelehnt, kein gespeicherter Fehl-Lauf
+    r = api.post(f"/api/definitions/{m['id']}/run", json={"instance": "tippfehler"})
+    assert r.status_code == 422 and api.get("/api/runs").json() == []
+    # Zeichen, die die Datenbank nicht speichern kann: Meldung statt 500, nichts importiert
+    for name in ("x\\ud800", "nul\\u0000name"):
+        raw = ('{"format":"wda-definitions","version":1,"definitions":[{"id":"abcdef","kind":'
+               '"metric","name":"NAME","spec":{"query":{"instance":"wlo-prod"}}}]}'
+               ).replace("NAME", name)
+        r = api.post("/api/definitions/import", content=raw.encode())
+        assert r.status_code == 422 and "Eintrag 1" in r.json()["detail"], r.text
+    raw = ('{"format":"wda-definitions","version":1,"definitions":[{"id":"abcdef","kind":'
+           '"template","name":"x","spec":{"title":"T","sections":[{"id":"a","type":"text",'
+           '"markdown":"\\ud800"}]}}]}')
+    assert api.post("/api/definitions/import", content=raw.encode()).status_code == 422
+    assert len(api.get("/api/definitions").json()) == 1
+    # Fehlermeldungen wiederholen keine beliebig große Eingabe
+    r = api.post("/api/definitions/import", json={"format": "wda-definitions",
+                                                  "version": "v" * 100000})
+    assert r.status_code == 422 and len(r.content) < 500
+    assert len(api.get("/api/definitions/" + "x" * 5000).content) < 500
+    # Läufe ohne Definition sind gezielt abrufbar
+    run = api.post(f"/api/definitions/{m['id']}/run").json()
+    assert [x["id"] for x in api.get("/api/runs", params={"definition": m["id"]}).json()] == [
+        run["id"]]
+    assert api.get("/api/runs", params={"definition": "none"}).json() == []
+    api.delete(f"/api/definitions/{m['id']}")
+    assert [x["id"] for x in api.get("/api/runs", params={"definition": "none"}).json()] == [
+        run["id"]]
+    # zu große Anfragen enden vor dem Einlesen, auch ohne Login
+    api.cookies.clear()
+    r = api.post("/api/auth/login", content=b"x" * (7 * 1024 * 1024))
+    assert r.status_code == 413 and r.json()["kind"] == "too_large"

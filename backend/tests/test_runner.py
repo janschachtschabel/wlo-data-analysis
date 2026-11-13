@@ -258,3 +258,33 @@ def test_refresh_bypasses_the_cache(tmp_path):
 
     assert world.go(three()) == [False, True, False]
     world.services.db.close()
+
+
+def test_unexpected_error_in_one_tile_keeps_the_run(world, monkeypatch):
+    import wda.store.runner as runner_module
+    real = runner_module.run_query
+
+    async def flaky(spec, client, vocab):
+        if spec.rows is None:
+            raise RuntimeError("streng-geheim: Programmfehler")
+        return await real(spec, client, vocab)
+
+    monkeypatch.setattr(runner_module, "run_query", flaky)
+    d = world.go(world.store.create("dashboard", "D", {"tiles": [
+        tile("gut", query=QUERY), tile("kaputt", query={"instance": "a"})]}))
+    run = world.go(world.runner.run(d.id))
+    assert run["status"] == "partial"
+    assert run["results"][1]["error"] == {
+        "detail": "Unerwarteter Fehler bei dieser Abfrage.", "kind": "internal"}
+    assert world.go(world.runner.get_run(run["id"])) == run
+
+
+def test_seq_is_never_reused(world):
+    m = world.go(world.store.create("metric", "M", {"query": {"instance": "a"}}))
+    ids = [world.go(world.runner.run(m.id))["id"] for _ in range(3)]
+    seqs = [r["seq"] for r in world.go(world.runner.runs(m.id))]
+    world.go(world.runner.delete_run(ids[-1]))
+    world.go(world.runner.run(m.id))
+    assert world.go(world.runner.runs(m.id))[0]["seq"] > max(seqs)
+    with pytest.raises(InvalidDefinition, match="Instanz"):
+        world.go(world.runner.run(m.id, instance="tippfehler"))
