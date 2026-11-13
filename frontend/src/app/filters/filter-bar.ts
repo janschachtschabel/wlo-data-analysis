@@ -41,7 +41,7 @@ interface Option { kind: 'field' | 'value' | 'literal'; id: string; label: strin
                aria-controls="filter-options" [attr.aria-activedescendant]="options().length ? 'fo-' + active() : null"
                [placeholder]="field() ? 'Wert suchen oder URI einfügen …' : 'Filter hinzufügen: Feld suchen …'"
                [ngModel]="query()" (ngModelChange)="query.set($event)"
-               (keydown)="key($event)" (focus)="open.set(true)" (blur)="blur()" />
+               (keydown)="key($event)" (focus)="open.set(true)" (input)="open.set(true)" (blur)="blur()" />
         @if (open() && (options().length || hint())) {
           <ul id="filter-options" role="listbox" class="options card">
             @for (option of options(); track option.kind + option.id; let i = $index) {
@@ -187,7 +187,9 @@ export class FilterBar {
       this.picked.update((map) => new Map(map).set(field.property + '\n' + option.id, option.label));
     }
     this.changed.emit(addValue(this.filters(), field.property, option.id));
-    this.query.set('');
+    // zurück zur Feldsuche; weitere Werte desselben Feldes über einen Klick auf seinen Namen
+    this.leaveField();
+    this.open.set(false); // das Ergebnis nicht verdecken; Tippen öffnet die Liste wieder
   }
 
   protected key(event: KeyboardEvent): void {
@@ -203,7 +205,8 @@ export class FilterBar {
       const option = options[this.active()];
       if (option) this.choose(option);
     } else if (event.key === 'Escape') {
-      if (this.field()) this.leaveField(); else this.open.set(false);
+      this.leaveField();
+      this.open.set(false);
     } else if (event.key === 'Backspace' && !this.query() && this.field()) {
       this.leaveField();
     }

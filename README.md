@@ -188,3 +188,26 @@ ruff check .
 WDA_ADMIN_PASSWORD=dev WDA_COOKIE_SECURE=false WDA_DATA_DIR=./data \
   python -m wda
 ```
+
+## Oberfläche
+
+Die Oberfläche (Angular, `frontend/`) ist im Docker-Image enthalten und unter `/` erreichbar.
+
+- **Explorer:** Filter über ein Eingabefeld bauen (erst das Feld, dann Werte mit Vorschlägen aus
+  dem Vokabular; Name und URI werden beide gezeigt, eine eingefügte URI wird erkannt),
+  aufschlüsseln, als Tabelle oder Grafik ansehen, als Kennzahl speichern. Die Adresse enthält
+  die ganze Abfrage und lässt sich als Link weitergeben; Ergebnisse stehen nie darin.
+- **Bibliothek:** Dashboards, Templates, Kennzahlen und Filter in Gruppen; suchen, duplizieren,
+  verschieben, löschen, importieren, exportieren; mitgelieferte Vorlagen (OER-Statistik)
+  installieren. „Bearbeiten“ öffnet die Definition mit Prüfung und Vorschau.
+- **Bericht und Läufe:** Eine Definition ansehen zählt frisch und speichert nichts; „Lauf
+  speichern“ legt den Stand ab, der sich als JSON, CSV, Markdown, HTML und PDF abrufen lässt.
+
+Entwicklung ohne Docker:
+
+```
+cd frontend && npm ci && npx ng build        # schreibt nach backend/wda/static
+cd ../backend && python -m wda               # liefert die Oberfläche mit aus
+python scripts/demo_server.py                # oder: Backend mit nachgebautem Bestand, Passwort demo-passwort
+cd ../frontend && npx ng test --watch=false && node e2e/smoke.mjs
+```
