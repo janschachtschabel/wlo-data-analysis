@@ -23,8 +23,10 @@ from ..engine.spec import Group, QuerySpec, Rows
 from ..errors import QueryError, UnknownInstance, describe_validation
 from ..external.oersi import OersiClient, notation
 from ..filters import FilterIn
+from . import points as points_module
 from .db import Database
 from .definitions import Definition, NotFound, fetch, new_id, now_iso
+from .points import Point, points_of, write_points
 from .specs import (
     DashboardSpec,
     DataSection,
@@ -82,6 +84,68 @@ def _restore(result: dict[str, Any] | None, query: Any) -> dict[str, Any] | None
     if isinstance(provenance, dict) and "spec" not in provenance and "fetched_at" in provenance:
         provenance["spec"] = query
     return result
+
+
+def load_run(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+    """Ein gespeicherter Lauf mit seinen Ergebnissen."""
+    run = Runner._head(row)
+    del run["seq"]
+    run.update(spec=json.loads(row["spec"]), saved=True, results=[])
+    for r in con.execute(
+            "SELECT * FROM run_results WHERE run_id=? ORDER BY position", (row["id"],)):
+        item = json.loads(r["query"])
+        run["results"].append({
+            "key": r["key"], "title": r["title"], "view": item["view"],
+            "query": item["query"],
+            "result": _restore(json.loads(r["result"]), item["query"])
+            if r["result"] is not None else None,
+            "error": json.loads(r["error"]) if r["error"] is not None else None})
+    return run
+
+
+def _points(run: dict[str, Any]) -> list[Point] | None:
+    """Punkte eines Laufs; ein Fehler dabei kostet nur die Historie dieses Laufs."""
+    try:
+        points = points_of(run)
+    except Exception:
+        log.exception("Punkte des Laufs %s ließen sich nicht bilden", run.get("id"))
+        return None
+    if points is None:
+        log.warning("Lauf %s hat mehr als %s Zahlen und bleibt ohne Punkte für die Historie",
+                    run.get("id"), points_module.MAX_POINTS)
+    return points
+
+
+def backfill_points(db: Database) -> int:
+    """Trägt für ältere Läufe die Punkte nach (einmal je Datenbank). Liefert die Zahl der
+    nachgetragenen Läufe; unlesbare Läufe werden übergangen."""
+    if db.read_now(lambda con: con.execute(
+            "SELECT 1 FROM meta WHERE key='points_backfilled'").fetchone()):
+        return 0
+    ids = db.read_now(lambda con: [r["id"] for r in con.execute(
+        "SELECT id FROM runs WHERE id NOT IN (SELECT DISTINCT run_id FROM points)"
+        " ORDER BY seq")])
+    done = 0
+    for run_id in ids:
+        def one(con: sqlite3.Connection, run_id: str = run_id) -> bool:
+            row = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+            if row is None:
+                return False
+            try:
+                run = load_run(con, row)
+            except (ValueError, KeyError, TypeError):
+                log.warning("Lauf %s ist unlesbar und bleibt ohne Punkte", run_id)
+                return False
+            points = _points(run)
+            if not points:
+                return False
+            write_points(con, run_id, points)
+            return True
+
+        done += bool(db.write_now(one))
+    db.write_now(lambda con: con.execute(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('points_backfilled', '1')"))
+    return done
 
 
 class DamagedRun(Exception):
@@ -270,7 +334,11 @@ class Runner:
         return await self.run("", refresh=refresh, instance=instance, save=False, draft=draft)
 
     async def run(self, def_id: str, *, refresh: bool = False, instance: str | None = None,
-                  save: bool = True, draft: Definition | None = None) -> dict[str, Any]:
+                  save: bool = True, draft: Definition | None = None,
+                  origin: str = "manual", run_id: str | None = None,
+                  progress: Callable[[int, int], None] | None = None) -> dict[str, Any]:
+        """``progress(erledigt, gesamt)`` wird nach jeder Abfrage gerufen; ``run_id`` legt die
+        ID des gespeicherten Laufs vorab fest (für Aufträge)."""
         if instance is not None:
             try:
                 self._services.client(instance)
@@ -285,21 +353,36 @@ class Runner:
         save = save and draft is None
         started = self._clock()
         # Alle Kacheln nebeneinander; der Client begrenzt die gleichzeitigen Abfragen.
-        results = list(await asyncio.gather(*[self._execute(p, refresh) for p in plan]))
+        done = 0
+
+        async def one(planned: Planned) -> dict[str, Any]:
+            nonlocal done
+            out = await self._execute(planned, refresh)
+            done += 1
+            if progress is not None:
+                progress(done, len(plan))
+            return out
+
+        if progress is not None:
+            progress(0, len(plan))
+        results = list(await asyncio.gather(*[one(p) for p in plan]))
         failed = sum(1 for r in results if r["error"] is not None)
         status = "ok" if not failed else "failed" if failed == len(results) else "partial"
         run = {
             # ein ungespeicherter Lauf ist nirgends abrufbar und hat deshalb keine ID
-            "id": new_id() if save else None,
+            "id": (run_id or new_id()) if save else None,
             "definition_id": definition.id or None, "kind": definition.kind,
             "name": definition.name, "definition_version": definition.version,
             "spec": definition.spec, "status": status, "started_at": started,
-            "finished_at": self._clock(), "saved": save, "results": results}
+            "finished_at": self._clock(), "origin": origin, "instance": instance,
+            "saved": save, "results": results}
         if save:
-            await self._db.write(lambda con: self._store(con, run))
+            points = await asyncio.to_thread(_points, run)
+            await self._db.write(lambda con: self._store(con, run, points))
         return run
 
-    def _store(self, con: sqlite3.Connection, run: dict[str, Any]) -> None:
+    def _store(self, con: sqlite3.Connection, run: dict[str, Any],
+               points: list[Point] | None = None) -> None:
         # Die Definition kann inzwischen gelöscht sein; der Lauf bleibt dann ohne Bezug.
         exists = con.execute("SELECT 1 FROM definitions WHERE id=?",
                              (run["definition_id"],)).fetchone()
@@ -307,10 +390,12 @@ class Runner:
             run["definition_id"] = None
         con.execute(
             "INSERT INTO runs (id, definition_id, kind, name, definition_version, spec, status,"
-            " started_at, finished_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            " started_at, finished_at, origin, instance) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (run["id"], run["definition_id"], run["kind"], run["name"],
              run["definition_version"], _dumps(run["spec"]), run["status"], run["started_at"],
-             run["finished_at"]))
+             run["finished_at"], run["origin"], run["instance"]))
+        if points:
+            write_points(con, run["id"], points)
         con.executemany(
             "INSERT INTO run_results (run_id, key, position, title, query, result, error)"
             " VALUES (?,?,?,?,?,?,?)",
@@ -332,7 +417,8 @@ class Runner:
         return {"id": row["id"], "seq": row["seq"], "definition_id": row["definition_id"],
                 "kind": row["kind"], "name": row["name"],
                 "definition_version": row["definition_version"], "status": row["status"],
-                "started_at": row["started_at"], "finished_at": row["finished_at"]}
+                "started_at": row["started_at"], "finished_at": row["finished_at"],
+                "origin": row["origin"], "instance": row["instance"]}
 
     async def runs(self, definition_id: str | None = None, limit: int = 50,
                    before: int | None = None, status: str | None = None,
@@ -372,20 +458,7 @@ class Runner:
                     "Der gespeicherte Lauf ist beschädigt und lässt sich nicht lesen. "
                     "Bitte die Definition neu ausführen.") from None
 
-        def load(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
-            run = self._head(row)
-            del run["seq"]
-            run.update(spec=json.loads(row["spec"]), saved=True, results=[])
-            for r in con.execute(
-                    "SELECT * FROM run_results WHERE run_id=? ORDER BY position", (run_id,)):
-                item = json.loads(r["query"])
-                run["results"].append({
-                    "key": r["key"], "title": r["title"], "view": item["view"],
-                    "query": item["query"],
-                    "result": _restore(json.loads(r["result"]), item["query"])
-                    if r["result"] is not None else None,
-                    "error": json.loads(r["error"]) if r["error"] is not None else None})
-            return run
+        load = load_run
 
         return await self._db.read(fn)
 

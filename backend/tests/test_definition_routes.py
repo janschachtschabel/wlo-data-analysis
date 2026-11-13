@@ -157,7 +157,8 @@ def test_run_routes(api, repo):
         repo.brute(repo.has("ccm:educationalcontext",
                             "http://w3id.org/openeduhub/vocabs/educationalContext/hochschule")))
     assert set(run) == {"id", "definition_id", "kind", "name", "definition_version", "spec",
-                        "status", "started_at", "finished_at", "saved", "results"}
+                        "status", "started_at", "finished_at", "origin", "instance",
+                        "saved", "results"}
     assert set(run["results"][0]) == {"key", "title", "view", "query", "result", "error"}
     assert api.get(f"/api/runs/{run['id']}").json() == run
 

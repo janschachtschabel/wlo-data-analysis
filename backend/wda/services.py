@@ -18,7 +18,7 @@ from .external.oersi import OersiClient
 from .instances import Instance, InstanceRegistry
 from .store.db import Database
 from .store.definitions import DefinitionStore
-from .store.runner import Runner
+from .store.runner import Runner, backfill_points
 from .store.transfer import Transfer
 
 log = logging.getLogger(__name__)
@@ -93,6 +93,10 @@ class Services:
         """Wird beim ersten Zugriff geöffnet; wirft ``ConfigError``, wenn das nicht geht."""
         if self._db is None:
             self._db = Database(self._settings.data_dir / "store.sqlite3")
+            try:  # ältere Läufe bekommen einmalig ihre Punkte für die Historie
+                backfill_points(self._db)
+            except Exception:
+                log.exception("Punkte älterer Läufe ließen sich nicht nachtragen")
         return self._db
 
     @property

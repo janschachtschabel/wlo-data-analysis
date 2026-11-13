@@ -13,7 +13,7 @@ from typing import TypeVar
 
 from ..config import ConfigError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 T = TypeVar("T")
 
 _SCHEMA = """
@@ -39,13 +39,28 @@ CREATE TABLE IF NOT EXISTS runs (
     definition_id TEXT REFERENCES definitions(id) ON DELETE SET NULL,
     kind TEXT NOT NULL, name TEXT NOT NULL, definition_version INTEGER NOT NULL,
     spec TEXT NOT NULL, status TEXT NOT NULL,
-    started_at TEXT NOT NULL, finished_at TEXT NOT NULL);
+    started_at TEXT NOT NULL, finished_at TEXT NOT NULL,
+    origin TEXT NOT NULL DEFAULT 'manual',  -- 'manual' | 'schedule'
+    instance TEXT);                         -- abweichende Instanz dieses Laufs
 CREATE INDEX IF NOT EXISTS runs_definition ON runs(definition_id, started_at);
 CREATE TABLE IF NOT EXISTS run_results (
     run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     key TEXT NOT NULL, position INTEGER NOT NULL, title TEXT NOT NULL,
     query TEXT, result TEXT, error TEXT,
     PRIMARY KEY (run_id, key));
+-- die Zahlen jedes Laufs als schmale Zeilen: Grundlage für Zeitreihen und Vergleiche
+CREATE TABLE IF NOT EXISTS points (
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    key TEXT NOT NULL, row_key TEXT NOT NULL, column_id TEXT NOT NULL, value REAL,
+    PRIMARY KEY (run_id, key, row_key, column_id)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS schedules (
+    id TEXT PRIMARY KEY,
+    definition_id TEXT NOT NULL REFERENCES definitions(id) ON DELETE CASCADE,
+    instance TEXT, every TEXT NOT NULL, at TEXT NOT NULL, weekday INTEGER, day INTEGER,
+    enabled INTEGER NOT NULL DEFAULT 1, next_due TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_run_id TEXT, last_status TEXT, last_error TEXT, last_started_at TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 -- in der Oberfläche angelegte Instanzen; data ist das Instanz-Objekt samt Zugangsdaten
 CREATE TABLE IF NOT EXISTS instances (
     id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -82,6 +97,8 @@ class Database:
                 if row is None:
                     con.execute("INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
                                 (str(SCHEMA_VERSION),))
+                elif int(row["value"]) < SCHEMA_VERSION:
+                    self._migrate(con)
         except (sqlite3.Error, OSError) as exc:
             if con is not None:
                 con.close()
@@ -97,6 +114,24 @@ class Database:
         with contextlib.suppress(OSError):
             os.chmod(self.path, 0o600)
         self._con = con
+
+    @staticmethod
+    def _migrate(con: sqlite3.Connection) -> None:
+        """Hebt eine ältere Datenbank auf den heutigen Stand; alles oder nichts."""
+        con.execute("BEGIN IMMEDIATE")
+        try:
+            have = {r["name"] for r in con.execute("PRAGMA table_info(runs)")}
+            if "origin" not in have:  # Version 1 → 2
+                con.execute("ALTER TABLE runs ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'")
+            if "instance" not in have:
+                con.execute("ALTER TABLE runs ADD COLUMN instance TEXT")
+            con.execute("UPDATE meta SET value=? WHERE key='schema_version'",
+                        (str(SCHEMA_VERSION),))
+            con.execute("COMMIT")
+        except BaseException:
+            if con.in_transaction:
+                con.execute("ROLLBACK")
+            raise
 
     def _run(self, fn: Callable[[sqlite3.Connection], T], write: bool) -> T:
         with self._lock:
@@ -118,6 +153,9 @@ class Database:
     def read_now(self, fn: Callable[[sqlite3.Connection], T]) -> T:
         """Kurzes Lesen ohne Thread-Wechsel (beim Start und für Winziges)."""
         return self._run(fn, False)
+
+    def write_now(self, fn: Callable[[sqlite3.Connection], T]) -> T:
+        return self._run(fn, True)
 
     async def read(self, fn: Callable[[sqlite3.Connection], T]) -> T:
         return await asyncio.to_thread(self._run, fn, False)
