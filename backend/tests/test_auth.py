@@ -50,7 +50,7 @@ def test_tampered_cookie(client):
     assert client.get("/api/auth/status").json() == {"authenticated": False}
     r = client.get("/api/instances")
     assert r.status_code == 401
-    assert r.json() == {"detail": "Nicht angemeldet"}
+    assert r.json() == {"detail": "Nicht angemeldet", "kind": "unauthenticated"}
 
 
 def test_cookie_from_other_secret_rejected(client):

@@ -10,6 +10,9 @@ from .edusharing.client import EduSharingClient
 from .edusharing.vocab import VocabStore
 from .instances import InstanceRegistry
 from .store.db import Database
+from .store.definitions import DefinitionStore
+from .store.runner import Runner
+from .store.transfer import Transfer
 
 
 class Services:
@@ -34,6 +37,18 @@ class Services:
         if self._db is None:
             self._db = Database(self._settings.data_dir / "store.sqlite3")
         return self._db
+
+    @property
+    def definitions(self) -> DefinitionStore:
+        return DefinitionStore(self.db)
+
+    @property
+    def transfer(self) -> Transfer:
+        return Transfer(self.db)
+
+    @property
+    def runner(self) -> Runner:
+        return Runner(self.db, self, keep=self._settings.runs_keep)
 
     def _http_client(self) -> httpx.AsyncClient:
         if self._http is None:

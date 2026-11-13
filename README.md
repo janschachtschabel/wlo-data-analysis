@@ -42,6 +42,7 @@ Minute auch die richtige Anmeldung.
 | `WDA_VOCAB_TTL` | `86400` | Sekunden, die Felder und Vokabulare einer Instanz gelten |
 | `WDA_UPSTREAM_TIMEOUT` | `90` | Timeout für Abfragen an eine Instanz in Sekunden |
 | `WDA_UPSTREAM_CONCURRENCY` | `4` | gleichzeitige Abfragen je Instanz |
+| `WDA_RUNS_KEEP` | `500` | gespeicherte Läufe je Definition; ältere werden entfernt |
 | `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
@@ -124,6 +125,31 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   die aufgelösten Filter und Gruppen und in `notes` (je Eintrag `code` und `text`) jede
   Besonderheit der Zählung (gekürzte Wertelisten, Summen-Gruppen,
   berechnete Spalten).
+
+## Verwaltung und Läufe
+
+Vier Arten von Definitionen liegen in einer SQLite-Datei im Datenverzeichnis
+(`store.sqlite3`): **Filter**, **Kennzahlen** (eine Abfrage mit Darstellung),
+**Dashboards** (Kacheln) und **Templates** (Abschnitte aus Text, Tabellen, Grafiken).
+Kacheln und Abschnitte verweisen auf eine Kennzahl oder tragen eine eigene Abfrage;
+gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
+
+| Route | Zweck |
+|---|---|
+| `GET/POST /api/groups`, `PUT/DELETE /api/groups/{id}` | Gruppen (Ordner) |
+| `GET/POST /api/definitions` (`kind`, `group`, `q`) | auflisten, anlegen |
+| `GET/PUT/DELETE /api/definitions/{id}` | lesen (mit Verwendern), ändern (mit `version`), löschen |
+| `POST /api/definitions/{id}/duplicate` | Kopie anlegen |
+| `POST /api/definitions/export`, `POST /api/definitions/import?mode=skip\|replace\|copy` | Definitionen als JSON aus- und einführen |
+| `POST /api/definitions/{id}/run` (`refresh`, `instance`, `save`) | alle Abfragen ausführen, Ergebnis speichern |
+| `GET /api/definitions/{id}/runs`, `GET /api/runs`, `GET/DELETE /api/runs/{id}` | gespeicherte Läufe |
+
+- Ein Lauf speichert die Ergebnis-Tabellen samt Abfrage, Instanz und Zeitpunkt, also nur
+  Zählungen. Er bleibt lesbar, auch wenn die Definition später geändert oder gelöscht wird.
+- Scheitert eine Kachel, trägt sie den Fehler; die übrigen laufen weiter (Status `partial`).
+- `instance` beim Lauf führt dieselbe Definition gegen eine andere Instanz aus.
+- Was noch verwendet wird, lässt sich nicht löschen (409 mit der Liste der Verwender).
+- Fehler haben überall die Form `{"detail": Satz, "kind": Art}`.
 
 ## Entwicklung
 

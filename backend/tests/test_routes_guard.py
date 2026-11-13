@@ -29,6 +29,10 @@ PROTECTED = {
     "/api", "/api/{rest:path}", "/api/instances", "/api/settings", "/api/query",
     "/api/instances/{instance_id}/about", "/api/instances/{instance_id}/fields",
     "/api/instances/{instance_id}/vocab", "/api/instances/{instance_id}/aggregate",
+    "/api/groups", "/api/groups/{group_id}", "/api/definitions", "/api/definitions/export",
+    "/api/definitions/import", "/api/definitions/{def_id}",
+    "/api/definitions/{def_id}/duplicate", "/api/definitions/{def_id}/run",
+    "/api/definitions/{def_id}/runs", "/api/runs", "/api/runs/{run_id}",
 }
 OUTSIDE_API = {"/{rest:path}"}  # nur die Oberfläche
 

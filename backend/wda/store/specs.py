@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, m
 
 from ..engine.formula import compile_formula
 from ..engine.spec import Label, QuerySpec
-from ..errors import QueryError
+from ..errors import QueryError, describe_validation
 from ..filters import FilterIn
 
 KINDS = ("filter", "metric", "dashboard", "template")
@@ -129,28 +129,6 @@ _MODELS: dict[str, type[_Model]] = {
 Spec = FilterSpec | MetricSpec | DashboardSpec | TemplateSpec
 
 
-_MESSAGES = {
-    "missing": "fehlt", "extra_forbidden": "unbekanntes Feld",
-    "string_pattern_mismatch": "enthält unerlaubte Zeichen oder hat die falsche Länge",
-    "string_too_long": "ist zu lang", "string_too_short": "ist zu kurz",
-    "too_long": "hat zu viele Einträge", "too_short": "hat zu wenige Einträge",
-    "literal_error": "ist kein erlaubter Wert", "union_tag_invalid": "ist kein erlaubter Wert",
-    "union_tag_not_found": "fehlt",
-}
-
-
-def describe(exc: ValidationError) -> str:
-    """Kurze deutsche Meldung mit dem Ort des ersten Fehlers, ohne die Eingabe zu wiederholen."""
-    err = exc.errors()[0]
-    where = ".".join(str(p) for p in err["loc"]) or "spec"
-    if err["type"] == "value_error":
-        what = str(err["msg"]).removeprefix("Value error, ")
-    else:
-        what = _MESSAGES.get(err["type"], "hat keinen gültigen Wert")
-    more = f" (und {len(exc.errors()) - 1} weitere Fehler)" if len(exc.errors()) > 1 else ""
-    return f"Ungültig: '{where}' – {what}{more}."
-
-
 def queries_of(spec: Spec) -> list[QuerySpec]:
     if isinstance(spec, MetricSpec):
         return [spec.query]
@@ -170,7 +148,7 @@ def parse_spec(kind: str, data: Any) -> Spec:
     try:
         spec = model.model_validate(data)
     except ValidationError as exc:
-        raise InvalidDefinition(describe(exc)) from None
+        raise InvalidDefinition(describe_validation(exc.errors())) from None
     for query in queries_of(spec):
         query.refresh = False
         for series in query.series:
