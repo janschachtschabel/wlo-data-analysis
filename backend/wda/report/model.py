@@ -23,6 +23,9 @@ class Row:
     values: list[Number | None]
     level: int = 0
     percent: list[float | None] | None = None
+    # Vergleich mit einem früheren Lauf: dessen Werte; ``new``: die Zeile gab es dort nicht
+    previous: list[Number | None] | None = None
+    new: bool = False
 
 
 @dataclass
@@ -65,6 +68,7 @@ class Report:
     finished_at: str
     blocks: list[Block]
     notes: list[dict[str, str]] = field(default_factory=list)
+    compare: dict[str, Any] | None = None  # Lauf, mit dem verglichen wird
 
     @property
     def tables(self) -> list[Table]:

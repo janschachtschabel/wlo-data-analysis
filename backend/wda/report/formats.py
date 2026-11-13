@@ -25,13 +25,17 @@ FORMATS = {
 
 
 def _row_label(row: Row) -> str:
-    return ("  " * row.level) + row.label
+    return ("  " * row.level) + row.label + (" (neu)" if row.new else "")
 
 
 def _cell(row: Row, pos: int) -> str:
     text = format_number(row.values[pos])
     if row.percent and pos < len(row.percent) and row.percent[pos] is not None:
         text += f" ({format_number(row.percent[pos], 1)} %)"
+    if row.previous is not None and pos < len(row.previous):
+        change = delta_text(row.values[pos], row.previous[pos])
+        if change:
+            text += f" ({change})"
     return text
 
 
@@ -63,8 +67,12 @@ def source_lines(table: Table) -> list[str]:
 
 
 def _meta(report: Report) -> str:
-    return (f"{KIND_LABELS.get(report.kind, report.kind)} · Lauf vom "
+    text = (f"{KIND_LABELS.get(report.kind, report.kind)} · Lauf vom "
             f"{format_time(report.started_at)} · {STATUS_LABELS.get(report.status, report.status)}")
+    if report.compare:
+        text += (f" · Vergleich mit dem Lauf vom {format_time(report.compare['started_at'])} "
+                 "(Veränderung in Klammern)")
+    return text
 
 
 # ---- JSON ----------------------------------------------------------------------------
@@ -87,6 +95,7 @@ def report_data(report: Report, with_html: bool = False) -> dict[str, Any]:
         "title": report.title, "kind": report.kind, "run_id": report.run_id,
         "definition_id": report.definition_id, "status": report.status,
         "started_at": report.started_at, "finished_at": report.finished_at,
+        "compare": report.compare,
         "notes": report.notes, "blocks": [block(b) for b in report.blocks]}
 
 
@@ -135,11 +144,14 @@ def to_csv(report: Report, delimiter: str = ";") -> bytes:
                 line += [_safe(label)] + [""] * (span - 1)
             writer.writerow(line)
         with_percent = any(r.percent for r in item.rows)
+        with_previous = report.compare is not None
         header: list[Any] = [""]
         for col in item.columns:
             header.append(_safe(col.label))
             if with_percent:
                 header.append(_safe(col.label + " (%)"))
+            if with_previous:
+                header.append(_safe(col.label + " (vorher)"))
         writer.writerow(header)
         for row in item.rows:
             line = [_safe(_row_label(row))]
@@ -147,6 +159,8 @@ def to_csv(report: Report, delimiter: str = ";") -> bytes:
                 line.append(number(row.values[pos]))
                 if with_percent:
                     line.append(number(row.percent[pos] if row.percent else None))
+                if with_previous:
+                    line.append(number(row.previous[pos] if row.previous else None))
             writer.writerow(line)
         for note in item.notes:
             writer.writerow(["Hinweis", _safe(note["text"])])
