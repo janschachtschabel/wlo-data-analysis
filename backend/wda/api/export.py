@@ -6,8 +6,10 @@ Die Ausgabe entsteht nur aus dem Lauf: Zählungen, Definitionen und deren Texte.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from urllib.parse import quote
 
@@ -15,9 +17,33 @@ from fastapi import APIRouter, HTTPException, Request, Response
 
 from ..report.build import build_report
 from ..report.formats import FORMATS, MAX_PDF_CELLS, PdfUnavailable, ReportTooLarge, render
+from ..report.model import Report
 from ..store.runner import DamagedRun
 
 router = APIRouter()
+log = logging.getLogger(__name__)
+
+# Der PDF-Satz ist langsam und speicherhungrig: einer zur Zeit in einem eigenen Thread, damit
+# er weder sich selbst vervielfacht noch den Thread-Pool der Datenbankzugriffe belegt.
+_PDF_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="wda-pdf")
+MAX_PDF_WAITING = 3
+_pdf_waiting = 0
+
+
+async def _render(report: Report, fmt: str) -> bytes:
+    global _pdf_waiting
+    if fmt != "pdf":
+        return await asyncio.to_thread(render, report, fmt)
+    if _pdf_waiting >= MAX_PDF_WAITING:
+        raise HTTPException(
+            503, "Es werden gerade mehrere PDF-Berichte gesetzt. Bitte gleich noch einmal "
+                 "versuchen.", headers={"Retry-After": "20"})
+    _pdf_waiting += 1
+    try:
+        return await asyncio.get_running_loop().run_in_executor(
+            _PDF_POOL, render, report, fmt)
+    finally:
+        _pdf_waiting -= 1
 
 
 def file_name(title: str, started_at: str, extension: str) -> str:
@@ -36,13 +62,15 @@ async def export_run(
     run = await request.app.state.services.runner.get_run(run_id)
     try:
         report = build_report(run)
-        body = await asyncio.to_thread(render, report, format)  # PDF-Satz braucht Rechenzeit
+        body = await _render(report, format)
     except ReportTooLarge:
         raise HTTPException(
             413, f"Der Bericht ist für den PDF-Export zu groß (mehr als "
                  f"{MAX_PDF_CELLS} Tabellenzellen). HTML und CSV gehen in jeder "
                  "Größe.") from None
     except (KeyError, TypeError, ValueError, IndexError, AttributeError, OverflowError):
+        # mit Stacktrace: ein Fehler im Renderer sähe sonst aus wie kaputte Daten
+        log.exception("Export des Laufs %s als %s gescheitert", run_id, format)
         raise DamagedRun(
             "Der gespeicherte Lauf ist beschädigt oder hat ein unerwartetes Format und "
             "lässt sich nicht darstellen. Bitte die Definition neu ausführen.") from None

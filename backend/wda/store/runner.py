@@ -335,6 +335,7 @@ class Runner:
             try:
                 return load(con, row)
             except (ValueError, KeyError, TypeError):
+                log.exception("Lauf %s lässt sich nicht lesen", run_id)
                 raise DamagedRun(
                     "Der gespeicherte Lauf ist beschädigt und lässt sich nicht lesen. "
                     "Bitte die Definition neu ausführen.") from None

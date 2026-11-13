@@ -96,3 +96,32 @@ def test_damaged_runs_give_a_clear_answer_never_500(api, settings, damage):
             assert r.json()["kind"] == "damaged_run"
         elif "export" in url:
             assert b"=1+1" not in r.content or b"'=1+1" in r.content
+
+
+def test_a_bug_in_rendering_is_logged_not_only_called_damage(api, monkeypatch, caplog):
+    import wda.report.formats as formats
+    m = make(api, "metric", "M", {"query": QUERY, "view": {"type": "bar"}})
+    run = api.post(f"/api/definitions/{m['id']}/run").json()
+    monkeypatch.setattr(formats, "chart_for", lambda *a, **k: None + 1)
+    with caplog.at_level("ERROR"):
+        r = api.get(f"/api/runs/{run['id']}/export?format=html")
+    assert r.status_code == 422
+    assert any("Export" in rec.message and rec.exc_info for rec in caplog.records)
+
+
+def test_pdf_queue_is_bounded_and_does_not_use_the_shared_thread_pool(api, monkeypatch):
+    import threading
+
+    import wda.api.export as export
+    m = make(api, "metric", "M", {"query": QUERY})
+    run = api.post(f"/api/definitions/{m['id']}/run").json()
+    names = []
+    monkeypatch.setattr(export, "render",
+                        lambda report, fmt: names.append(threading.current_thread().name)
+                        or b"%PDF-x")
+    assert api.get(f"/api/runs/{run['id']}/export?format=pdf").status_code == 200
+    assert names and names[0].startswith("wda-pdf")
+    monkeypatch.setattr(export, "_pdf_waiting", export.MAX_PDF_WAITING)
+    r = api.get(f"/api/runs/{run['id']}/export?format=pdf")
+    assert r.status_code == 503 and r.headers["retry-after"] and r.json()["kind"]
+    assert api.get(f"/api/runs/{run['id']}/export?format=html").status_code == 200

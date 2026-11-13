@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -9,9 +10,10 @@ from typing import Any
 from ..engine.engine import SCHEMA_VERSION
 from ..engine.formula import compile_formula
 from ..errors import QueryError
-from ..external.oersi import series_values
+from ..external.oersi import EXTERNAL_SCHEMA_VERSION, series_values
 from .model import Block, Column, Failure, Report, Row, Table, Text
 
+log = logging.getLogger(__name__)
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}\n]{1,300}?)\s*\}\}")
 
 
@@ -182,9 +184,11 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
     per_block: list[dict[str, list[Any]]] = []
     child_keys: dict[str, list[tuple[str, str]]] = {s["id"]: [] for s in sections}
     failed = 0
+    alias: dict[str, str] = {}  # Wert, wie er in der Definition steht -> Zeilenschlüssel
     formulas = {s["id"]: compile_formula(s["formula"]) for s in series if s.get("formula")}
 
-    def usable(item: dict[str, Any] | None, label: str) -> dict[str, Any] | None:
+    def usable(item: dict[str, Any] | None, label: str,
+               version: int = SCHEMA_VERSION) -> dict[str, Any] | None:
         if item is None:
             return None
         if item.get("error") is not None or item.get("result") is None:
@@ -193,7 +197,7 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
             if note not in notes:
                 notes.append(note)
             return None
-        if item["result"].get("schema_version") != SCHEMA_VERSION:
+        if item["result"].get("schema_version") != version:
             notes.append({"code": "unsupported_result",
                           "text": f"{label}: Ergebnis in einem anderen Format; den Lauf "
                                   "bitte neu ausführen."})
@@ -218,12 +222,13 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
             for key, values in (block.get("sections") or {}).items():
                 cells["group:" + key] = pick(values)
             for key, values in (block.get("cells") or {}).items():
-                cells["row:" + key] = pick(values)
+                cells["manual:" + key] = pick(values)
             sources.append({"label": block["label"], "kind": "manual",
                             "as_of": block.get("as_of"), "note": block.get("note")})
             continue
         if block["source"] == "oersi":
-            counts = usable(results.get(f"{sid}/{block['id']}/oersi"), block["label"])
+            counts = usable(results.get(f"{sid}/{block['id']}/oersi"), block["label"],
+                            EXTERNAL_SCHEMA_VERSION)
             if counts is None:
                 failed += 1
                 sources.append({"label": block["label"], "kind": "failed"})
@@ -273,8 +278,11 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
                                    if row["label"] == row["key"] else row["label"])
                       for row in detail["rows"]}
             for sec in sections:
-                for _ in sec.get("values", []):
+                for written in sec.get("values", []):
                     key = next(resolved, None)
+                    if key is not None:
+                        alias[written if isinstance(written, str)
+                              else str(written.get("value"))] = key
                     if key is not None and (key, labels.get(key, key)) not in child_keys[
                             sec["id"]]:
                         child_keys[sec["id"]].append((key, labels.get(key, key)))
@@ -298,18 +306,30 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
                 if (key, fallback.get(key, key)) not in child_keys[sec["id"]]:
                     child_keys[sec["id"]].append((key, fallback.get(key, key)))
     known = {key for keys in child_keys.values() for key, _ in keys}
-    for block in section["blocks"]:
+    resolved_rows = bool(alias)
+    for block, cells in zip(section["blocks"], per_block, strict=True):
         if block["source"] != "manual":
             continue
-        lost = sorted(k for k in (block.get("cells") or {}) if k not in known)
+        # Der Schlüssel darf der Wert der Zeile sein oder so lauten wie in der Definition.
+        for key in list(block.get("cells") or {}):
+            target = key if key in known else alias.get(key)
+            if target in known:
+                cells.setdefault("row:" + target, cells["manual:" + key])
+        lost = sorted(k for k in (block.get("cells") or {})
+                      if k not in known and alias.get(k) not in known)
         lost += sorted(f"Gruppe {k}" for k in (block.get("sections") or {})
                        if k not in child_keys)
         if lost:
             shown = ", ".join(repr(k) for k in lost[:5]) + (" …" if len(lost) > 5 else "")
             notes.append({"code": "manual_unmatched",
                           "text": f"{block['label']}: {len(lost)} Handeinträge gehören zu "
-                                  f"keiner Zeile der Tabelle und fehlen ({shown}). Der "
-                                  "Schlüssel muss der Wert der Zeile sein, nicht ihr Name."})
+                                  f"keiner Zeile der Tabelle und fehlen ({shown}). "
+                                  + ("Der Schlüssel muss der Wert der Zeile sein oder so "
+                                     "lauten wie in der Definition der Zeilen."
+                                     if resolved_rows else
+                                     "Die Zeilen ließen sich nicht auflösen, weil kein "
+                                     "Abfrage-Block ein Ergebnis hat; es gelten die Werte, "
+                                     "wie sie in der Definition stehen.")})
 
     rows: list[Row] = []
     for sec in sections:
@@ -337,6 +357,8 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
 
 
 def _damaged(key: str, title: Any) -> Failure:
+    # mit Stacktrace: ein Fehler im Zusammenbau sähe sonst aus wie kaputte Daten
+    log.exception("Bericht: Ergebnis %s ließ sich nicht zusammenbauen", key)
     return Failure(key, str(title or key),
                    "Dieses gespeicherte Ergebnis ist beschädigt oder hat ein unerwartetes "
                    "Format. Den Lauf bitte neu ausführen.", "damaged")

@@ -45,7 +45,17 @@
 
 - `GET /api/runs/{id}/report` → Berichtsmodell als JSON, Textabschnitte zusätzlich als maskiertes HTML (`html`). Dasselbe für einen ungespeicherten Lauf: `POST /api/definitions/{id}/run?save=false&report=true` bzw. `POST /api/preview` mit einer ungespeicherten Definition (`{kind, spec, instance?}`) → Lauf + Bericht, nichts wird gespeichert.
 - Auslieferung der SPA: Dateien aus `static/` mit Cache-Kopfzeilen (gehashte Dateien lange, `index.html` nie), unbekannte Pfade außerhalb `/api` → `index.html`.
-- Was das übergreifende Review 4–5 für die Oberfläche als fehlend meldet, kommt hier dazu.
+- Aus dem übergreifenden Review 4–5:
+  - Auslieferung über eine feste Liste der Dateien in `static/` (kein Mount); heute liefert jeder Pfad `index.html`. Dockerfile bekommt eine Frontend-Stufe.
+  - `GET /api/settings` nennt die Exportformate und ob PDF verfügbar ist.
+  - `POST /api/definitions/check` prüft eine Definition ohne Speichern und liefert `errors: [{loc, msg}]` (für den Matrix-Editor).
+  - Berichtsmodell und Lauf tragen ein Versionsfeld; ein ungespeicherter Lauf hat `id: null`.
+  - Aufgelöste Zeilen einer Matrix (Schlüssel, Label) stehen im Bericht, auch wenn kein Abfrage-Block gelingt.
+  - Unbekannte Instanz heißt überall `unknown_instance`.
+  - `/api/builtin` meldet, ob die installierte Fassung von der mitgelieferten abweicht; `install?mode=replace` setzt zurück.
+  - `/api/runs`: Filter nach Status und Art, `DELETE /api/runs?definition=…`; `/api/definitions` nennt den letzten Lauf. Gespeicherte Ergebnisse ohne doppelte `provenance.spec`.
+  - Instanzen in der Oberfläche anlegen und bearbeiten (aus Paket 4 hierher verschoben): `POST/PUT/DELETE /api/instances`, mit Verwerfen von Client und Cache.
+  - Lange Läufe: Lauf als Auftrag mit Fortschritt (`POST …/run?wait=false` → 202, `GET /api/runs/{id}` mit `status: running`), damit ein Proxy-Zeitlimit nicht stört.
 
 ## Review Focus
 

@@ -188,6 +188,10 @@ def test_list_items_may_continue_on_the_next_line():
     assert "<li>erster Punkt, der umbricht</li>" in html and "<p>Danach</p>" in html
 
 
+def test_only_indented_lines_continue_a_list_item():
+    assert markdown_to_html("- a\nText danach") == "<ul><li>a</li></ul>\n<p>Text danach</p>"
+
+
 def test_builtin_method_text_is_one_list():
     import json as _json
     from importlib import resources

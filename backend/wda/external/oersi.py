@@ -17,6 +17,7 @@ from ..edusharing.errors import EduSharingError
 
 SUBJECT_PREFIX = "https://w3id.org/kim/hochschulfaechersystematik/"
 NO_LICENSE = "__none__"
+EXTERNAL_SCHEMA_VERSION = 1  # Format dieses Ergebnisses, unabhängig von der Engine
 _CC = re.compile(r"creativecommons\.org/licenses/([a-z-]{2,11})(?:/|$)", re.IGNORECASE)
 _NOTATION = re.compile(r"/hochschulfaechersystematik/(n\d{1,4})$")
 
@@ -122,7 +123,8 @@ class OersiClient:
                 raise bad
             aggs = data["aggregations"]
             out: dict[str, Any] = {
-                "schema_version": 1, "external": "oersi", "url": self.url, "total": total,
+                "schema_version": EXTERNAL_SCHEMA_VERSION, "external": "oersi",
+                "url": self.url, "total": total,
                 "by_license": _by_license(aggs["license"]["buckets"]), "sections": {},
                 "fetched_at": self._clock()}
             if aggs["license"].get("sum_other_doc_count"):

@@ -165,7 +165,7 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
   `{{abschnitt.total.spalte}}`, `{{abschnitt.cell.zeile.spalte}}` (bei einer Matrix heißt
   die Spalte `block.spalte`). Auflösbar sind nur Spalten, die die Tabelle zeigt.
 - In Handeinträgen (`manual`) ist der Schlüssel einer Zelle der Wert der Zeile (z. B. die
-  URI des Fachs), nicht ihr Name; berechnete Spalten entstehen auch dort aus den Formeln,
+  URI des Fachs) oder genau die Angabe, mit der die Zeile in der Definition steht; berechnete Spalten entstehen auch dort aus den Formeln,
   wenn sie nicht eingetragen sind. PDF gibt es bis 30.000 Tabellenzellen.
 - `GET /api/builtin` zeigt mitgelieferte Definitionen, `POST /api/builtin/oer-statistik/install`
   legt die **OER-Statistik** an: Fächer in zehn Fächergruppen × Bildungsbereiche × Quelle ×

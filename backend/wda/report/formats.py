@@ -7,7 +7,6 @@ import dataclasses
 import io
 import json
 import re
-import threading
 from html import escape
 from typing import Any
 
@@ -291,7 +290,6 @@ class ReportTooLarge(Exception):
 
 
 MAX_PDF_CELLS = 30_000  # darüber braucht der Satz Minuten und Gigabytes
-_PDF_LOCK = threading.Semaphore(1)  # ein PDF-Satz zur Zeit, er ist speicherhungrig
 
 
 def pdf_available() -> bool:
@@ -318,9 +316,8 @@ def to_pdf(report: Report) -> bytes:
         def fetch(self, url: str, *args: Any, **kwargs: Any) -> Any:
             raise URLFetchingError("Der Bericht lädt nichts nach.")
 
-    with _PDF_LOCK:
-        return HTML(string=to_html(report).decode("utf-8"),
-                    url_fetcher=NoFetch(allowed_protocols=[])).write_pdf()
+    return HTML(string=to_html(report).decode("utf-8"),
+                url_fetcher=NoFetch(allowed_protocols=[])).write_pdf()
 
 
 def render(report: Report, fmt: str) -> bytes:

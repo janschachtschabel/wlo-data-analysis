@@ -30,7 +30,7 @@ class Formula:
             result = _eval(self._tree, values)
         except (OverflowError, ValueError, ZeroDivisionError):
             return None
-        if result is None or isinstance(result, bool) or abs(result) > MAX_MAGNITUDE:
+        if result is None or isinstance(result, bool) or abs(result) >= MAX_MAGNITUDE:
             return None
         if isinstance(result, float):
             if not math.isfinite(result):

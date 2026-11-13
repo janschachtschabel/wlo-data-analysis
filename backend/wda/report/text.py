@@ -45,9 +45,11 @@ def markdown_to_html(markdown: str, heading_offset: int = 1) -> str:
             if paragraph:
                 flush()
             items.append(match.group(1))
-        elif items and not paragraph:
+        elif items and not paragraph and raw[:1].isspace():
             items[-1] += " " + line.strip()  # Folgezeile eines Listenpunkts
         else:
+            if items:
+                flush()
             paragraph.append(line.strip())
     flush()
     return "\n".join(html)

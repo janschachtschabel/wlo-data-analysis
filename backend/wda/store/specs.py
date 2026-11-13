@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, model_validator
 
-from ..engine.formula import compile_formula
+from ..engine.formula import MAX_MAGNITUDE, compile_formula
 from ..engine.spec import MAX_SERIES, Ident, Label, QuerySpec, Series
 from ..errors import QueryError, describe_validation
 from ..filters import FilterIn, Name, ValueIn
@@ -105,7 +105,9 @@ class DataSection(_Sourced):
     title: Label
 
 
-Cell = int | float | None
+# Handzahlen: endliche Zahlen in der Größenordnung, die auch Formeln liefern dürfen
+Cell = Annotated[int, Field(gt=-MAX_MAGNITUDE, lt=MAX_MAGNITUDE)] | Annotated[
+    float, Field(allow_inf_nan=False, gt=-MAX_MAGNITUDE, lt=MAX_MAGNITUDE)] | None
 
 
 MAX_MATRIX_ROWS = 2000  # so viele Werte nimmt die Engine als Zeilenauswahl
@@ -200,6 +202,22 @@ class MatrixSection(_Model):
         unknown = set(self.show or []) - {s.id for s in self.series}
         if unknown or len(set(self.show or [])) != len(self.show or []):
             raise ValueError("show nennt unbekannte oder doppelte Spalten")
+        # dieselben Regeln wie für die Spalten einer Abfrage (IDs, Formeln, Verweise)
+        try:
+            QuerySpec(instance="x", series=[s.model_dump() for s in self.series])
+        except ValidationError as exc:
+            raise ValueError(describe_validation(exc.errors())) from None
+        ids = {s.id for s in self.series}
+        for s in self.series:
+            if s.formula is None:
+                continue
+            try:
+                missing = compile_formula(s.formula).names - ids
+            except QueryError:
+                continue  # die Formel selbst wird beim Auflösen der Definition gemeldet
+            if missing:
+                raise ValueError(f"Die Formel der Spalte {s.id} verweist auf unbekannte "
+                                 f"Spalten ({', '.join(sorted(missing))})")
         counted = {s.id for s in self.series if s.formula is None}
         for block in self.blocks:
             if isinstance(block, OersiBlock) and (wrong := set(block.counts) - counted):

@@ -320,3 +320,30 @@ def test_manual_blocks_alone_still_show_their_rows(world):
     # ein Schlüssel, der zu keiner Zeile gehört, fällt nicht still weg
     [lost] = [n["text"] for n in table.notes if n["code"] == "manual_unmatched"]
     assert "Mundo" in lost and "'Mathematik'" in lost
+
+
+def test_manual_cells_accept_the_name_written_in_the_definition(world):
+    # Zeilen stehen als Namen in der Definition; der Handeintrag darf denselben Namen
+    # oder den aufgelösten Wert nennen, unabhängig davon, ob ein Abfrage-Block gelingt
+    section = matrix()
+    section["blocks"][2]["cells"] = {M: {"gesamt": 200}, "Physik": {"gesamt": 9}}
+    [table] = build_report(run_template(world, template(section))).blocks
+    assert row(table, M).values[8] == 200 and row(table, P).values[8] == 9
+    assert not [n for n in table.notes if n["code"] == "manual_unmatched"]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), 10 ** 15, -1e300])
+def test_manual_numbers_must_be_plain_counts(bad):
+    section = matrix()
+    section["blocks"][2]["totals"] = {"gesamt": bad}
+    with pytest.raises(InvalidDefinition):
+        parse_spec("template", template(section))
+
+
+@pytest.mark.parametrize("series", [
+    [{"id": "max", "label": "X"}],
+    [{"id": "a", "label": "A"}, {"id": "z", "label": "Z", "formula": "gibtsnicht + 1"}],
+])
+def test_matrix_columns_are_checked_like_a_query_when_saving(series):
+    with pytest.raises(InvalidDefinition):
+        parse_spec("template", template(matrix(series=series)))
