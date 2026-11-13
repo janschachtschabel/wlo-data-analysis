@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     upstream_timeout: float = Field(default=90.0, gt=0)
     upstream_concurrency: int = Field(default=4, ge=1, le=32)
     runs_keep: int = Field(default=500, ge=1, le=100000)
+    oersi_url: str = "https://oersi.org/resources/api/search/oer_data/_search"
 
     @field_validator("admin_password")
     @classmethod

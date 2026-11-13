@@ -8,6 +8,7 @@ from .cache import TTLCache
 from .config import Settings
 from .edusharing.client import EduSharingClient
 from .edusharing.vocab import VocabStore
+from .external.oersi import OersiClient
 from .instances import InstanceRegistry
 from .store.db import Database
 from .store.definitions import DefinitionStore
@@ -49,6 +50,11 @@ class Services:
     @property
     def runner(self) -> Runner:
         return Runner(self.db, self, keep=self._settings.runs_keep)
+
+    @property
+    def oersi(self) -> OersiClient:
+        return OersiClient(self._http_client(), self.cache, self._settings.oersi_url,
+                           timeout=self._settings.upstream_timeout)
 
     def _http_client(self) -> httpx.AsyncClient:
         if self._http is None:

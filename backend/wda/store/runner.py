@@ -19,6 +19,7 @@ from ..edusharing.vocab import UnresolvedValue, VocabStore
 from ..engine.engine import run_query
 from ..engine.spec import Group, QuerySpec, Rows
 from ..errors import QueryError
+from ..external.oersi import OersiClient, notation
 from ..filters import FilterIn
 from .db import Database
 from .definitions import Definition, NotFound, fetch, new_id, now_iso
@@ -29,6 +30,7 @@ from .specs import (
     InvalidDefinition,
     MatrixSection,
     MetricSpec,
+    OersiBlock,
     QueryBlock,
     TemplateSpec,
     View,
@@ -41,6 +43,8 @@ log = logging.getLogger(__name__)
 class ServicesLike(Protocol):
     def client(self, instance_id: str) -> EduSharingClient: ...
     def vocab(self, instance_id: str) -> VocabStore: ...
+    @property
+    def oersi(self) -> OersiClient: ...
 
 
 @dataclass
@@ -50,6 +54,7 @@ class Planned:
     view: dict[str, Any]
     query: QuerySpec | None = None
     error: dict[str, Any] | None = None
+    external: dict[str, Any] | None = None  # Abruf außerhalb des Repositoriums
 
 
 def _error(kind: str, detail: str, **extra: Any) -> dict[str, Any]:
@@ -151,10 +156,18 @@ class Runner:
         rows = section.rows
         listed = [v for s in rows.sections for v in s.values]
         for block in section.blocks:
-            if not isinstance(block, QueryBlock):
-                continue  # Handeinträge stehen in der Definition, es gibt nichts abzurufen
             prefix = f"{section.id}/{block.id}"
             title = f"{section.title} – {block.label}"
+            if isinstance(block, OersiBlock):
+                wanted = {
+                    s.id: [n for v in s.values + s.extra
+                           if (n := notation(v if isinstance(v, str) else v.value))]
+                    for s in rows.sections}
+                plan.append(Planned(prefix + "/oersi", title, View().model_dump(mode="json"),
+                                    external={"kind": "oersi", "sections": wanted}))
+                continue
+            if not isinstance(block, QueryBlock):
+                continue  # Handeinträge stehen in der Definition, es gibt nichts abzurufen
             if instance is None:
                 plan.append(Planned(prefix + "/rows", title, View().model_dump(mode="json"),
                                     error=_error("invalid_query",
@@ -183,6 +196,16 @@ class Runner:
             "query": (planned.query.model_dump(mode="json", exclude={"refresh"})
                       if planned.query else None),
             "result": None, "error": planned.error}
+        if planned.external is not None and planned.error is None:
+            try:
+                out["result"] = await self._services.oersi.counts(
+                    planned.external["sections"], refresh=refresh)
+            except EduSharingError as exc:
+                out["error"] = _error(exc.kind, exc.message, upstream_status=exc.status)
+            except Exception:
+                log.exception("Unerwarteter Fehler beim Abruf von OERSI (%s)", planned.key)
+                out["error"] = _error("internal", "Unerwarteter Fehler bei dieser Abfrage.")
+            return out
         if planned.query is None:
             return out
         query = planned.query.model_copy(update={"refresh": refresh})

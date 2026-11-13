@@ -203,3 +203,51 @@ def test_stored_filters_and_subtotal_none(world):
 def test_invalid_matrix(change, match):
     with pytest.raises(InvalidDefinition, match=match):
         parse_spec("template", template(matrix(**change)))
+
+
+HFS = "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/"
+
+
+def oersi_matrix():
+    section = matrix()
+    section["rows"]["sections"][0]["extra"] = [
+        "Informatik", {"value": HFS + "n4", "literal": True},
+        {"value": HFS + "n42", "literal": True}]
+    section["series"] = SERIES + [{"id": "rund", "label": "OER gerundet",
+                                   "formula": "round(a, -2)"}]
+    section["blocks"] = [section["blocks"][0], {
+        "id": "oersi", "label": "OERSI", "source": "oersi",
+        "counts": {"gesamt": "total", "mit": "licensed",
+                   "a": ["CC_0", "PDM", "CC_BY", "CC_BY_SA"]}}]
+    return section
+
+
+def test_oersi_block_fills_totals_and_subject_groups(world):
+    run = run_template(world, template(oersi_matrix()))
+    assert run["status"] == "ok"
+    assert [r["key"] for r in run["results"]] == ["oer/sek1/rows", "oer/sek1/groups",
+                                                  "oer/oersi/oersi"]
+    body = world.oersi.bodies[0]
+    assert body["size"] == 0
+    assert list(body["aggs"]["sections"]["filters"]["filters"]) == ["mint"]  # geist: kein n…
+    [table] = build_report(run).blocks
+    # gesamt, a, mit, d = gesamt - mit, rund = round(a, -2)
+    assert row(table, "__total__").values[5:] == [900, 650, 880, 20, 700]
+    assert row(table, "mint").values[5:] == [100, 60, 60, 40, 100]
+    assert row(table, "geist").values[5:] == [None] * 5
+    assert row(table, M).values[5:] == [None] * 5
+    assert table.sources[1] == {"label": "OERSI", "kind": "external", "service": "OERSI",
+                                "fetched_at": table.sources[1]["fetched_at"]}
+    assert build_report(world.go(world.runner.get_run(run["id"]))) == build_report(run)
+
+
+def test_oersi_failure_leaves_the_repository_block(world):
+    import httpx
+    world.oersi.script = [httpx.Response(503, text="x")]
+    run = run_template(world, template(oersi_matrix()))
+    assert run["status"] == "partial"
+    assert run["results"][2]["error"]["kind"] == "unavailable"
+    [table] = build_report(run).blocks
+    assert row(table, "__total__").values[0] is not None
+    assert row(table, "__total__").values[5:] == [None] * 5
+    assert any(n["text"].startswith("OERSI: ") for n in table.notes)

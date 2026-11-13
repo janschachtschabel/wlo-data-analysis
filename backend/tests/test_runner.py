@@ -15,6 +15,7 @@ from wda.store.specs import InvalidDefinition
 
 from .esdata import DISC, EC, DataRepo, make_docs
 from .test_definitions import tile
+from .test_oersi import Oersi
 
 TAX, LVL, LIC = "ccm:taxonid", "ccm:educationalcontext", "ccm:commonlicense_key"
 M = DISC + "380"
@@ -30,6 +31,7 @@ INSTANCES = json.dumps([
 class World:
     def __init__(self, tmp_path, keep=500):
         self.a, self.b = DataRepo(), DataRepo(make_docs(150, seed=3))
+        self.oersi = Oersi()
         settings = Settings(admin_password="x", data_dir=tmp_path, instances=INSTANCES,
                             runs_keep=keep, cache_ttl=0)
         self.services = Services(settings, InstanceRegistry(INSTANCES),
@@ -39,6 +41,8 @@ class World:
 
     def handler(self, request):
         host = request.url.host
+        if host == "oersi.org":
+            return self.oersi.handler(request)
         if host == "kaputt.example":
             return httpx.Response(500, text="x")
         return (self.a if host == "a.example" else self.b).handler(request)

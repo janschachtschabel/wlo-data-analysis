@@ -157,6 +157,18 @@ class ManualBlock(_Model):
         default_factory=dict, max_length=2000)
 
 
+class OersiBlock(_Model):
+    """Zählungen direkt von OERSI. ``counts`` sagt je gezählter Spalte, was sie ist:
+    ``"total"``, ``"licensed"`` (Lizenz angegeben) oder eine Liste von Lizenzschlüsseln.
+    Zeilengruppen entstehen aus den Werten der Destatis-Systematik (``…/n42``)."""
+
+    id: Ident
+    label: Label
+    source: Literal["oersi"]
+    counts: dict[Ident, Literal["total", "licensed"] | list[
+        Annotated[StrictStr, Field(max_length=40)]]] = Field(min_length=1, max_length=MAX_SERIES)
+
+
 class MatrixSection(_Model):
     """Tabelle mit gegliederten Zeilen und einem Spaltenblock je Quelle."""
 
@@ -166,7 +178,8 @@ class MatrixSection(_Model):
     instance: InstanceId | None = None
     rows: MatrixRows
     series: list[Series] = Field(min_length=1, max_length=MAX_SERIES)
-    blocks: list[Annotated[QueryBlock | ManualBlock, Field(discriminator="source")]] = Field(
+    blocks: list[Annotated[QueryBlock | ManualBlock | OersiBlock,
+                           Field(discriminator="source")]] = Field(
         min_length=1, max_length=12)
 
     @model_validator(mode="after")

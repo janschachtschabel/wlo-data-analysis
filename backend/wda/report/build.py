@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..engine.engine import SCHEMA_VERSION
+from ..engine.formula import compile_formula
+from ..external.oersi import series_values
 from .model import Block, Column, Failure, Report, Row, Table, Text
 
 _PLACEHOLDER = re.compile(r"\{\{\s*([^{}\n]{1,300}?)\s*\}\}")
@@ -135,6 +137,19 @@ def _source(label: str, result: dict[str, Any]) -> dict[str, Any]:
             "filters": describe_filters(prov.get("filters") or [])}
 
 
+def _external_line(series: list[dict[str, Any]], counts: dict[str, Any],
+                   mapping: dict[str, Any]) -> list[Any]:
+    """Spalten eines externen Blocks: gezählte aus den Lizenzzahlen, berechnete über
+    dieselben Formeln wie bei Abfragen."""
+    values: dict[str, Any] = dict.fromkeys((s["id"] for s in series), None)
+    values.update(series_values(counts, {k: v for k, v in mapping.items() if k in values}))
+    formulas = {s["id"]: compile_formula(s["formula"]) for s in series if s.get("formula")}
+    for _ in formulas:  # Formeln dürfen aufeinander verweisen
+        for sid, formula in formulas.items():
+            values[sid] = formula.evaluate(values)
+    return [values[s["id"]] for s in series]
+
+
 def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
                  ) -> Table | Failure:
     """Setzt die Abfragen der Blöcke und die Handeinträge zu einer gegliederten Tabelle
@@ -183,6 +198,18 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
                 cells["row:" + key] = pick(values)
             sources.append({"label": block["label"], "kind": "manual",
                             "as_of": block.get("as_of"), "note": block.get("note")})
+            continue
+        if block["source"] == "oersi":
+            counts = usable(results.get(f"{sid}/{block['id']}/oersi"), block["label"])
+            if counts is None:
+                failed += 1
+                sources.append({"label": block["label"], "kind": "failed"})
+                continue
+            cells["__total__"] = _external_line(series, counts, block["counts"])
+            for key, part in (counts.get("sections") or {}).items():
+                cells["group:" + key] = _external_line(series, part, block["counts"])
+            sources.append({"label": block["label"], "kind": "external", "service": "OERSI",
+                            "fetched_at": counts.get("fetched_at")})
             continue
         detail = usable(results.get(f"{sid}/{block['id']}/rows"), block["label"])
         groups = usable(results.get(f"{sid}/{block['id']}/groups"), block["label"])
