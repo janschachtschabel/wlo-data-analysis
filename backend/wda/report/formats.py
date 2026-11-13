@@ -6,6 +6,8 @@ import csv
 import dataclasses
 import io
 import json
+import re
+import threading
 from html import escape
 from typing import Any
 
@@ -105,7 +107,7 @@ def to_csv(report: Report, delimiter: str = ";") -> bytes:
                 return ""
             text = repr(round(value, 6))
             return text.replace(".", ",") if decimal_comma else text
-        return value
+        return value if isinstance(value, int) else ""
 
     writer.writerow([_safe(report.title)])
     writer.writerow([_safe(_meta(report))])
@@ -146,7 +148,8 @@ def to_csv(report: Report, delimiter: str = ";") -> bytes:
 # ---- Markdown ------------------------------------------------------------------------
 
 def _md(text: Any) -> str:
-    out = str(text).replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ")
+    out = str(text).replace("\\", "\\\\").replace("|", "\\|")
+    out = re.sub(r"[\x00-\x1f\x7f\u0085\u2028\u2029]+", " ", out)
     for ch in "<>[]`*_":
         out = out.replace(ch, "\\" + ch)
     return out
@@ -283,6 +286,14 @@ class PdfUnavailable(Exception):
     """Dem System fehlen die Bibliotheken für den PDF-Satz (im Docker-Image sind sie da)."""
 
 
+class ReportTooLarge(Exception):
+    """Der Bericht ist zu groß für den PDF-Satz."""
+
+
+MAX_PDF_CELLS = 30_000  # darüber braucht der Satz Minuten und Gigabytes
+_PDF_LOCK = threading.Semaphore(1)  # ein PDF-Satz zur Zeit, er ist speicherhungrig
+
+
 def pdf_available() -> bool:
     try:
         import weasyprint  # noqa: F401
@@ -292,6 +303,9 @@ def pdf_available() -> bool:
 
 
 def to_pdf(report: Report) -> bytes:
+    cells = sum(len(t.rows) * (len(t.columns) + 1) for t in report.tables)
+    if cells > MAX_PDF_CELLS:
+        raise ReportTooLarge
     try:
         from weasyprint import HTML  # erst hier: der Import ist schwer
         from weasyprint.urls import URLFetcher, URLFetchingError
@@ -304,8 +318,9 @@ def to_pdf(report: Report) -> bytes:
         def fetch(self, url: str, *args: Any, **kwargs: Any) -> Any:
             raise URLFetchingError("Der Bericht lädt nichts nach.")
 
-    return HTML(string=to_html(report).decode("utf-8"),
-                url_fetcher=NoFetch(allowed_protocols=[])).write_pdf()
+    with _PDF_LOCK:
+        return HTML(string=to_html(report).decode("utf-8"),
+                    url_fetcher=NoFetch(allowed_protocols=[])).write_pdf()
 
 
 def render(report: Report, fmt: str) -> bytes:

@@ -14,7 +14,8 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from ..report.build import build_report
-from ..report.formats import FORMATS, PdfUnavailable, render
+from ..report.formats import FORMATS, MAX_PDF_CELLS, PdfUnavailable, ReportTooLarge, render
+from ..store.runner import DamagedRun
 
 router = APIRouter()
 
@@ -33,9 +34,18 @@ async def export_run(
     download: bool = True,
 ) -> Response:
     run = await request.app.state.services.runner.get_run(run_id)
-    report = build_report(run)
     try:
+        report = build_report(run)
         body = await asyncio.to_thread(render, report, format)  # PDF-Satz braucht Rechenzeit
+    except ReportTooLarge:
+        raise HTTPException(
+            413, f"Der Bericht ist für den PDF-Export zu groß (mehr als "
+                 f"{MAX_PDF_CELLS} Tabellenzellen). HTML und CSV gehen in jeder "
+                 "Größe.") from None
+    except (KeyError, TypeError, ValueError, IndexError, AttributeError, OverflowError):
+        raise DamagedRun(
+            "Der gespeicherte Lauf ist beschädigt oder hat ein unerwartetes Format und "
+            "lässt sich nicht darstellen. Bitte die Definition neu ausführen.") from None
     except PdfUnavailable:
         raise HTTPException(
             503, "Der PDF-Export braucht die Bibliothek Pango, die auf diesem System fehlt. "

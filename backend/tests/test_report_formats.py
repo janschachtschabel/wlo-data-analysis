@@ -7,6 +7,8 @@ import pytest
 from wda.report.build import build_report
 from wda.report.charts import chart_for
 from wda.report.formats import (
+    MAX_PDF_CELLS,
+    ReportTooLarge,
     pdf_available,
     render,
     to_csv,
@@ -159,7 +161,50 @@ def test_pdf_renderer_never_fetches(monkeypatch):
     monkeypatch.setattr(formats, "to_html", lambda report: real(report).replace(
         b"</body>", b'<img src="https://example.org/x.png"><img src="file:///etc/passwd">'
                     b'<link rel="stylesheet" href="https://example.org/x.css"></body>'))
-    assert to_pdf(sample()).startswith(b"%PDF")  # die Zugriffe werden abgelehnt, kein Abruf
+    opened = []
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda *a, **k: opened.append(a) or (_ for _ in ()).throw(OSError()))
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open",
+                        lambda self, *a, **k: opened.append(a) or (_ for _ in ()).throw(
+                            OSError()))
+    assert to_pdf(sample()).startswith(b"%PDF")
+    assert opened == []  # abgelehnt, bevor irgendetwas geöffnet wird
+
+
+def test_pdf_refuses_reports_that_are_too_large():
+    report = sample()
+    table = report.tables[0]
+    table.rows = [Row(f"r{n}", f"R{n}", "value", [1] * len(table.columns))
+                  for n in range(MAX_PDF_CELLS // len(table.columns) + 1)]
+    with pytest.raises(ReportTooLarge):
+        to_pdf(report)
+
+
+def test_list_items_may_continue_on_the_next_line():
+    html = markdown_to_html(
+        "Vorweg\n\n- erster Punkt, der\n  umbricht\n- zweiter\n  auch\n\nDanach")
+    assert html.count("<ul>") == 1 and html.count("<li>") == 2
+    assert "<li>erster Punkt, der umbricht</li>" in html and "<p>Danach</p>" in html
+
+
+def test_builtin_method_text_is_one_list():
+    import json as _json
+    from importlib import resources
+    data = _json.loads(resources.files("wda.builtin").joinpath(
+        "oer-statistik.json").read_text("utf-8"))
+    [method] = [s["markdown"] for d in data["definitions"]
+                for s in d["spec"].get("sections", []) if s.get("id") == "methodik"]
+    html = markdown_to_html(method)
+    assert html.count("<ul>") == 1 and "<p>" not in html
+    assert html.count("<li>") == method.count("\n- ")
+
+
+def test_markdown_table_survives_control_characters():
+    report = sample()
+    report.tables[0].rows[0].label = "A\rB\u2028C"
+    text = to_markdown(report).decode("utf-8")
+    assert "A B C" in text and "\r" not in text and "\u2028" not in text
 
 
 def test_real_run_in_all_formats(tmp_path):

@@ -13,12 +13,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from pydantic import ValidationError
+
 from ..edusharing.client import EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore
 from ..engine.engine import run_query
 from ..engine.spec import Group, QuerySpec, Rows
-from ..errors import QueryError
+from ..errors import QueryError, describe_validation
 from ..external.oersi import OersiClient, notation
 from ..filters import FilterIn
 from .db import Database
@@ -63,6 +65,10 @@ def _error(kind: str, detail: str, **extra: Any) -> dict[str, Any]:
 
 def _dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
+
+
+class DamagedRun(Exception):
+    """Ein gespeicherter Lauf lässt sich nicht lesen oder darstellen."""
 
 
 class Runner:
@@ -174,17 +180,23 @@ class Runner:
                                                  "Für diese Tabelle ist keine Instanz "
                                                  "angegeben (am Template oder beim Lauf).")))
                 continue
-            detail = QuerySpec(
-                instance=instance, filters=block.filters, series=section.series,
-                rows=Rows(property=rows.property, include=listed or None, sort="given",
-                          missing=rows.missing) if listed or rows.missing else None)
-            plan.append(build(prefix + "/rows", title, detail, filter_ids, View()))
-            if rows.subtotal == "distinct":
+            try:
+                detail = QuerySpec(
+                    instance=instance, filters=block.filters, series=section.series,
+                    rows=Rows(property=rows.property, include=listed or None, sort="given",
+                              missing=rows.missing) if listed or rows.missing else None)
                 groups = QuerySpec(
                     instance=instance, filters=block.filters, series=section.series,
                     rows=Rows(property=rows.property, sort="given", groups=[
                         Group(id=s.id, label=s.label, values=s.values + s.extra)
-                        for s in rows.sections]))
+                        for s in rows.sections])) if rows.subtotal == "distinct" else None
+            except ValidationError as exc:  # z. B. mehr Werte, als eine Abfrage nimmt
+                plan.append(Planned(prefix + "/rows", title, View().model_dump(mode="json"),
+                                    error=_error("invalid_query",
+                                                 describe_validation(exc.errors()))))
+                continue
+            plan.append(build(prefix + "/rows", title, detail, filter_ids, View()))
+            if groups is not None:
                 plan.append(build(prefix + "/groups", title, groups, filter_ids, View()))
         return plan
 
@@ -320,6 +332,14 @@ class Runner:
             row = con.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
             if row is None:
                 raise NotFound("Den Lauf gibt es nicht.")
+            try:
+                return load(con, row)
+            except (ValueError, KeyError, TypeError):
+                raise DamagedRun(
+                    "Der gespeicherte Lauf ist beschädigt und lässt sich nicht lesen. "
+                    "Bitte die Definition neu ausführen.") from None
+
+        def load(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
             run = self._head(row)
             del run["seq"]
             run.update(spec=json.loads(row["spec"]), saved=True, results=[])

@@ -163,7 +163,10 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
   (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen) oder ein Handeintrag (`manual`).
 - Texte dürfen Platzhalter tragen: `{{run.date}}`, `{{run.instance}}`,
   `{{abschnitt.total.spalte}}`, `{{abschnitt.cell.zeile.spalte}}` (bei einer Matrix heißt
-  die Spalte `block.spalte`).
+  die Spalte `block.spalte`). Auflösbar sind nur Spalten, die die Tabelle zeigt.
+- In Handeinträgen (`manual`) ist der Schlüssel einer Zelle der Wert der Zeile (z. B. die
+  URI des Fachs), nicht ihr Name; berechnete Spalten entstehen auch dort aus den Formeln,
+  wenn sie nicht eingetragen sind. PDF gibt es bis 30.000 Tabellenzellen.
 - `GET /api/builtin` zeigt mitgelieferte Definitionen, `POST /api/builtin/oer-statistik/install`
   legt die **OER-Statistik** an: Fächer in zehn Fächergruppen × Bildungsbereiche × Quelle ×
   Lizenzkategorien A bis D. Die Zuordnungen (Fach → Fächergruppe, Bildungsstufe → Bereich,

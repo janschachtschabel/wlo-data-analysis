@@ -44,7 +44,7 @@ Table {key, title, header_groups: [{label, span}]?, columns: [{id, label, derive
 - HTML: alles aus Definition und Repositorium wird maskiert; kein Skript, keine externen Ressourcen; Markdown-Text wird mit einer kleinen eigenen Umsetzung (Überschriften, Absätze, Listen, fett, kursiv) übertragen, rohes HTML darin bleibt Text.
 - PDF entsteht aus demselben HTML; der Renderer darf keine Netz- oder Dateizugriffe machen (`url_fetcher`, der alles ablehnt).
 - Externe Quellen: nur Zählungen (`size: 0`), fester Host je Quelle, Zeitlimit, Cache wie beim Repositorium; Ausfall einer externen Quelle lässt die übrigen Blöcke stehen (Block mit Fehler, Lauf `partial`).
-- Platzhalter im Text: `{{abschnitt.total.spalte}}`, `{{abschnitt.block.total.spalte}}`, `{{abschnitt.cell.zeile.spalte}}`, `{{run.date}}`, `{{run.instance}}`. Unbekannte Platzhalter bleiben sichtbar stehen und erzeugen einen Hinweis; nichts wird ausgewertet.
+- Platzhalter im Text: `{{abschnitt.total.spalte}}`, `{{abschnitt.total.block.spalte}}`, `{{abschnitt.cell.zeile.block.spalte}}` (so umgesetzt; nur für Spalten, die die Tabelle zeigt), `{{run.date}}`, `{{run.instance}}`. Unbekannte Platzhalter bleiben sichtbar stehen und erzeugen einen Hinweis; nichts wird ausgewertet.
 - Die Zuordnungen des OER-Templates (Bildungsstufen → Bereich, Lizenz → Kategorie, Fach → Fächergruppe) sind Daten der Definition, kein Code.
 
 ## OER-Template (mitgeliefert, `builtin/oer-statistik.json`)

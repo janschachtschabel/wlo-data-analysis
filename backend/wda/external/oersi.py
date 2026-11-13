@@ -33,7 +33,9 @@ def license_key(url: str) -> str:
         return "PDM"
     if match := _CC.search(lowered):
         parts = match.group(1).split("-")
-        if parts[0] == "by" and set(parts[1:]) <= {"sa", "nc", "nd"}:
+        rest = parts[1:]
+        if (parts[0] == "by" and set(rest) <= {"sa", "nc", "nd"} and len(set(rest)) == len(rest)
+                and not {"sa", "nd"} <= set(rest)):
             order = [p for p in ("nc", "sa", "nd") if p in parts[1:]]
             return "_".join(["CC", "BY", *order]).upper()
     return "CUSTOM"
@@ -52,7 +54,8 @@ def _by_license(buckets: Any) -> dict[str, int]:
         raise ValueError
     for bucket in buckets:
         key, count = bucket["key"], bucket["doc_count"]
-        if not isinstance(key, str) or isinstance(count, bool) or not isinstance(count, int):
+        if (not isinstance(key, str) or isinstance(count, bool) or not isinstance(count, int)
+                or count < 0):
             raise ValueError
         name = license_key(key)
         out[name] = out.get(name, 0) + count
@@ -127,7 +130,7 @@ class OersiClient:
             for name in sections:
                 bucket = aggs["sections"]["buckets"][name]
                 count = bucket["doc_count"]
-                if isinstance(count, bool) or not isinstance(count, int):
+                if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                     raise bad
                 if bucket["license"].get("sum_other_doc_count"):
                     raise bad
@@ -136,12 +139,12 @@ class OersiClient:
             if sections:
                 bucket = aggs["no_subject"]
                 count = bucket["doc_count"]
-                if (isinstance(count, bool) or not isinstance(count, int)
+                if (isinstance(count, bool) or not isinstance(count, int) or count < 0
                         or bucket["license"].get("sum_other_doc_count")):
                     raise bad
                 out["missing"] = {
                     "total": count, "by_license": _by_license(bucket["license"]["buckets"])}
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, AttributeError):
             raise bad from None
         return out
 

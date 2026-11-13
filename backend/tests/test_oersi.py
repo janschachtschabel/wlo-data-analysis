@@ -22,6 +22,7 @@ URL = "https://oersi.example/resources/api/search/oer_data/_search"
     ("https://creativecommons.org/publicdomain/mark/1.0/", "PDM"),
     ("https://www.gnu.org/licenses/gpl-3.0", "CUSTOM"),
     ("https://creativecommons.org/licenses/sampling/1.0/", "CUSTOM"),
+    ("https://creativecommons.org/licenses/by-nc-sa-nd/4.0/", "CUSTOM"),  # gibt es nicht
     ("https://example.org/creativecommons.org/licenses/by/", "CC_BY"),
     (NO_LICENSE, NO_LICENSE), ("", NO_LICENSE),
 ])
@@ -121,6 +122,11 @@ def test_cache_and_refresh():
         "sum_other_doc_count": 7, "buckets": []}}}), "bad_response"),
     (httpx.Response(200, json={"hits": {"total": {"value": 5}}, "aggregations": {"license": {
         "buckets": [{"key": 5, "doc_count": 1}]}}}), "bad_response"),
+    (httpx.Response(200, json={"hits": {"total": {"value": 5}}, "aggregations": {"license": {
+        "buckets": [{"key": "https://creativecommons.org/licenses/by/4.0/",
+                     "doc_count": -3}]}}}), "bad_response"),
+    (httpx.Response(200, json={"hits": {"total": {"value": 5}}, "aggregations": {
+        "license": []}}), "bad_response"),
     (httpx.ReadTimeout("langsam"), "timeout"),
     (httpx.ConnectError("geheim:passwort@host"), "unavailable"),
 ])

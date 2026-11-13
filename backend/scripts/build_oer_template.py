@@ -117,7 +117,8 @@ METHOD = """\
   Materialien mit Lizenzangabe.
 - „OER gerundet“ ist A, auf Hunderter gerundet.
 - OERSI wird direkt bei oersi.org abgefragt; dort gibt es keine Bildungsstufe, die Spalten
-  stehen deshalb für den gesamten Bestand. Zeilen gibt es dort nur für die Fächergruppen.
+  stehen deshalb für den gesamten Bestand. Zeilen gibt es dort nur für die Fächergruppen
+  und für Einträge ohne Fach.
 - Mundo und Kita.bayern haben keine Schnittstelle in diesem Werkzeug; ihre Zahlen sind
   Handeinträge in der Definition des Templates.
 """

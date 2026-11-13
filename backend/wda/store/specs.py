@@ -108,6 +108,9 @@ class DataSection(_Sourced):
 Cell = int | float | None
 
 
+MAX_MATRIX_ROWS = 2000  # so viele Werte nimmt die Engine als Zeilenauswahl
+
+
 class RowSection(_Model):
     """Zeilengruppe einer Matrix. ``values`` erscheinen als eigene Zeilen, ``extra`` zählt nur
     in der Zwischensumme mit."""
@@ -136,6 +139,8 @@ class MatrixRows(_Model):
     @model_validator(mode="after")
     def _unique(self) -> MatrixRows:
         _unique_ids([s.id for s in self.sections], "Zeilengruppen")
+        if sum(len(s.values) for s in self.sections) > MAX_MATRIX_ROWS:
+            raise ValueError(f"höchstens {MAX_MATRIX_ROWS} Einzelzeilen in einer Tabelle")
         return self
 
 
@@ -195,6 +200,12 @@ class MatrixSection(_Model):
         unknown = set(self.show or []) - {s.id for s in self.series}
         if unknown or len(set(self.show or [])) != len(self.show or []):
             raise ValueError("show nennt unbekannte oder doppelte Spalten")
+        counted = {s.id for s in self.series if s.formula is None}
+        for block in self.blocks:
+            if isinstance(block, OersiBlock) and (wrong := set(block.counts) - counted):
+                raise ValueError(
+                    f"Block {block.id}: counts nennt Spalten, die es nicht gibt oder die "
+                    f"berechnet sind ({', '.join(sorted(wrong))})")
         return self
 
 

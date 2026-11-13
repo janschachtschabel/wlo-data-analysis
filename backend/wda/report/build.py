@@ -8,6 +8,7 @@ from typing import Any
 
 from ..engine.engine import SCHEMA_VERSION
 from ..engine.formula import compile_formula
+from ..errors import QueryError
 from ..external.oersi import series_values
 from .model import Block, Column, Failure, Report, Row, Table, Text
 
@@ -62,7 +63,7 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
     rows.append(Row("__total__", "Gesamt", "total", [c.get("total") for c in result["columns"]]))
     prov = result.get("provenance", {})
     inst = prov.get("instance") or {}
-    return Table(
+    return _checked(Table(
         key, title, columns, rows,
         view=view or {"type": "table", "options": {}},
         notes=list(prov.get("notes") or []),
@@ -73,7 +74,22 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
             "oldest_fetched_at": prov.get("oldest_fetched_at"),
             "queries": prov.get("queries"),
             "filters": describe_filters(prov.get("filters") or []),
-        }])
+        }]))
+
+
+def _checked(table: Table) -> Table:
+    """Ein Lauf aus der Datenbank kann beschädigt sein: lieber ein Fehlerblock als eine
+    Tabelle, an der ein Ausgabeformat scheitert."""
+    for row in table.rows:
+        if len(row.values) != len(table.columns) or not all(
+                v is None or (isinstance(v, int | float) and not isinstance(v, bool)
+                              and v == v and abs(v) < 1e15) for v in row.values):
+            raise ValueError("Zeile passt nicht zu den Spalten")
+        if not isinstance(row.label, str) or not isinstance(row.key, str):
+            raise ValueError("Zeile ohne Namen")
+    if not isinstance(table.view, dict):
+        raise ValueError("Ansicht")
+    return table
 
 
 def _lookup(tables: dict[str, Table], run: dict[str, Any], path: str) -> str | None:
@@ -166,6 +182,7 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
     per_block: list[dict[str, list[Any]]] = []
     child_keys: dict[str, list[tuple[str, str]]] = {s["id"]: [] for s in sections}
     failed = 0
+    formulas = {s["id"]: compile_formula(s["formula"]) for s in series if s.get("formula")}
 
     def usable(item: dict[str, Any] | None, label: str) -> dict[str, Any] | None:
         if item is None:
@@ -191,7 +208,12 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
         per_block.append(cells)
         if block["source"] == "manual":
             def pick(values: dict[str, Any] | None) -> list[Any]:
-                return [(values or {}).get(s["id"]) for s in series]
+                given = {s["id"]: (values or {}).get(s["id"]) for s in series}
+                for _ in formulas:  # berechnete Spalten, wo nichts eingetragen ist
+                    for fid, formula in formulas.items():
+                        if (values or {}).get(fid) is None:
+                            given[fid] = formula.evaluate(given)
+                return [given[s["id"]] for s in series]
             cells["__total__"] = pick(block.get("totals"))
             for key, values in (block.get("sections") or {}).items():
                 cells["group:" + key] = pick(values)
@@ -267,6 +289,28 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
     def line(key: str) -> list[Any]:
         return [v for cells in per_block for v in cells.get(key, [None] * width)]
 
+    if not any(child_keys.values()):
+        # kein Abfrage-Block hat die Zeilen aufgelöst: Werte der Definition wörtlich nehmen
+        fallback = section["rows"].get("labels") or {}
+        for sec in sections:
+            for value in sec.get("values", []):
+                key = value if isinstance(value, str) else str(value.get("value"))
+                if (key, fallback.get(key, key)) not in child_keys[sec["id"]]:
+                    child_keys[sec["id"]].append((key, fallback.get(key, key)))
+    known = {key for keys in child_keys.values() for key, _ in keys}
+    for block in section["blocks"]:
+        if block["source"] != "manual":
+            continue
+        lost = sorted(k for k in (block.get("cells") or {}) if k not in known)
+        lost += sorted(f"Gruppe {k}" for k in (block.get("sections") or {})
+                       if k not in child_keys)
+        if lost:
+            shown = ", ".join(repr(k) for k in lost[:5]) + (" …" if len(lost) > 5 else "")
+            notes.append({"code": "manual_unmatched",
+                          "text": f"{block['label']}: {len(lost)} Handeinträge gehören zu "
+                                  f"keiner Zeile der Tabelle und fehlen ({shown}). Der "
+                                  "Schlüssel muss der Wert der Zeile sein, nicht ihr Name."})
+
     rows: list[Row] = []
     for sec in sections:
         rows.append(Row(sec["id"], sec["label"], "group", line("group:" + sec["id"]), level=0))
@@ -288,17 +332,33 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
                   "text": "Ein Material mit mehreren Werten zählt in jeder zutreffenden Zeile. "
                           "Zwischensummen und die Gesamtzeile sind eigene Zählungen (jedes "
                           "Material einmal), keine Summen der Zeilen."})
-    return Table(sid, section["title"], columns, rows, header_groups=header_groups,
-                 notes=notes, sources=sources)
+    return _checked(Table(sid, section["title"], columns, rows, header_groups=header_groups,
+                          notes=notes, sources=sources))
+
+
+def _damaged(key: str, title: Any) -> Failure:
+    return Failure(key, str(title or key),
+                   "Dieses gespeicherte Ergebnis ist beschädigt oder hat ein unerwartetes "
+                   "Format. Den Lauf bitte neu ausführen.", "damaged")
 
 
 def build_report(run: dict[str, Any]) -> Report:
     results = {item["key"]: item for item in run.get("results", [])}
-    built: dict[str, Table | Failure] = {
-        key: _block_for(item) for key, item in results.items() if "/" not in key}
+    damaged = (KeyError, TypeError, ValueError, IndexError, AttributeError, QueryError)
+    built: dict[str, Table | Failure] = {}
+    for key, item in results.items():
+        if "/" in key:
+            continue
+        try:
+            built[key] = _block_for(item)
+        except damaged:
+            built[key] = _damaged(key, item.get("title") if isinstance(item, dict) else None)
     for section in (run.get("spec") or {}).get("sections", []):
         if section.get("type") == "matrix":
-            built[section["id"]] = build_matrix(section, results)
+            try:
+                built[section["id"]] = build_matrix(section, results)
+            except damaged:
+                built[section["id"]] = _damaged(section["id"], section.get("title"))
     tables = {key: b for key, b in built.items() if isinstance(b, Table)}
     notes: list[dict[str, str]] = []
     blocks: list[Block] = []

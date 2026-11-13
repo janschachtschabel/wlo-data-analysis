@@ -67,3 +67,32 @@ def test_export_errors_and_login(api):
     assert r.status_code == 422 and r.json()["kind"] == "invalid_request"
     api.cookies.clear()
     assert api.get(f"/api/runs/{run['id']}/export").status_code == 401
+
+
+@pytest.mark.parametrize("damage", [
+    "UPDATE run_results SET result='{kaputt'",
+    "UPDATE run_results SET result='{\"schema_version\": 1}'",
+    "UPDATE run_results SET result='[1, 2]'",
+    "UPDATE run_results SET query='null'",
+    "UPDATE run_results SET error='\"Text\"', result=NULL",
+    "UPDATE run_results SET result=json_set(result, '$.rows[0].values', json('[]'))",
+    "UPDATE run_results SET result=json_set(result, '$.rows[0].values[0]', '=1+1')",
+    "UPDATE runs SET spec='{kaputt'",
+])
+def test_damaged_runs_give_a_clear_answer_never_500(api, settings, damage):
+    import sqlite3
+    m = make(api, "metric", "M", {"query": QUERY})
+    run = api.post(f"/api/definitions/{m['id']}/run").json()
+    path = settings.data_dir / "store.sqlite3"
+    con = sqlite3.connect(path)
+    con.execute(damage)
+    con.commit()
+    con.close()
+    for url in [f"/api/runs/{run['id']}"] + [
+            f"/api/runs/{run['id']}/export?format={f}" for f in ("json", "csv", "md", "html")]:
+        r = api.get(url)
+        assert r.status_code in (200, 422), (url, r.status_code, r.text)
+        if r.status_code == 422:
+            assert r.json()["kind"] == "damaged_run"
+        elif "export" in url:
+            assert b"=1+1" not in r.content or b"'=1+1" in r.content

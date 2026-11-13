@@ -282,3 +282,41 @@ def test_show_hides_helper_columns_but_placeholders_still_work(world):
     for bad in (["gibtesnicht"], ["a", "a"], []):
         with pytest.raises(InvalidDefinition):
             parse_spec("template", template(matrix(show=bad)))
+
+
+def test_too_many_listed_rows_are_refused_when_saving():
+    # die Engine nimmt höchstens 2000 Zeilenwerte; sonst scheiterte erst der Lauf
+    section = matrix()
+    section["rows"]["sections"] = [
+        {"id": f"g{n}", "label": f"G{n}",
+         "values": [{"value": f"v{n}-{i}", "literal": True} for i in range(300)]}
+        for n in range(8)]
+    with pytest.raises(InvalidDefinition, match="2000"):
+        parse_spec("template", template(section))
+
+
+def test_oersi_counts_must_name_real_columns():
+    section = matrix()
+    section["blocks"].append({"id": "oersi", "label": "OERSI", "source": "oersi",
+                              "counts": {"gibtsnicht": "total"}})
+    with pytest.raises(InvalidDefinition, match="gibtsnicht"):
+        parse_spec("template", template(section))
+
+
+def test_manual_blocks_alone_still_show_their_rows(world):
+    section = matrix()
+    section["rows"]["sections"] = [
+        {"id": "mint", "label": "MINT", "values": [{"value": M, "literal": True}, "Physik"]}]
+    section["rows"]["labels"] = {M: "Mathematik"}
+    section["blocks"] = [{
+        "id": "mundo", "label": "Mundo", "source": "manual",
+        "totals": {"gesamt": 1000, "mit": 900},
+        "cells": {M: {"gesamt": 200, "a": 50}, "Mathematik": {"gesamt": 1}}}]
+    run = run_template(world, template(section))
+    [table] = build_report(run).blocks
+    assert row(table, M).label == "Mathematik" and row(table, M).values == [200, 50, None, None]
+    # Formeln gelten auch für Handeinträge: D = gesamt - mit
+    assert row(table, "__total__").values == [1000, None, 900, 100]
+    # ein Schlüssel, der zu keiner Zeile gehört, fällt nicht still weg
+    [lost] = [n["text"] for n in table.notes if n["code"] == "manual_unmatched"]
+    assert "Mundo" in lost and "'Mathematik'" in lost
