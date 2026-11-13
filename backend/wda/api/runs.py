@@ -5,7 +5,7 @@ Ein Lauf enthält nur Ergebnisse der Abfrage-Engine (Zählungen), nie Datensätz
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
@@ -54,11 +54,24 @@ async def all_runs(
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     before: Annotated[int | None, Query(ge=1)] = None,
     definition: Annotated[str | None, Query(max_length=64)] = None,
+    status: Literal["ok", "partial", "failed"] | None = None,
+    kind: Literal["metric", "dashboard", "template"] | None = None,
 ) -> list[dict[str, Any]]:
     """``definition=<id>`` nur Läufe dieser Definition (auch einer gelöschten nicht mehr:
     deren Läufe liefert ``definition=none``). Weniger Einträge als ``limit`` heißt: Ende."""
     wanted = "" if definition == "none" else definition
-    return await _runner(request).runs(wanted, limit=limit, before=before)
+    return await _runner(request).runs(
+        wanted, limit=limit, before=before, status=status, kind=kind)
+
+
+@router.delete("/runs")
+async def delete_runs(
+    request: Request, definition: Annotated[str, Query(min_length=1, max_length=64)],
+) -> dict[str, int]:
+    """Löscht alle Läufe einer Definition (``none``: die Läufe gelöschter Definitionen).
+    Ohne ``definition`` wird nichts gelöscht."""
+    wanted = "" if definition == "none" else definition
+    return {"deleted": await _runner(request).delete_runs(wanted)}
 
 
 @router.get("/runs/{run_id}")

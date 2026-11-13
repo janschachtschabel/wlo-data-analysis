@@ -139,12 +139,12 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
 | Route | Zweck |
 |---|---|
 | `GET/POST /api/groups`, `PUT/DELETE /api/groups/{id}` | Gruppen (Ordner) |
-| `GET/POST /api/definitions` (`kind`, `group`, `q`) | auflisten, anlegen |
+| `GET/POST /api/definitions` (`kind`, `group`, `q`) | auflisten (mit `last_run`), anlegen |
 | `GET/PUT/DELETE /api/definitions/{id}` | lesen (mit Verwendern), ändern (mit `version`), löschen |
 | `POST /api/definitions/{id}/duplicate` | Kopie anlegen |
 | `POST /api/definitions/export`, `POST /api/definitions/import?mode=skip\|replace\|copy` | Definitionen als JSON aus- und einführen |
 | `POST /api/definitions/{id}/run` (`refresh`, `instance`, `save`) | alle Abfragen ausführen, Ergebnis speichern |
-| `GET /api/definitions/{id}/runs`, `GET /api/runs` (`definition=<id>` oder `none`), `GET/DELETE /api/runs/{id}` | gespeicherte Läufe |
+| `GET /api/definitions/{id}/runs`, `GET /api/runs` (`definition=<id>` oder `none`, `status`, `kind`), `GET/DELETE /api/runs/{id}`, `DELETE /api/runs?definition=<id>` (alle Läufe einer Definition) | gespeicherte Läufe |
 
 - Ein Lauf speichert die Ergebnis-Tabellen samt Abfrage, Instanz und Zeitpunkt, also nur
   Zählungen. Er bleibt lesbar, auch wenn die Definition später geändert oder gelöscht wird.
@@ -172,7 +172,7 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
   (Texte zusätzlich als maskiertes HTML), `POST /api/preview` führt eine ungespeicherte
   Definition aus und legt nichts ab, `POST /api/check` prüft eine Definition und nennt alle
   Fehler mit ihrem Ort. Ein ungespeicherter Lauf hat `id: null`.
-- `GET /api/builtin` zeigt mitgelieferte Definitionen, `POST /api/builtin/oer-statistik/install`
+- `GET /api/builtin` zeigt mitgelieferte Definitionen (`changed`: die installierte Fassung weicht ab; `install?mode=replace` setzt sie zurück), `POST /api/builtin/oer-statistik/install`
   legt die **OER-Statistik** an: Fächer in zehn Fächergruppen × Bildungsbereiche × Quelle ×
   Lizenzkategorien A bis D. Die Zuordnungen (Fach → Fächergruppe, Bildungsstufe → Bereich,
   Lizenz → Kategorie) stehen in der Definition und sind dort änderbar; erzeugt wird die

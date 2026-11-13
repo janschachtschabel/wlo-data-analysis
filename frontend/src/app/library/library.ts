@@ -11,7 +11,7 @@ const KINDS: { id: Kind; label: string; plural: string }[] = [
   { id: 'dashboard', label: 'Dashboard', plural: 'Dashboards' }, { id: 'template', label: 'Template', plural: 'Templates' },
   { id: 'metric', label: 'Kennzahl', plural: 'Kennzahlen' }, { id: 'filter', label: 'Filter', plural: 'Filter' },
 ];
-interface Builtin { id: string; title: string; description?: string; definitions: { id: string; name: string; installed: boolean }[] }
+interface Builtin { id: string; title: string; description?: string; definitions: { id: string; name: string; installed: boolean; changed?: boolean }[] }
 
 /** Alles Gespeicherte: Gruppen, Suche, Öffnen, Duplizieren, Verschieben, Löschen, Import/Export. */
 @Component({
@@ -49,8 +49,11 @@ interface Builtin { id: string; title: string; description?: string; definitions
           @for (bundle of builtin(); track bundle.id) {
             <p><strong>{{ bundle.title }}</strong><br />
               @if (bundle.description) { <span class="muted small">{{ bundle.description }}</span><br /> }
-              @if (installed(bundle)) { <span class="muted">installiert</span> }
-              @else { <button type="button" (click)="install(bundle)">Installieren</button> }</p>
+              @if (!installed(bundle)) { <button type="button" (click)="install(bundle)">Installieren</button> }
+              @else if (changed(bundle)) {
+                <span class="muted">installiert, weicht von der Vorlage ab</span><br />
+                <button type="button" (click)="reset(bundle)">Auf die Vorlage zurücksetzen</button>
+              } @else { <span class="muted">installiert</span> }</p>
           }
         }
       </aside>
@@ -69,7 +72,11 @@ interface Builtin { id: string; title: string; description?: string; definitions
                           @else { <a href="" (click)="open(item, $event)">{{ item.name }}</a> }
                           @if (item.description) { <div class="muted small">{{ item.description }}</div> }
                         </td>
-                        <td class="muted small">geändert {{ time(item.updated_at) }}</td>
+                        <td class="muted small">geändert {{ time(item.updated_at) }}
+                          @if (item.last_run; as last) {
+                            <div><a [routerLink]="['/lauf', last.id]">letzter Lauf {{ time(last.started_at) }}</a>@if (last.status !== 'ok') { ({{ last.status === 'partial' ? 'teilweise' : 'gescheitert' }}) }</div>
+                          }
+                        </td>
                         <td>
                           <select [attr.aria-label]="'Gruppe von ' + item.name" [ngModel]="item.group_id ?? ''" (ngModelChange)="move(item, $event)">
                             <option value="">ohne Gruppe</option>
@@ -163,6 +170,11 @@ export class Library {
   }
 
   protected installed(bundle: Builtin): boolean { return bundle.definitions.every((d) => d.installed); }
+  protected changed(bundle: Builtin): boolean { return bundle.definitions.some((d) => d.changed); }
+  protected reset(bundle: Builtin): Promise<void> | void {
+    if (!confirm(`„${bundle.title}“ auf die mitgelieferte Fassung zurücksetzen? Eigene Änderungen daran gehen verloren.`)) return;
+    return this.act(async () => { await this.api.post(`/builtin/${encodeURIComponent(bundle.id)}/install?mode=replace`); return `„${bundle.title}“ zurückgesetzt.`; }, 'Zurücksetzen nicht möglich.');
+  }
 
   protected async open(item: Definition, event: Event): Promise<void> {
     event.preventDefault();

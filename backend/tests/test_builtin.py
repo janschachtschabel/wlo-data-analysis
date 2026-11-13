@@ -81,7 +81,8 @@ def test_list_install_run_and_export(api):
     listed = api.get("/api/builtin").json()
     assert [b["id"] for b in listed] == ["oer-statistik"]
     assert listed[0]["definitions"] == [{"id": "builtin-oer-statistik", "kind": "template",
-                                         "name": "OER-Statistik", "installed": False}]
+                                         "name": "OER-Statistik", "installed": False,
+                                         "changed": False}]
     r = api.post("/api/builtin/oer-statistik/install")
     assert r.status_code == 200 and r.json()["definitions"][0]["action"] == "created"
     assert api.get("/api/builtin").json()[0]["definitions"][0]["installed"] is True

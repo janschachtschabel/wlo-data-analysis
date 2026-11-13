@@ -68,6 +68,22 @@ def _dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _slim(result: dict[str, Any], query: Any) -> dict[str, Any]:
+    """Die Abfrage steht schon am Ergebnis-Eintrag; in ``provenance`` wird sie nicht noch
+    einmal gespeichert."""
+    provenance = result.get("provenance")
+    if isinstance(provenance, dict) and "spec" in provenance and provenance["spec"] == query:
+        return {**result, "provenance": {k: v for k, v in provenance.items() if k != "spec"}}
+    return result
+
+
+def _restore(result: dict[str, Any] | None, query: Any) -> dict[str, Any] | None:
+    provenance = result.get("provenance") if isinstance(result, dict) else None
+    if isinstance(provenance, dict) and "spec" not in provenance and "fetched_at" in provenance:
+        provenance["spec"] = query
+    return result
+
+
 class DamagedRun(Exception):
     """Ein gespeicherter Lauf lässt sich nicht lesen oder darstellen."""
 
@@ -300,7 +316,7 @@ class Runner:
             " VALUES (?,?,?,?,?,?,?)",
             [(run["id"], r["key"], pos, r["title"],
               _dumps({"query": r["query"], "view": r["view"]}),
-              _dumps(r["result"]) if r["result"] is not None else None,
+              _dumps(_slim(r["result"], r["query"])) if r["result"] is not None else None,
               _dumps(r["error"]) if r["error"] is not None else None)
              for pos, r in enumerate(run["results"])])
         if run["definition_id"] is not None:
@@ -319,7 +335,8 @@ class Runner:
                 "started_at": row["started_at"], "finished_at": row["finished_at"]}
 
     async def runs(self, definition_id: str | None = None, limit: int = 50,
-                   before: int | None = None) -> list[dict[str, Any]]:
+                   before: int | None = None, status: str | None = None,
+                   kind: str | None = None) -> list[dict[str, Any]]:
         """Neueste zuerst, ohne Ergebnisse. ``before`` ist das ``seq`` des letzten Eintrags
         der vorigen Seite."""
         where, args = [], []
@@ -331,6 +348,10 @@ class Runner:
         if before is not None:
             where.append("seq < ?")
             args.append(before)
+        for column, wanted in (("status", status), ("kind", kind)):
+            if wanted is not None:
+                where.append(f"{column}=?")
+                args.append(wanted)
         sql = ("SELECT * FROM runs"  # noqa: S608
                + (" WHERE " + " AND ".join(where) if where else "")
                + " ORDER BY seq DESC LIMIT ?")
@@ -361,11 +382,22 @@ class Runner:
                 run["results"].append({
                     "key": r["key"], "title": r["title"], "view": item["view"],
                     "query": item["query"],
-                    "result": json.loads(r["result"]) if r["result"] is not None else None,
+                    "result": _restore(json.loads(r["result"]), item["query"])
+                    if r["result"] is not None else None,
                     "error": json.loads(r["error"]) if r["error"] is not None else None})
             return run
 
         return await self._db.read(fn)
+
+    async def delete_runs(self, definition_id: str) -> int:
+        """Alle Läufe einer Definition; ``""`` meint die Läufe gelöschter Definitionen."""
+        def fn(con: sqlite3.Connection) -> int:
+            if definition_id == "":
+                return con.execute("DELETE FROM runs WHERE definition_id IS NULL").rowcount
+            return con.execute(
+                "DELETE FROM runs WHERE definition_id=?", (definition_id,)).rowcount
+
+        return await self._db.write(fn)
 
     async def delete_run(self, run_id: str) -> None:
         def fn(con: sqlite3.Connection) -> None:

@@ -14,10 +14,24 @@ const PAGE = 50;
   imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <h1>Gespeicherte Läufe</h1>
+    <div class="row">
+      <h1 class="grow">Gespeicherte Läufe</h1>
+      <label>Art
+        <select [value]="kindFilter()" (change)="kindFilter.set($any($event.target).value)">
+          <option value="">alle</option><option value="metric">Kennzahlen</option>
+          <option value="dashboard">Dashboards</option><option value="template">Templates</option>
+        </select>
+      </label>
+      <label>Status
+        <select [value]="statusFilter()" (change)="statusFilter.set($any($event.target).value)">
+          <option value="">alle</option><option value="ok">vollständig</option>
+          <option value="partial">teilweise</option><option value="failed">gescheitert</option>
+        </select>
+      </label>
+    </div>
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     <div class="card">
-      @if (!runs().length && !loading() && !error()) { <p class="muted">Noch keine Läufe. Ein Lauf entsteht über „Lauf speichern“ an einer Kennzahl, einem Dashboard oder Template.</p> }
+      @if (!runs().length && !loading() && !error()) { <p class="muted">{{ kindFilter() || statusFilter() ? 'Keine Läufe mit dieser Auswahl.' : 'Noch keine Läufe. Ein Lauf entsteht über „Lauf speichern“ an einer Kennzahl, einem Dashboard oder Template.' }}</p> }
       @if (runs().length) {
         <div class="scroll"><table class="data">
           <thead><tr><th>Name</th><th>Art</th><th>Stand</th><th>Status</th><th></th></tr></thead>
@@ -42,20 +56,25 @@ export class Runs {
   protected readonly more = signal(false);
   protected readonly loading = signal(false);
   protected readonly error = signal('');
+  protected readonly kindFilter = signal('');
+  protected readonly statusFilter = signal('');
   protected readonly time = formatTime;
   protected readonly status = (s: string) => STATUS[s] ?? s;
   protected readonly kind = (k: string) => KIND[k] ?? k;
 
   constructor() {
     const auth = inject(Auth);
-    effect(() => { auth.renewed(); untracked(() => { this.runs.set([]); this.error.set(''); void this.load(); }); });
+    effect(() => { auth.renewed(); this.kindFilter(); this.statusFilter(); untracked(() => { this.runs.set([]); this.error.set(''); void this.load(); }); });
   }
 
   protected async load(): Promise<void> {
     this.loading.set(true);
     try {
       const last = this.runs().at(-1)?.seq;
-      const page = await this.api.get<RunHead[]>(`/runs?limit=${PAGE}${last ? '&before=' + last : ''}`);
+      const kind = this.kindFilter(), status = this.statusFilter();
+      const page = await this.api.get<RunHead[]>(`/runs?limit=${PAGE}${last ? '&before=' + last : ''}` +
+        (kind ? '&kind=' + kind : '') + (status ? '&status=' + status : ''));
+      if (kind !== this.kindFilter() || status !== this.statusFilter()) return; // Auswahl inzwischen geändert
       this.runs.update((runs) => [...runs, ...page]);
       this.more.set(page.length === PAGE);
     } catch (error) {

@@ -105,3 +105,14 @@
 
 - [ ] Playwright: anmelden → Filter bauen → Kennzahl speichern → Dashboard → Lauf → Export HTML; mitgelieferte OER-Statistik installieren und ausführen; Review Focus 1 bis 5; Screenshots hell/dunkel ansehen; Bündelgröße prüfen; Commit.
 - [ ] Live-Probe auf Jans Rechner gegen WLO.
+
+## Stand nach der Umsetzung (13.11.2026)
+
+- Erledigt: Tasks 1 bis 6 ohne die Live-Probe der letzten Fassung; Review der ersten Fassung
+  (1 kritischer, 8 wichtige, 13 kleinere Befunde) behoben; Instanzen-Seite; Baukasten für
+  Dashboards und Templates in `/bearbeiten/:id` (statt eigener Seiten `/dashboard/:id` und
+  `/template/:id`; Ansehen unter `/ansicht/:id`).
+- Verschoben nach Paket 7: Läufe als Auftrag mit Fortschritt (`wait=false`). Dort entstehen
+  geplante Läufe ohnehin als Aufträge; ein Lauf der OER-Statistik dauert live 5 bis 7 s.
+- Offen aus der Live-Probe: zwei Zeitschreibweisen in der Berichtsansicht (Ortszeit und UTC),
+  Einleitung nennt die Kennung der Instanz statt ihres Namens.

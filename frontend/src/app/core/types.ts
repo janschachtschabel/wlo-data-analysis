@@ -41,6 +41,7 @@ export type Kind = 'filter' | 'metric' | 'dashboard' | 'template';
 export interface Definition {
   id: string; kind: Kind; name: string; description: string; group_id: string | null;
   version: number; created_at: string; updated_at: string; spec?: any; used_by?: any[];
+  last_run?: { id: string; status: string; started_at: string } | null;
 }
 export interface Group { id: string; name: string }
 export interface RunHead {

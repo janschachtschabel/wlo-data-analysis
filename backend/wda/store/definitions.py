@@ -227,6 +227,14 @@ class DefinitionStore:
             if needle:  # in Python: casefold kann auch Umlaute, SQLite nicht
                 rows = [r for r in rows
                         if needle in r["name"].casefold() or needle in r["description"].casefold()]
+            last = {r["definition_id"]: {"id": r["id"], "status": r["status"],
+                                         "started_at": r["started_at"]}
+                    for r in con.execute(
+                        "SELECT id, definition_id, status, started_at FROM runs WHERE seq IN ("
+                        " SELECT MAX(seq) FROM runs WHERE definition_id IS NOT NULL"
+                        " GROUP BY definition_id)")}
+            for row in rows:
+                row["last_run"] = last.get(row["id"])
             return sorted(rows, key=lambda r: (sort_key(r["name"]), r["id"]))
 
         return await self._db.read(fn)
