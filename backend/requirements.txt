@@ -90,6 +90,8 @@ typing-inspection==0.4.5
     #   fastapi
     #   pydantic
     #   pydantic-settings
+tzdata==2026.6
+    # via wda (pyproject.toml)
 uvicorn==0.54.0
     # via wda (pyproject.toml)
 uvloop==0.23.0 ; sys_platform != "win32"

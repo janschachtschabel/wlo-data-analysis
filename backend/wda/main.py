@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import mimetypes
 import re
 import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -27,11 +30,14 @@ from .api import (
     query,
     report,
     runs,
+    schedules,
 )
 from .api import settings as settings_api
 from .config import Settings, load_settings
 from .deps import AdminGate, require_admin
 from .instances import InstanceRegistry
+from .jobs import TooManyJobs
+from .scheduler import Scheduler, utc_now
 from .security import LoginThrottle, SessionSigner, session_signing_key
 from .services import Services
 
@@ -58,6 +64,7 @@ def create_app(
     clock: Callable[[], float] = time.monotonic,
     transport: httpx.AsyncBaseTransport | None = None,
     static_dir: Path | None = None,
+    now: Callable[[], datetime] = utc_now,
 ) -> FastAPI:
     settings = settings or load_settings()
 
@@ -66,7 +73,13 @@ def create_app(
         # Die Ablage beim Start öffnen: Eine unbrauchbare oder neuere Datenbank bricht den
         # Start mit Meldung ab, statt später jede Anfrage scheitern zu lassen.
         _ = app.state.services.db
+        planner = (asyncio.create_task(app.state.scheduler.run_forever())
+                   if settings.scheduler else None)
         yield
+        if planner is not None:
+            planner.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await planner
         await app.state.services.aclose()
 
     app = FastAPI(
@@ -83,6 +96,14 @@ def create_app(
     app.state.throttle = LoginThrottle(clock=clock)
     app.state.services = Services(settings, app.state.instances, transport=transport)
 
+    app.state.scheduler_clock = now
+    app.state.scheduler = Scheduler(
+        lambda: app.state.services.schedules, lambda: app.state.services.runner, clock=now)
+
+    @app.exception_handler(TooManyJobs)
+    async def too_many_jobs(request: Request, exc: TooManyJobs) -> JSONResponse:
+        return JSONResponse({"detail": str(exc), "kind": "too_many_jobs"}, status_code=429)
+
     public = APIRouter(prefix="/api")
     public.include_router(health.router)
     public.include_router(auth.router)
@@ -96,6 +117,7 @@ def create_app(
     protected.include_router(definitions.router)
     protected.include_router(runs.router)
     protected.include_router(history.router)
+    protected.include_router(schedules.router)
     protected.include_router(export.router)
     protected.include_router(report.router)
     protected.include_router(builtin.router)

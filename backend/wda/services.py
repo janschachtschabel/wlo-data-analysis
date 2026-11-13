@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import ValidationError
@@ -16,9 +17,11 @@ from .edusharing.client import EduSharingClient
 from .edusharing.vocab import VocabStore
 from .external.oersi import OersiClient
 from .instances import Instance, InstanceRegistry
+from .jobs import Jobs
 from .store.db import Database
 from .store.definitions import DefinitionStore
 from .store.runner import Runner, backfill_points
+from .store.schedules import ScheduleStore
 from .store.transfer import Transfer
 
 log = logging.getLogger(__name__)
@@ -40,6 +43,7 @@ class Services:
         self._vocabs: dict[str, VocabStore] = {}
         self._db: Database | None = None
         self._stored_loaded = False
+        self.jobs = Jobs()
 
     @property
     def registry(self) -> InstanceRegistry:
@@ -112,6 +116,10 @@ class Services:
         return Runner(self.db, self, keep=self._settings.runs_keep)
 
     @property
+    def schedules(self) -> ScheduleStore:
+        return ScheduleStore(self.db, ZoneInfo(self._settings.timezone))
+
+    @property
     def oersi(self) -> OersiClient:
         return OersiClient(self._http_client(), self.cache, self._settings.oersi_url,
                            timeout=self._settings.upstream_timeout)
@@ -145,6 +153,7 @@ class Services:
         return self._vocabs[instance_id]
 
     async def aclose(self) -> None:
+        await self.jobs.aclose()
         if self._http is not None:
             await self._http.aclose()
             self._http = None

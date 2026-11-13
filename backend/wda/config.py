@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,6 +31,17 @@ class Settings(BaseSettings):
     upstream_concurrency: int = Field(default=4, ge=1, le=32)
     runs_keep: int = Field(default=500, ge=1, le=100000)
     oersi_url: str = "https://oersi.org/resources/api/search/oer_data/_search"
+    timezone: str = "Europe/Berlin"  # in ihr gelten die Uhrzeiten der Zeitpläne
+    scheduler: bool = True  # ``off``: Zeitpläne bleiben liegen (Tests, zweite Instanz)
+
+    @field_validator("timezone")
+    @classmethod
+    def _known_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            raise ValueError("ist keine bekannte Zeitzone") from None
+        return value
 
     @field_validator("admin_password")
     @classmethod

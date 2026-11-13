@@ -37,6 +37,7 @@ PROTECTED = {
     "/api/definitions/{def_id}/runs", "/api/runs", "/api/runs/{run_id}",
     "/api/runs/{run_id}/export", "/api/builtin", "/api/builtin/{bundle_id}/install",
     "/api/definitions/{def_id}/history", "/api/definitions/{def_id}/history/keys",
+    "/api/schedules", "/api/schedules/{schedule_id}", "/api/schedules/{schedule_id}/run",
 }
 OUTSIDE_API = {"/{rest:path}"}  # nur die Oberfläche
 

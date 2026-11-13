@@ -8,8 +8,10 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, model_validator
 
+from ..errors import UnknownInstance
 from .report import report_of
 
 router = APIRouter()
@@ -21,16 +23,39 @@ class RunIn(BaseModel):
     instance: Annotated[StrictStr, Field(min_length=1, max_length=64)] | None = None
     save: StrictBool = True
     report: StrictBool = False  # das Berichtsmodell gleich mitliefern
+    # false: als Auftrag starten; Antwort 202, Stand und Ergebnis unter /runs/{id}
+    wait: StrictBool = True
+
+    @model_validator(mode="after")
+    def _job_is_saved(self) -> RunIn:
+        if not self.wait and (not self.save or self.report):
+            raise ValueError("Ein Auftrag (wait=false) wird immer gespeichert und liefert "
+                             "keinen Bericht mit")
+        return self
 
 
 def _runner(request: Request):
     return request.app.state.services.runner
 
 
-@router.post("/definitions/{def_id}/run")
+@router.post("/definitions/{def_id}/run", response_model=None)
 async def run_definition(def_id: str, request: Request, body: RunIn | None = None
-                         ) -> dict[str, Any]:
+                         ) -> dict[str, Any] | JSONResponse:
     body = body or RunIn()
+    if not body.wait:
+        services = request.app.state.services
+        await services.definitions.get(def_id)  # 404 sofort, nicht erst im Auftrag
+        if body.instance is not None:
+            try:
+                services.client(body.instance)
+            except KeyError:
+                raise UnknownInstance(body.instance) from None
+
+        async def work(run_id: str, progress) -> None:
+            await services.runner.run(def_id, refresh=body.refresh, instance=body.instance,
+                                      run_id=run_id, progress=progress)
+
+        return JSONResponse(services.jobs.start(def_id, work).view(), status_code=202)
     run = await _runner(request).run(
         def_id, refresh=body.refresh, instance=body.instance, save=body.save)
     if body.report:
@@ -76,6 +101,11 @@ async def delete_runs(
 
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str, request: Request) -> dict[str, Any]:
+    """Ein laufender Auftrag antwortet mit ``status: "running"`` und ``progress``, ein
+    gescheiterter eine Weile mit ``status: "failed"`` und ``error``."""
+    job = request.app.state.services.jobs.get(run_id)
+    if job is not None:
+        return job.view()
     return await _runner(request).get_run(run_id)
 
 

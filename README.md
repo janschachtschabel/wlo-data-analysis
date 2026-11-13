@@ -44,6 +44,8 @@ Minute auch die richtige Anmeldung.
 | `WDA_UPSTREAM_CONCURRENCY` | `4` | gleichzeitige Abfragen je Instanz |
 | `WDA_RUNS_KEEP` | `500` | gespeicherte Läufe je Definition; ältere werden entfernt |
 | `WDA_OERSI_URL` | Suchschnittstelle von oersi.org | Adresse für den OERSI-Abruf in Berichten |
+| `WDA_TIMEZONE` | `Europe/Berlin` | Zeitzone, in der die Uhrzeiten der Zeitpläne gelten |
+| `WDA_SCHEDULER` | `on` | `off` schaltet den Planer ab; Zeitpläne bleiben dann liegen (z. B. bei einer zweiten Instanz auf derselben Datenbank) |
 | `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
