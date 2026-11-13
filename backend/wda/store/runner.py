@@ -160,7 +160,52 @@ def backfill_points(db: Database) -> int:
         done += bool(db.write_now(one))
     db.write_now(lambda con: con.execute(
         "INSERT OR REPLACE INTO meta (key, value) VALUES ('points_backfilled', '1')"))
+    if done:
+        log.info("Zahlen von %s älteren Läufen für die Historie nachgetragen", done)
     return done
+
+
+def backfill_instances(db: Database) -> int:
+    """Ältere Läufe wissen nicht, ob sie gegen eine andere Instanz liefen als ihre Definition.
+    Das steht aber in ihren Abfragen: Weicht deren Instanz von der der Definition ab, wird
+    sie am Lauf vermerkt, damit er nicht in der Historie der üblichen Instanz steht (einmal
+    je Datenbank). Liefert die Zahl der geänderten Läufe."""
+    if db.read_now(lambda con: con.execute(
+            "SELECT 1 FROM meta WHERE key='instances_backfilled'").fetchone()):
+        return 0
+
+    def fn(con: sqlite3.Connection) -> int:
+        usual: dict[str, set[str] | None] = {}
+        changed = 0
+        for row in con.execute(
+                "SELECT id, definition_id FROM runs WHERE instance IS NULL").fetchall():
+            def_id = row["definition_id"]
+            if def_id not in usual:
+                try:
+                    usual[def_id] = {p.query.instance for p in Runner._plan(
+                        con, fetch(con, def_id), None) if p.query is not None}
+                except Exception:  # gelöscht oder nicht mehr gültig: nichts zu vergleichen
+                    usual[def_id] = None
+            ran: set[str] = set()
+            for r in con.execute("SELECT query FROM run_results WHERE run_id=?", (row["id"],)):
+                try:
+                    query = (json.loads(r["query"]) or {}).get("query") or {}
+                except (ValueError, TypeError, AttributeError):
+                    continue
+                if isinstance(query, dict) and isinstance(query.get("instance"), str):
+                    ran.add(query["instance"])
+            own = usual[def_id]
+            if own and len(ran) == 1 and len(own) == 1 and ran != own:
+                con.execute("UPDATE runs SET instance=? WHERE id=?", (next(iter(ran)), row["id"]))
+                changed += 1
+        con.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('instances_backfilled', '1')")
+        return changed
+
+    changed = db.write_now(fn)
+    if changed:
+        log.info("%s ältere Läufe ihrer abweichenden Instanz zugeordnet", changed)
+    return changed
 
 
 class DamagedRun(Exception):

@@ -1,5 +1,5 @@
 import { ResultRow } from '../core/types';
-import { MAX_BARS, MAX_SERIES, MAX_SLICES, Palette, chartPlan } from './options';
+import { MAX_BARS, MAX_SERIES, MAX_SLICES, Palette, chartPlan, fillChartData, isFillTable } from './options';
 
 const palette: Palette = {
   series: ['#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8'], surface: '#fff', text: '#000', muted: '#666', grid: '#ddd',
@@ -84,5 +84,32 @@ describe('chartPlan: was die Grafik weglässt, steht dabei', () => {
     const plan = chartPlan(input, 'pie', palette);
     expect(plan.option!['series'][0].data).toHaveLength(1);
     expect(plan.notes.join(' ')).toContain('2 Zeilen ohne positiven Wert');
+  });
+});
+
+describe('Grafik aus Füllgraden', () => {
+  const col = (id: string, derived = false) => ({ id, label: id, derived });
+  const row = (key: string, values: (number | null)[]) => ({ key, label: key, kind: 'value', values, percent: [1] }) as any;
+
+  it('zeigt je Feld den Füllgrad, gestapelt mit und ohne Wert', () => {
+    const input = { columns: [col('filled'), col('missing', true), col('rate', true)], rows: [row('a', [30, 70, 30]), row('b', [null, null, null])] };
+    expect(isFillTable(input.columns)).toBe(true);
+    const bar = fillChartData(input, 'bar');
+    expect(bar.columns.map((c) => c.id)).toEqual(['rate']);
+    expect(bar.rows.map((r) => r.values)).toEqual([[30], [null]]);
+    const stacked = fillChartData(input, 'stacked_bar');
+    expect(stacked.columns.map((c) => c.id)).toEqual(['filled', 'missing']);
+    expect(stacked.rows[0].values).toEqual([30, 70]);
+    expect(stacked.rows[0].percent).toBeNull();
+  });
+
+  it('lässt je Zeile die Anzahl weg und alles andere, wie es ist', () => {
+    const input = { columns: [col('count'), col('f_a', true), col('f_b', true)], rows: [row('q', [10, 50, 80])] };
+    const out = fillChartData(input, 'bar');
+    expect(out.columns.map((c) => c.id)).toEqual(['f_a', 'f_b']);
+    expect(out.rows[0].values).toEqual([50, 80]);
+    const usual = { columns: [col('count'), col('x')], rows: [row('q', [1, 2])] };
+    expect(fillChartData(usual, 'bar')).toBe(usual);
+    expect(isFillTable(usual.columns)).toBe(false);
   });
 });

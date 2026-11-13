@@ -1,7 +1,7 @@
 import {
   replaceValue,
   MAX_STATE_LENGTH, addValue, fieldChoices, decodeState, emptyState, encodeState, looksLikeUri, removeFilter,
-  removeValue,
+  removeValue, fillDefaults,
 } from './state';
 
 describe('Zustand des Explorers in der Adresse', () => {
@@ -105,5 +105,39 @@ describe('Link-Zustand: Prüfung', () => {
     const filters = [{ property: 'p', values: ['mathe', { value: 'u2', literal: true }] }];
     expect(replaceValue(filters, 'p', 'mathe', 'u1')).toEqual([
       { property: 'p', values: [{ value: 'u2', literal: true }, { value: 'u1', literal: true }] }]);
+  });
+
+  it('trägt Füllgrade und räumt auf, was nicht dazu passt', () => {
+    const spec = { instance: 'a', filters: [], rows: { property: 'q', top: 5, values: ['x'] }, columns: { property: 'c' },
+      percent: 'row', series: [{ id: 's' }], fill: { fields: [{ property: 'f' }, { property: 'q' }], show: 'missing' } };
+    const out = decodeState(btoa(JSON.stringify({ s: spec, v: 'stacked_bar' }))).state!;
+    expect(out.spec.fill).toEqual({ fields: [{ property: 'f' }], show: 'missing' });
+    expect(out.spec.rows).toEqual({ property: 'q', top: 5 });
+    expect(out.spec.columns).toBeNull();
+    expect(out.spec.percent).toBe('none');
+    expect('series' in out.spec).toBe(false);
+    expect(out.view).toBe('table'); // gestapelt gibt es nur ohne Zeilenfeld
+    const plain = decodeState(btoa(JSON.stringify({ s: { instance: 'a', fill: { fields: [{ property: 'f' }] } }, v: 'stacked_bar' })));
+    expect(plain.state?.view).toBe('stacked_bar');
+    expect(plain.state?.spec.rows).toBeNull();
+    expect(decodeState(btoa(JSON.stringify({ s: { instance: 'a', fill: { fields: [{ property: 'f' }] } }, v: 'pie' }))).state?.view).toBe('table');
+  });
+
+  it('lehnt kaputte Füllgrade ab', () => {
+    const fills = [{}, { fields: [] }, { fields: [{ property: '' }] }, { fields: [{ property: 'a' }, { property: 'a' }] },
+      { fields: [{ property: 'a' }], show: 'x' }, { fields: Array.from({ length: 31 }, (_, n) => ({ property: 'p' + n })) },
+      { fields: [{ property: 'q' }] }];
+    for (const fill of fills) {
+      const text = btoa(JSON.stringify({ s: { instance: 'a', rows: { property: 'q' }, fill } }));
+      expect(decodeState(text).state).toBeNull();
+    }
+  });
+
+  it('schlägt für Füllgrade die üblichen Felder vor, sonst die ersten', () => {
+    const f = (property: string) => ({ property, caption: property }) as any;
+    expect(fillDefaults([f('x'), f('ccm:taxonid'), f('ccm:commonlicense_key')])).toEqual(
+      [{ property: 'ccm:taxonid' }, { property: 'ccm:commonlicense_key' }]);
+    expect(fillDefaults([f('x'), f('ccm:taxonid')], 'ccm:taxonid')).toEqual([{ property: 'x' }]);
+    expect(fillDefaults([])).toEqual([]);
   });
 });

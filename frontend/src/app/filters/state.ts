@@ -4,6 +4,20 @@ import { FieldInfo, Filter, QuerySpec, Value, ViewType } from '../core/types';
 export interface ExplorerState { spec: QuerySpec; view: ViewType }
 
 export const MAX_STATE_LENGTH = 8000;
+export const MAX_FILL_FIELDS = 30;
+/** Darstellungen, die für Füllgrade taugen */
+export const FILL_VIEWS: ViewType[] = ['table', 'bar', 'stacked_bar'];
+/** Felder, mit denen die Füllgrade beginnen, soweit die Instanz sie kennt */
+export const FILL_DEFAULTS = ['ccm:taxonid', 'ccm:educationalcontext', 'ccm:oeh_lrt_aggregated', 'ccm:commonlicense_key',
+  'ccm:replicationsource', 'cclom:general_language', 'ccm:educationalintendedenduserrole'];
+
+/** Felder für den Einstieg in die Füllgrade: die üblichen, sonst die ersten der Liste. */
+export function fillDefaults(fields: FieldInfo[], skip = ''): { property: string }[] {
+  const known = new Set(fields.map((f) => f.property));
+  const usual = FILL_DEFAULTS.filter((p) => known.has(p) && p !== skip);
+  const chosen = usual.length ? usual : fields.map((f) => f.property).filter((p) => p !== skip).slice(0, 6);
+  return chosen.map((property) => ({ property }));
+}
 const VIEWS: ViewType[] = ['table', 'number', 'bar', 'stacked_bar', 'line', 'pie'];
 
 export function valueOf(value: Value): string {
@@ -70,10 +84,25 @@ export function decodeState(text: string | null): { state: ExplorerState | null;
     for (const axis of [spec.rows, spec.columns]) {
       if (axis != null && (typeof axis !== 'object' || typeof axis.property !== 'string' || !axis.property)) return broken;
     }
+    if (spec.fill != null) {
+      const fields = spec.fill?.fields;
+      if (!Array.isArray(fields) || !fields.length || fields.length > MAX_FILL_FIELDS) return broken;
+      if (!fields.every((f: any) => f && typeof f.property === 'string' && f.property)) return broken;
+      if (new Set(fields.map((f: any) => f.property)).size !== fields.length) return broken;
+      if (spec.fill.show !== undefined && !['rate', 'missing', 'filled'].includes(spec.fill.show)) return broken;
+    }
     let view: ViewType = VIEWS.includes(data.v) ? data.v : 'table';
     const clean: QuerySpec = { ...spec, refresh: false };
     // Zustände, aus denen die Bedienung nicht herausführt, gar nicht erst annehmen
-    if (!clean.rows) { clean.rows = null; clean.columns = null; clean.percent = 'none'; view = 'table'; }
+    if (clean.fill) {
+      clean.columns = null; clean.percent = 'none'; delete clean.series;
+      clean.rows = clean.rows ? { property: clean.rows.property, top: clean.rows.top ?? null } : null;
+      if (clean.rows && clean.fill.fields.some((f) => f.property === clean.rows!.property)) {
+        clean.fill = { ...clean.fill, fields: clean.fill.fields.filter((f) => f.property !== clean.rows!.property) };
+        if (!clean.fill.fields.length) return broken;
+      }
+      if (!FILL_VIEWS.includes(view) || (clean.rows && view === 'stacked_bar')) view = 'table';
+    } else if (!clean.rows) { clean.fill = null; clean.rows = null; clean.columns = null; clean.percent = 'none'; view = 'table'; }
     else if (clean.columns?.property === clean.rows.property) clean.columns = null;
     if (view === 'number') view = 'table';
     return { state: { spec: clean, view }, error: '' };

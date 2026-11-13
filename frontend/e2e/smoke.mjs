@@ -66,6 +66,32 @@ assert.equal(await page.locator('app-filter-bar .chip .value').count(), 1);
 await page.goto(base + '/?q=kaputt!!');
 await page.waitForSelector('.notice:has-text("startet leer")');
 
+// Füllgrade: je Feld mit und ohne Wert, gestapelt, je Fach, Zustand in der Adresse
+await page.goto(base + '/');
+await page.waitForSelector('.big');
+await page.click('.views button:has-text("Füllgrade")');
+await page.waitForSelector('app-result-table th:has-text("Füllgrad")');
+const fillRows = await page.locator('app-result-table tbody tr').count();
+assert.ok(fillRows >= 2, 'Füllgrade: mindestens zwei Felder');
+assert.equal(await page.locator('app-result-table tr.total').count(), 0, 'Füllgrade je Feld haben keine Gesamtzeile');
+await page.click('.views button:has-text("Gestapelt")');
+await page.waitForSelector('app-chart canvas');
+await page.click('details.pick summary');
+await page.locator('details.pick input[type=checkbox]:checked').first().uncheck();
+await page.waitForFunction((n) => document.querySelectorAll('app-result-table tbody tr').length === n - 1, fillRows);
+await page.selectOption('select[name=rows]', { label: 'Fach' });
+await page.waitForSelector('select[name=show]');
+await page.waitForSelector('app-result-table th:has-text("Anzahl")');
+await page.selectOption('select[name=show]', 'missing');
+await page.waitForFunction(() => /ohne Wert/.test(document.querySelector('app-result-table')?.textContent ?? ''));
+const fillLink = page.url();
+await page.goto(base + '/');
+await page.waitForSelector('.big');
+await page.goto(fillLink);
+await page.waitForSelector('select[name=show]');
+assert.equal(await page.inputValue('select[name=show]'), 'missing');
+assert.equal(await page.getAttribute('.views button:has-text("Füllgrade")', 'aria-pressed'), 'true');
+
 // Bibliothek: der HTML-Name bleibt Text; mitgelieferte Vorlage installieren und ansehen
 await page.goto(base + '/bibliothek');
 await page.waitForSelector(`text=${EVIL}`);
@@ -220,6 +246,11 @@ for (const path of ['/', '/bibliothek', '/laeufe', '/instanzen', new URL(history
   const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   assert.ok(wide <= 1, `${path} ist bei 390 px um ${wide} px zu breit`);
 }
+await page.goto(fillLink);
+await page.click('details.pick summary');
+await page.waitForTimeout(300);
+const fillWide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+assert.ok(fillWide <= 1, `Füllgrade sind bei 390 px um ${fillWide} px zu breit`);
 await page.goto(base + '/bibliothek');
 await page.click('section:has-text("Dashboards") >> text=Bearbeiten');
 await page.waitForSelector('app-spec-form .item');

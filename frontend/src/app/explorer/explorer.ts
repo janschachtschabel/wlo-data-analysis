@@ -6,9 +6,9 @@ import { Api, ApiError, Latest } from '../core/api';
 import { Auth } from '../core/auth';
 import { formatNumber, formatTime } from '../core/format';
 import { Instances } from '../core/instances';
-import { Definition, FieldInfo, Filter, QueryResult, QuerySpec, ViewType } from '../core/types';
+import { Definition, FieldInfo, FillShow, Filter, QueryResult, QuerySpec, ViewType } from '../core/types';
 import { FilterBar } from '../filters/filter-bar';
-import { ExplorerState, decodeState, emptyState, encodeState, fieldChoices, replaceValue } from '../filters/state';
+import { ExplorerState, FILL_VIEWS, MAX_FILL_FIELDS, decodeState, emptyState, encodeState, fieldChoices, fillDefaults, replaceValue } from '../filters/state';
 import { ResultTable } from '../shared/result-table';
 
 const VIEWS: { id: ViewType; label: string }[] = [
@@ -26,15 +26,48 @@ const VIEWS: { id: ViewType; label: string }[] = [
       <app-filter-bar [instance]="spec().instance" [filters]="spec().filters ?? []" [labels]="labels()"
                       (changed)="setFilters($event)" />
       <div class="row controls">
-        <label>Aufschlüsseln nach
-          <select [ngModel]="spec().rows?.property ?? ''" (ngModelChange)="setRows($event)">
-            <option value="">– nur Gesamtzahl –</option>
+        <div class="views" role="group" aria-label="Was gezählt wird">
+          <button type="button" [class.on]="!spec().fill" [attr.aria-pressed]="!spec().fill" (click)="setFill(false)">Verteilung</button>
+          <button type="button" [class.on]="!!spec().fill" [attr.aria-pressed]="!!spec().fill" (click)="setFill(true)"
+                  [disabled]="!facetFields().length" title="Wie oft ist ein Feld ausgefüllt?">Füllgrade</button>
+        </div>
+        <label>{{ spec().fill ? 'je' : 'Aufschlüsseln nach' }}
+          <select name="rows" [ngModel]="spec().rows?.property ?? ''" (ngModelChange)="setRows($event)">
+            <option value="">{{ spec().fill ? '– insgesamt –' : '– nur Gesamtzahl –' }}</option>
             @for (field of facetFields(); track field.property) {
               <option [value]="field.property">{{ field.caption || field.property }}</option>
             }
           </select>
         </label>
-        @if (spec().rows) {
+        @if (spec().fill; as fill) {
+          <details class="pick">
+            <summary>Felder ({{ fill.fields.length }})</summary>
+            <div class="list" role="group" aria-label="Felder für die Füllgrade">
+              @for (field of facetFields(); track field.property) {
+                @if (field.property !== spec().rows?.property) {
+                  <label><input type="checkbox" [name]="'fill-' + field.property" [checked]="hasFill(field.property)"
+                                [disabled]="!hasFill(field.property) && fill.fields.length >= maxFill || hasFill(field.property) && fill.fields.length === 1"
+                                (change)="toggleFill(field.property)" /> {{ field.caption || field.property }}</label>
+                }
+              }
+            </div>
+          </details>
+          @if (spec().rows) {
+            <label>Zeilen
+              <select [ngModel]="spec().rows?.top ?? 0" (ngModelChange)="setTop(+$event)">
+                <option [value]="10">Top 10</option><option [value]="25">Top 25</option>
+                <option [value]="100">Top 100</option><option [value]="0">alle</option>
+              </select>
+            </label>
+            <label>Anzeige
+              <select name="show" [ngModel]="fill.show ?? 'rate'" (ngModelChange)="setShow($event)">
+                <option value="rate">Füllgrad in %</option><option value="missing">Anzahl ohne Wert</option>
+                <option value="filled">Anzahl mit Wert</option>
+              </select>
+            </label>
+          }
+        }
+        @if (spec().rows && !spec().fill) {
           <label>Spalten nach
             <select [ngModel]="spec().columns?.property ?? ''" (ngModelChange)="setColumns($event)">
               <option value="">– eine Spalte –</option>
@@ -91,7 +124,12 @@ const VIEWS: { id: ViewType; label: string }[] = [
         }
       } @else if (result.value(); as data) {
         <div class="row head">
-          @if (data.columns.length === 1) {
+          @if (data.total_row === false) {
+            <div>
+              <div class="big">{{ number(data.base_total) }}</div>
+              <div class="muted">Materialien als Grundgesamtheit · {{ instances.name(data.instance) }}</div>
+            </div>
+          } @else if (data.columns.length === 1) {
             <div>
               <div class="big">{{ number(data.columns[0].total) }}</div>
               <div class="muted">Materialien · {{ instances.name(data.instance) }}</div>
@@ -100,17 +138,17 @@ const VIEWS: { id: ViewType; label: string }[] = [
             <div class="muted">{{ data.rows.length }} Zeilen × {{ data.columns.length }} Spalten · {{ instances.name(data.instance) }}</div>
           }
           <span class="grow"></span>
-          @if (spec().rows) {
+          @if (spec().rows || spec().fill) {
             <div class="views" role="group" aria-label="Darstellung">
-              @for (v of views; track v.id) {
+              @for (v of shownViews(); track v.id) {
                 <button type="button" [class.on]="view() === v.id" [attr.aria-pressed]="view() === v.id" (click)="view.set(v.id)">{{ v.label }}</button>
               }
             </div>
           }
         </div>
-        @if (spec().rows) {
-          @if (view() !== 'table') { <app-chart [data]="data" [view]="view()" [label]="'Grafik: ' + rowTitle()" /> }
-          <app-result-table [columns]="data.columns" [rows]="tableRows()" [rowTitle]="rowTitle()" />
+        @if (spec().rows || spec().fill) {
+          @if (view() !== 'table') { <app-chart [data]="data" [view]="view()" [label]="'Grafik: ' + (rowTitle() || 'Füllgrade')" /> }
+          <app-result-table [columns]="data.columns" [rows]="tableRows()" [rowTitle]="rowTitle() || (spec().fill ? 'Feld' : '')" />
         }
         <details class="origin" [open]="data.provenance.notes.length > 0">
           <summary>Herkunft: abgerufen {{ time(data.provenance.fetched_at) }}{{ data.provenance.cached ? ' (aus dem Zwischenspeicher)' : '' }},
@@ -137,6 +175,12 @@ const VIEWS: { id: ViewType; label: string }[] = [
     .views button { border-radius: 0; margin-left: -1px; }
     .views button:first-child { border-radius: 6px 0 0 6px; } .views button:last-child { border-radius: 0 6px 6px 0; }
     .views button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+    .pick { position: relative; } .pick summary { cursor: pointer; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; }
+    .pick .list { position: absolute; z-index: 5; top: 100%; left: 0; margin-top: 4px; min-width: 260px; max-width: min(360px, 90vw);
+                  max-height: 320px; overflow: auto; background: var(--surface); border: 1px solid var(--border);
+                  border-radius: 6px; padding: 8px 10px; display: grid; gap: 4px; box-shadow: 0 6px 18px rgb(0 0 0 / .15); }
+    .pick .list label { display: flex; }
+    @media (max-width: 640px) { .pick { flex-basis: 100%; } .pick .list { position: static; min-width: 0; max-width: none; } }
     .origin { margin-top: var(--gap); color: var(--muted); font-size: 13px; }
     .origin ul { margin: 6px 0 0; padding-left: 18px; }
     app-chart { margin-bottom: var(--gap); }
@@ -186,8 +230,16 @@ export class Explorer {
   protected readonly tableRows = computed(() => {
     const data = this.result.value();
     if (!data) return [];
+    if (data.total_row === false) return data.rows;
     return [...data.rows, { key: '__total__', label: 'Gesamt', kind: 'total' as const, values: data.columns.map((c) => c.total) }];
   });
+  protected readonly maxFill = MAX_FILL_FIELDS;
+  protected readonly shownViews = computed(() => {
+    if (!this.spec().fill) return VIEWS;
+    // gestapelt (mit Wert / ohne Wert) gibt es nur ohne Zeilenfeld
+    return VIEWS.filter((v) => FILL_VIEWS.includes(v.id) && (v.id !== 'stacked_bar' || !this.spec().rows));
+  });
+  protected readonly hasFill = (property: string) => !!this.spec().fill?.fields.some((f) => f.property === property);
   protected readonly suggestions = computed<{ id: string; label: string }[]>(() =>
     ((this.result.error()?.extra['suggestions'] ?? []) as any[]).slice(0, 6)
       .filter((s) => s && typeof s.id === 'string')
@@ -258,7 +310,42 @@ export class Explorer {
   protected patch(change: Partial<QuerySpec>): void { this.spec.update((spec) => ({ ...spec, ...change })); }
   protected setFilters(filters: Filter[]): void { this.patch({ filters }); }
 
+  /** Zwischen Verteilung und Füllgraden wechseln; Filter und Zeilenfeld bleiben. */
+  protected setFill(on: boolean): void {
+    const spec = this.spec();
+    if (on === !!spec.fill) return;
+    if (!on) {
+      this.patch({ fill: null });
+      if (!spec.rows) this.view.set('table');
+      return;
+    }
+    const rows = spec.rows ? { property: spec.rows.property, top: spec.rows.top ?? 25 } : null;
+    this.patch({ fill: { fields: fillDefaults(this.facetFields(), rows?.property), show: 'rate' }, rows, columns: null, percent: 'none' });
+    this.view.set(rows ? 'table' : 'stacked_bar');
+  }
+  protected toggleFill(property: string): void {
+    const fill = this.spec().fill;
+    if (!fill) return;
+    const fields = this.hasFill(property)
+      ? fill.fields.filter((f) => f.property !== property)
+      : [...fill.fields, { property }];
+    if (fields.length && fields.length <= MAX_FILL_FIELDS) this.patch({ fill: { ...fill, fields } });
+  }
+  protected setShow(show: FillShow): void {
+    const fill = this.spec().fill;
+    if (fill) this.patch({ fill: { ...fill, show } });
+  }
+
   protected setRows(property: string): void {
+    const fill = this.spec().fill;
+    if (fill) {
+      // das Zeilenfeld kann nicht zugleich ein gezähltes Feld sein
+      const fields = fill.fields.filter((f) => f.property !== property);
+      const kept = fields.length ? fields : fillDefaults(this.facetFields(), property);
+      this.patch({ rows: property ? { property, top: this.spec().rows?.top ?? 25 } : null, fill: { ...fill, fields: kept } });
+      if (!FILL_VIEWS.includes(this.view()) || (property && this.view() === 'stacked_bar')) this.view.set('table');
+      return;
+    }
     if (!property) { this.patch({ rows: null, columns: null, percent: 'none' }); this.view.set('table'); return; }
     const columns = this.spec().columns?.property === property ? null : this.spec().columns;
     this.patch({ rows: { property, top: this.spec().rows?.top ?? 25, missing: this.spec().rows?.missing ?? false }, columns });

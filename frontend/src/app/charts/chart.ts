@@ -6,7 +6,7 @@ import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } f
 import { ECharts, init, use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { ViewType } from '../core/types';
-import { ChartInput, ChartPlan, Palette, chartPlan } from './options';
+import { ChartInput, ChartPlan, Palette, chartPlan, fillChartData } from './options';
 
 use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer]);
 
@@ -61,7 +61,7 @@ export class Chart implements OnDestroy {
   protected readonly plan = computed(() => {
     this.theme();
     const palette = readPalette(this.plot().nativeElement);
-    return this.build()?.(palette) ?? chartPlan(this.data(), this.view(), palette);
+    return this.build()?.(palette) ?? chartPlan(fillChartData(this.data(), this.view()), this.view(), palette);
   });
 
   constructor() {

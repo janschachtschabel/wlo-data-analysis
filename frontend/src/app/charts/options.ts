@@ -189,3 +189,30 @@ export function historyPlan(input: HistoryInput, palette: Palette): ChartPlan {
     },
   };
 }
+
+/** Tabelle der Füllgrade je Feld (Spalten „mit Wert“, „ohne Wert“, „Füllgrad %“)? */
+export function isFillTable(columns: { id: string }[]): boolean {
+  return columns.length === 3 && columns[0].id === 'filled' && columns[1].id === 'missing' && columns[2].id === 'rate';
+}
+
+/**
+ * Was eine Grafik aus einer Füllgrad-Tabelle zeigt: gestapelt „mit Wert / ohne Wert“ (zusammen
+ * die Grundgesamtheit), sonst nur den Füllgrad. Anzahl und Prozent kommen nie in eine Grafik.
+ */
+export function fillChartData(input: ChartInput, view: ViewType): ChartInput {
+  if (isFillTable(input.columns)) {
+    const keep = view === 'stacked_bar' ? [0, 1] : [2];
+    return {
+      // „ohne Wert“ ist zwar berechnet, ergänzt „mit Wert“ aber genau zur Gesamtzahl
+      columns: keep.map((n) => ({ ...input.columns[n], derived: false })),
+      rows: input.rows.map((r) => ({ ...r, values: keep.map((n) => r.values[n]), percent: null })),
+    };
+  }
+  if (input.columns.length > 1 && input.columns[0].id === 'count' && input.columns.slice(1).every((c) => c.derived)) {
+    return {
+      columns: input.columns.slice(1),
+      rows: input.rows.map((r) => ({ ...r, values: r.values.slice(1), percent: null })),
+    };
+  }
+  return input;
+}

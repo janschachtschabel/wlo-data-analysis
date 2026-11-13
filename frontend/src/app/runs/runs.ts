@@ -40,7 +40,7 @@ const PAGE = 50;
             @for (run of runs(); track run.id) {
               <tr>
                 <td><a [routerLink]="['/lauf', run.id]">{{ run.name }}</a></td>
-                <td>{{ kind(run.kind) }}</td><td>{{ time(run.started_at) }}@if (run.origin === 'schedule') { <span class="muted"> · Zeitplan</span> }</td>
+                <td>{{ kind(run.kind) }}</td><td>{{ time(run.started_at) }}@if (run.origin === 'schedule') { <span class="muted"> · Zeitplan</span> }@if (run.instance) { <span class="muted"> · {{ run.instance }}</span> }</td>
                 <td [class.error]="run.status === 'failed'">{{ status(run.status) }}</td>
                 <td><button type="button" class="link" (click)="remove(run)">Löschen</button></td>
               </tr>

@@ -11,7 +11,10 @@ export interface QuerySpec {
   instance: string; filters?: Filter[]; rows?: Rows | null; series?: Series[];
   columns?: { property: string; top?: number } | null;
   percent?: 'none' | 'column' | 'row'; refresh?: boolean;
+  /** Füllgrade statt Zählungen: je Feld, wie oft es gefüllt ist */
+  fill?: { fields: { property: string; label?: string }[]; show?: FillShow } | null;
 }
+export type FillShow = 'rate' | 'missing' | 'filled';
 export interface Note { code: string; text: string }
 export interface ResultColumn { id: string; label: string; derived: boolean; total: number | null }
 export interface ResultRow {
@@ -22,6 +25,8 @@ export interface ResultRow {
 }
 export interface QueryResult {
   schema_version: number; instance: string; columns: ResultColumn[]; rows: ResultRow[];
+  /** Füllgrade ohne Zeilenfeld: keine Gesamtzeile, dafür die Grundgesamtheit */
+  total_row?: boolean; base_total?: number | null;
   provenance: {
     fetched_at: number | null; oldest_fetched_at: number | null; cached: boolean;
     queries: number; notes: Note[];

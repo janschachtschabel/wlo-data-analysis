@@ -146,3 +146,25 @@ def test_migration_from_version_1_adds_columns_and_backfills_points(world, tmp_p
     assert again.read_now(lambda c: c.execute("SELECT COUNT(*) FROM points").fetchone()[0]) == len(
         expected)
     again.close()
+
+
+def test_older_runs_against_another_instance_get_it_noted_once(world):  # noqa: F811
+    from wda.store.runner import backfill_instances
+
+    m = world.go(world.store.create("metric", "M", {"query": QUERY}))
+    own = world.go(world.runner.run(m.id))
+    other = world.go(world.runner.run(m.id))
+    db = world.services.db
+
+    def as_before(con):  # so, wie ein Lauf gegen eine andere Instanz früher gespeichert wurde
+        row = con.execute("SELECT query FROM run_results WHERE run_id=?",
+                          (other["id"],)).fetchone()
+        con.execute("UPDATE run_results SET query=? WHERE run_id=?",
+                    (row["query"].replace(f'"{QUERY["instance"]}"', '"anderswo"'), other["id"]))
+        con.execute("DELETE FROM meta WHERE key='instances_backfilled'")
+
+    db.write_now(as_before)
+    assert backfill_instances(db) == 1
+    got = db.read_now(lambda c: dict(c.execute("SELECT id, instance FROM runs").fetchall()))
+    assert got == {own["id"]: None, other["id"]: "anderswo"}
+    assert backfill_instances(db) == 0  # nur einmal

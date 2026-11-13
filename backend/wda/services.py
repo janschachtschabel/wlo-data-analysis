@@ -21,7 +21,7 @@ from .jobs import Jobs
 from .store.db import Database
 from .store.definitions import DefinitionStore
 from .store.history import History
-from .store.runner import Runner, backfill_points
+from .store.runner import Runner, backfill_instances, backfill_points
 from .store.schedules import ScheduleStore
 from .store.transfer import Transfer
 
@@ -100,6 +100,7 @@ class Services:
             self._db = Database(self._settings.data_dir / "store.sqlite3")
             try:  # ältere Läufe bekommen einmalig ihre Punkte für die Historie
                 backfill_points(self._db)
+                backfill_instances(self._db)
             except Exception:
                 log.exception("Punkte älterer Läufe ließen sich nicht nachtragen")
         return self._db
