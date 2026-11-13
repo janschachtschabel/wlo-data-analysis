@@ -117,3 +117,19 @@ CREATE TABLE schedules (
 
 - [ ] Review durch frischen Reviewer, Befunde beheben.
 - [ ] Live auf Jans Rechner: Zeitplan für die OER-Statistik, zwei Läufe, Verlauf und Vergleich ansehen.
+
+## Stand nach der Umsetzung
+
+- Umgesetzt wie geplant, mit einem Review und Befundbehebung. Abweichungen:
+  - Vergleichbarkeit hängt an einer Kurzform der ausgeführten Abfragen (`runs.fingerprint`),
+    nicht nur an der Version der Definition; so fällt auch ein geänderter Filter auf.
+  - „Voriger Lauf“ und „Stand an einem Tag“ nehmen nur Läufe, die nicht gescheitert sind und
+    Zahlen haben.
+  - Der Planer beansprucht einen Termin vor dem Lauf (`claim`): Zwei Instanzen auf einer
+    Datenbank führen ihn nicht doppelt aus; ein Lauf, der beim Beenden abbricht, wird nicht
+    nachgeholt.
+  - Das Nachtragen der Punkte läuft nach der Migration je Lauf in eigener Transaktion.
+- Offen (gering): Zeitplan bleibt, wenn seine Instanz gelöscht wird (Fehler steht am
+  Zeitplan); das Layout für die Auswahl im Verlauf wird je Anfrage aus dem jüngsten Lauf
+  gelesen; migrierte Läufe gegen eine andere Instanz stehen in der Standardreihe; keine
+  Komponententests für Polling und Auswahl in der Oberfläche.

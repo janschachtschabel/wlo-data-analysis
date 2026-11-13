@@ -146,6 +146,10 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
 | `POST /api/definitions/{id}/duplicate` | Kopie anlegen |
 | `POST /api/definitions/export`, `POST /api/definitions/import?mode=skip\|replace\|copy` | Definitionen als JSON aus- und einführen |
 | `POST /api/definitions/{id}/run` (`refresh`, `instance`, `save`) | alle Abfragen ausführen, Ergebnis speichern |
+| `POST /api/definitions/{id}/run` mit `wait: false` | Lauf als Auftrag: Antwort 202 mit der ID; `GET /api/runs/{id}` nennt den Fortschritt, danach den gespeicherten Lauf |
+| `GET /api/definitions/{id}/history` (`key`, `row`, `column`, `from`, `to`, `instance`, `limit`), `GET /api/definitions/{id}/history/keys` | Zeitreihe gewählter Zahlen über die gespeicherten Läufe |
+| `GET /api/runs/{id}/report?compare=previous\|<Lauf-ID>\|<JJJJ-MM-TT>`, ebenso am Export | Veränderung gegenüber einem früheren Lauf |
+| `GET/POST /api/schedules`, `PUT/DELETE /api/schedules/{id}`, `POST /api/schedules/{id}/run` | Zeitpläne (täglich, wöchentlich, monatlich) |
 | `GET /api/definitions/{id}/runs`, `GET /api/runs` (`definition=<id>` oder `none`, `status`, `kind`), `GET/DELETE /api/runs/{id}`, `DELETE /api/runs?definition=<id>` (alle Läufe einer Definition) | gespeicherte Läufe |
 
 - Ein Lauf speichert die Ergebnis-Tabellen samt Abfrage, Instanz und Zeitpunkt, also nur
@@ -205,6 +209,12 @@ Die Oberfläche (Angular, `frontend/`) ist im Docker-Image enthalten und unter `
   installieren. „Bearbeiten“ öffnet die Definition mit Prüfung und Vorschau.
 - **Bericht und Läufe:** Eine Definition ansehen zählt frisch und speichert nichts; „Lauf
   speichern“ legt den Stand ab, der sich als JSON, CSV, Markdown, HTML und PDF abrufen lässt.
+- **Verlauf und Zeitpläne:** Jeder gespeicherte Lauf ist ein Punkt im Verlauf einer
+  Definition. Ein Zeitplan lässt sie von selbst laufen; war die Anwendung zum Termin aus, wird
+  der Lauf einmal nachgeholt, nach einem Fehlschlag folgen bis zu drei neue Versuche. Am Lauf
+  zeigt „Vergleichen mit“ die Veränderung gegenüber einem früheren Lauf, auch in den Exporten.
+  Wurde die Definition oder ein von ihr benutzter Filter geändert, steht das als Hinweis dabei.
+  Tage in Zeiträumen und Vergleichen meinen den Kalendertag in `WDA_TIMEZONE`.
 
 Entwicklung ohne Docker:
 
