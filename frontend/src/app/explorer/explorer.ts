@@ -44,7 +44,7 @@ const VIEWS: { id: ViewType; label: string }[] = [
             <summary>Felder ({{ fill.fields.length }})</summary>
             <div class="list" role="group" aria-label="Felder für die Füllgrade">
               @for (field of facetFields(); track field.property) {
-                @if (field.property !== spec().rows?.property) {
+                @if (field.property !== spec().rows?.property && !field.property.startsWith('virtual:')) {
                   <label><input type="checkbox" [name]="'fill-' + field.property" [checked]="hasFill(field.property)"
                                 [disabled]="!hasFill(field.property) && fill.fields.length >= maxFill || hasFill(field.property) && fill.fields.length === 1"
                                 (change)="toggleFill(field.property)" /> {{ field.caption || field.property }}</label>

@@ -15,7 +15,8 @@ export const FILL_DEFAULTS = ['ccm:taxonid', 'ccm:educationalcontext', 'ccm:oeh_
 export function fillDefaults(fields: FieldInfo[], skip = ''): { property: string }[] {
   const known = new Set(fields.map((f) => f.property));
   const usual = FILL_DEFAULTS.filter((p) => known.has(p) && p !== skip);
-  const chosen = usual.length ? usual : fields.map((f) => f.property).filter((p) => p !== skip).slice(0, 6);
+  const chosen = usual.length ? usual
+    : fields.map((f) => f.property).filter((p) => p !== skip && !p.startsWith('virtual:')).slice(0, 6);
   return chosen.map((property) => ({ property }));
 }
 const VIEWS: ViewType[] = ['table', 'number', 'bar', 'stacked_bar', 'line', 'pie'];

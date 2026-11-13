@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..edusharing.client import MAX_VALUES, Aggregate, Criterion, EduSharingClient
+from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import VocabStore
 from ..errors import Notes, QueryError
 from ..filters import (
@@ -358,6 +359,13 @@ def _field_id(prop: str) -> str:
     return (re.sub(r"[^a-z0-9]+", "_", prop.casefold()).strip("_") or "feld")[:40]
 
 
+# Ablehnungen des Repositoriums, die nur das eine Feld betreffen
+_REFUSED = frozenset({"rejected", "unknown_property"})
+# Widget-Arten, bei denen ein Material höchstens einen Wert trägt
+SINGLE_TYPES = frozenset({"singleoption", "radioHorizontal", "radioVertical",
+                          "singlevalueTree", "slider", "checkbox"})
+
+
 async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                         run: _Run) -> dict[str, Any]:
     """Füllgrade. Je Feld wird gezählt, wie viele Dokumente dort mindestens einen Wert haben:
@@ -398,38 +406,92 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
 
     await check_prefix_values(occurring, list(base), prefix_fields, notes)
 
-    async def criterion(prop: str) -> Criterion | None | bool:
-        """Das Kriterium „hat einen Wert“; ``True``: gilt ohnehin, ``False``: nie,
-        ``None``: nicht bestimmbar."""
+    main_task = run.call(base, row_prop)
+    reasons: dict[str, str] = {}   # Feld → warum nicht bestimmbar
+    ranges: dict[str, tuple[int, int]] = {}
+    summed: set[str] = set()
+
+    async def measure(prop: str) -> Aggregate | int | bool | None:
+        """Materialien mit Wert: eine Zählung (mit Zeilenfacette), eine Zahl (nur insgesamt
+        bekannt), ``True``: alle, ``False``: keines, ``None``: nicht bestimmbar."""
         if prop in base_props:
             return True
         if prop in prefix_fields:
-            return Criterion(prop, ("",))
-        facet = await occurring(prop)
+            return await run.call(base + (Criterion(prop, ("",)),), row_prop)
+        if prop.startswith("virtual:"):
+            reasons[prop] = "virtual"  # kein gespeichertes Feld, nur eine Suchhilfe
+            return None
+        try:
+            facet = (await run.call(base, prop)).facets[prop]
+        except EduSharingError as exc:
+            if exc.kind not in _REFUSED:
+                raise
+            await main_task  # liegt es an den Filtern, scheitert die Abfrage hier
+            reasons[prop] = "refused"
+            return None
         if facet.truncated or len(facet.values) > MAX_VALUES:
+            reasons[prop] = "many"
             return None
         if not facet.values:
             return False
-        return Criterion(prop, tuple(v.value for v in facet.values))
+        total = (await main_task).total
+        low, high = max(v.count for v in facet.values), sum(v.count for v in facet.values)
+        try:
+            counted = await run.call(
+                base + (Criterion(prop, tuple(v.value for v in facet.values)),), row_prop)
+        except EduSharingError as exc:
+            if exc.kind not in _REFUSED:
+                raise
+            counted = None
+        # Die Zählung muss zu den Facetten passen: mindestens der häufigste Wert, höchstens
+        # die Summe. Sonst vergleicht das Kriterium nicht exakt (z. B. Textsuche).
+        if counted is not None and low <= counted.total <= high:
+            return counted
+        field = await vocab.field(prop)
+        if low == high or (field is not None and field.type in SINGLE_TYPES):
+            summed.add(prop)
+            return min(high, total)
+        ranges[prop] = (low, min(high, total))
+        return None
 
-    main_task = run.call(base, row_prop)
-    wanted = await asyncio.gather(*[criterion(f.property) for f in fill.fields])
+    by_field: list[Aggregate | int | bool | None] = list(await asyncio.gather(
+        *[measure(f.property) for f in fill.fields]))
     main = await main_task
-    counted = await asyncio.gather(*[
-        run.call(base + (crit,), row_prop) for crit in wanted if isinstance(crit, Criterion)])
-    answers = iter(counted)
-    by_field: list[Aggregate | bool | None] = [
-        next(answers) if isinstance(crit, Criterion) else crit for crit in wanted]
 
     labels = []
     for item in fill.fields:
         known = await vocab.field(item.property)
         labels.append(item.label or (known.caption if known and known.caption else item.property))
-    unknown = [label for label, got in zip(labels, by_field, strict=True) if got is None]
-    if unknown:
+    name = {f.property: label for f, label in zip(fill.fields, labels, strict=True)}
+
+    def named(reason: str) -> str:
+        return ", ".join(name[p] for p in name if reasons.get(p) == reason)
+
+    if named("many"):
         notes.add("fill_unknown",
                   "Nicht bestimmbar (zu viele verschiedene Werte oder gekürzte Werteliste): "
-                  f"{', '.join(unknown)}.")
+                  f"{named('many')}.")
+    if named("virtual"):
+        notes.add("fill_virtual",
+                  f"Nicht bestimmbar: {named('virtual')} (Suchhilfe des Repositoriums, kein "
+                  "gespeichertes Feld).")
+    if named("refused"):
+        notes.add("fill_refused",
+                  f"Nicht bestimmbar: {named('refused')} (das Repositorium zählt dieses Feld "
+                  "nicht).")
+    if ranges:
+        parts = "; ".join(f"{name[p]}: zwischen {low} und {high}"
+                          for p, (low, high) in ranges.items())
+        notes.add("fill_range",
+                  "Nicht genau bestimmbar, weil das Repositorium das Feld nicht als Filter "
+                  "zählt und ein Material mehrere Werte tragen kann. Materialien mit Wert "
+                  f"insgesamt: {parts}.")
+    if summed:
+        text = ("Aus der Summe der einzelnen Werte gerechnet (das Feld trägt je Material "
+                f"einen Wert): {', '.join(name[p] for p in name if p in summed)}.")
+        if rows_spec:
+            text += " Je Zeile ist das nicht möglich."
+        notes.add("fill_summed", text)
     filtered = [label for label, got in zip(labels, by_field, strict=True) if got is True]
     if filtered:
         notes.add("fill_filtered",
@@ -437,7 +499,7 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
                   "hat dort einen Wert.")
     capped = False
 
-    def filled_of(got: Aggregate | bool | None, total: int | None,
+    def filled_of(got: Aggregate | int | bool | None, total: int | None,
                   row: str | None, row_cut: bool) -> int | None:
         nonlocal capped
         if got is None or total is None:
@@ -446,6 +508,8 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
             return total
         if got is False:
             return 0
+        if isinstance(got, int):
+            return got if row is None else None
         if row is None:
             value: int | None = got.total
         else:

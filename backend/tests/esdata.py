@@ -32,7 +32,11 @@ LICENSE_GROUPS = {
 }
 SOURCES = ["oersi_spider", "youtube_spider", "bpb_spider"]
 KNOWN = {"ccm:taxonid", "ccm:educationalcontext", "ccm:commonlicense_key", "license",
-         "ccm:replicationsource", "ngsearchword"}
+         "ccm:replicationsource", "ngsearchword", "ccm:editorial_checklist"}
+# Wie live gemessen: als Facette zählbar, als Kriterium abgelehnt
+FACET_ONLY = {"ccm:price", "ccm:oeh_buffet_criteria", "virtual:kita_search"}
+PRICES = ["no", "yes", "yes_for_additional"]
+BUFFET = ["speech_valid", "content_valid", "medial_relevant"]
 
 MDS = {"id": "oeh", "widgets": [
     {"id": "ccm:taxonid", "caption": "Fach", "type": "multivalueTree",
@@ -43,6 +47,14 @@ MDS = {"id": "oeh", "widgets": [
     {"id": "ccm:commonlicense_key", "caption": "Lizenz", "type": "text"},
     {"id": "ccm:replicationsource", "caption": "Quelle", "type": "text"},
     {"id": "cclom:title", "caption": "Titel", "type": "text"},
+    {"id": "ccm:price", "caption": "Kosten", "type": "singleoption",
+     "values": [{"id": v, "caption": v} for v in PRICES]},
+    {"id": "ccm:oeh_buffet_criteria", "caption": "Buffet-Kriterien", "type": "multioption",
+     "values": [{"id": v, "caption": v} for v in BUFFET]},
+    {"id": "ccm:editorial_checklist", "caption": "Erschließungsstatus", "type": "multioption",
+     "values": [{"id": v, "caption": v} for v in ("2", "9")]},
+    {"id": "virtual:kita_search", "caption": "Kita", "type": "singleoption",
+     "values": [{"id": "1", "caption": "ja"}]},
 ]}
 
 Doc = dict[str, list[str]]
@@ -62,6 +74,11 @@ def make_docs(n: int = 400, seed: int = 7) -> list[Doc]:
         doc["ccm:commonlicense_key"] = [rng.choice(LICENSES)] if rng.random() < 0.7 else []
         doc["ccm:replicationsource"] = [rng.choice(SOURCES)]
         docs.append(doc)
+    extra = random.Random(seed + 1000)  # noqa: S311 - eigene Folge, damit das Übrige bleibt
+    for doc in docs:
+        doc["ccm:price"] = [extra.choice(PRICES)] if extra.random() < 0.5 else []
+        doc["ccm:oeh_buffet_criteria"] = extra.sample(BUFFET, extra.choice([0, 0, 2, 3]))
+        doc["ccm:editorial_checklist"] = [extra.choice(["2", "9"])] if extra.random() < 0.1 else []
     return docs
 
 
@@ -71,6 +88,8 @@ def _matches(doc: Doc, prop: str, values: list[str]) -> bool:
     if prop == "license":
         keys = set().union(*(LICENSE_GROUPS.get(v, set()) for v in values))
         return bool(keys & set(doc.get("ccm:commonlicense_key", [])))
+    if prop == "ccm:editorial_checklist":  # live gemessen: vergleicht nicht exakt
+        return bool(doc.get("ccm:educationalcontext"))
     if prop == "ccm:commonlicense_key":  # einwertig, Präfix-Treffer
         return any(key.startswith(values[0]) for key in doc.get(prop, []))
     return bool(set(values) & set(doc.get(prop, [])))
@@ -114,7 +133,7 @@ class DataRepo:
         facets = []
         for spec in body.get("facets") or []:
             prop = spec["property"]
-            if prop not in KNOWN and prop != "cclom:title":
+            if prop not in KNOWN | FACET_ONLY and prop != "cclom:title":
                 return error_response(400, f"Widget {prop} was not found in the mds oeh")
             counts = Counter(v for d in select(skip=prop) for v in d.get(prop, []))
             ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))

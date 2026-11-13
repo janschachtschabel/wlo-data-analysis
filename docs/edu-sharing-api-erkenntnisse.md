@@ -122,3 +122,29 @@ Metadatenset nicht kennt (Schmutzwerte ohne URI, leere Werte).
 `{"size":0,"track_total_hits":true,"aggs":{"lic":{"terms":{"field":"license.id","size":50}}}}`
 liefert 200, `hits.total.value` 104.893. `license.id` enthält volle URLs mit Versions-
 und Ländervarianten, die zum Gruppieren normalisiert werden müssen.
+
+## Füllgrade und Kennzeichen (gemessen 2026-11-13, Produktion, 318.912 Materialien)
+
+- Füllgrad über das Kriterium „alle vorkommenden Werte" stimmt für die Kernfelder mit den
+  Facettensummen überein: Fach 74,9 %, Sprache 74,8 %, Materialart 75,9 %, Lizenz 72,3 %,
+  Bildungsstufe 54,7 %, Zielgruppe 51,0 %, Quelle 93,7 %, Bezugsquelle 98,3 %.
+- **Nur als Facette, nicht als Kriterium (400):** alle `ccm:oeh_quality_*`,
+  `ccm:oeh_accessibility_*`, `ccm:oeh_competence_*`, `ccm:price`, `ccm:conditionsOfAccess`,
+  `ccm:containsAdvertisement`, `ccm:license_oer`, `ccm:fskRating`,
+  `ccm:dataProtectionConformity`, `ccm:accessibilitySummary`, `ccm:oeh_buffet_criteria`,
+  `ccm:oeh_languageLevel`, `ccm:oeh_languageTarget`, `cclom:status`. Verteilungen gehen,
+  Filter nicht. Der Füllgrad ergibt sich bei einwertigen Feldern aus der Facettensumme
+  (`ccm:price` 158.675 = 49,8 %); bei mehrwertigen (`ccm:oeh_buffet_criteria`: Summe
+  129.585, häufigster Wert 25.928) bleibt nur eine Spanne.
+- **Kriterium angenommen, aber nicht exakt:** `ccm:editorial_checklist` (Wert „9": 2.765
+  Treffer statt 25.153 laut Facette; alle Werte: 129.396 statt höchstens 28.607),
+  `ccm:author_freetext` (Textsuche), `cclom:general_keyword` (zwei Werte ergeben 0). Die
+  Engine prüft deshalb jede Zählung gegen die Facette (häufigster Wert ≤ Zählung ≤ Summe).
+- `virtual:*`-Felder und `license` sind Suchhilfen, keine gespeicherten Felder: Facette
+  ohne Werte.
+- Qualitätsfelder mischen Schreibweisen (Zahl 0 bis 5 und URI derselben Stufe),
+  `ccm:containsAdvertisement` mischt `no`/`yes` mit Zahlen; einige Felder tragen nur `TODO`.
+- Praktisch leer: `ccm:editorial_state` (13), `ccm:oeh_signatures` (8), `cclom:status` (72).
+- Füllgrad je Quelle (25 größte): 0,34 s, 10 Abfragen. Auffällig: bpb ohne Bildungsstufe
+  (1,2 %), GeoGebra ohne Fach (2,0 %), Tutory ohne Sprache (2,9 %).
+

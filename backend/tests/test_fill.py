@@ -182,3 +182,67 @@ def test_fill_metric_through_run_report_history_and_export(settings):
         assert "Füllgrad %" in csv and "Gesamt;" not in csv
         assert api.get(f"/api/runs/{second['id']}/export?format=html").status_code == 200
         assert api.get(f"/api/runs/{second['id']}/export?format=md").status_code == 200
+
+
+# ---- Felder, die das Repositorium nur als Facette zählt (live gemessen) --------------------
+
+PRICE, BUFFET, CHECK, KITA = ("ccm:price", "ccm:oeh_buffet_criteria", "ccm:editorial_checklist",
+                              "virtual:kita_search")
+
+
+def notes_of(result):
+    return {n["code"]: n["text"] for n in result["provenance"]["notes"]}
+
+
+def test_single_valued_field_refused_as_filter_is_summed(repo, tmp_path):
+    result = query(repo, tmp_path, fill=fields(PRICE, TAX))
+    total = len(repo.docs)
+    filled = sum(1 for d in repo.docs if has(d, PRICE))
+    assert 0 < filled < total
+    assert result["rows"][0]["values"] == [filled, total - filled, round(100 * filled / total, 1)]
+    assert "Kosten" in notes_of(result)["fill_summed"]
+    # mit Grundfilter: die Summe gilt für die gefilterten Materialien
+    result = query(repo, tmp_path, filters=[{"property": LVL, "values": [HS]}],
+                   fill=fields(PRICE))
+    docs = [d for d in repo.docs if HS in d.get(LVL, [])]
+    assert result["rows"][0]["values"][0] == sum(1 for d in docs if has(d, PRICE))
+
+
+def test_multi_valued_field_refused_as_filter_is_unknown_with_range(repo, tmp_path):
+    result = query(repo, tmp_path, fill=fields(BUFFET))
+    assert result["rows"][0]["values"] == [None, None, None]
+    text = notes_of(result)["fill_range"]
+    filled = sum(1 for d in repo.docs if has(d, BUFFET))
+    low, high = (int(n) for n in text.split("zwischen ")[1].rstrip(".").split(" und "))
+    assert low <= filled <= high and low < high
+    assert "fill_summed" not in notes_of(result)
+
+
+def test_filter_that_does_not_match_exactly_is_not_trusted(repo, tmp_path):
+    """Das Kriterium des Feldes zählt etwas anderes als die Facette: nie als Füllgrad."""
+    result = query(repo, tmp_path, fill=fields(CHECK))
+    filled = sum(1 for d in repo.docs if has(d, CHECK))
+    wrong = sum(1 for d in repo.docs if has(d, LVL))
+    assert wrong > filled > 0
+    got = result["rows"][0]["values"][0]
+    assert got != wrong
+    # je Material ein Wert im Testbestand, das Feld gilt aber als mehrwertig: Spanne
+    assert got is None and str(filled) in notes_of(result)["fill_range"]
+
+
+def test_virtual_field_is_unknown_not_zero(repo, tmp_path):
+    result = query(repo, tmp_path, fill=fields(KITA, TAX))
+    assert result["rows"][0]["values"] == [None, None, None]
+    assert "Kita" in notes_of(result)["fill_virtual"]
+    assert result["rows"][1]["values"][0] is not None
+    assert not any(f["property"] == KITA for s in repo.searches for f in s.get("facets") or [])
+
+
+def test_summed_field_has_no_value_per_row(repo, tmp_path):
+    result = query(repo, tmp_path, rows={"property": SRC}, fill=fields(PRICE, LIC))
+    total = len(repo.docs)
+    filled = sum(1 for d in repo.docs if has(d, PRICE))
+    assert result["columns"][1]["total"] == round(100 * filled / total, 1)
+    assert all(r["values"][1] is None for r in result["rows"])
+    assert all(r["values"][2] is not None for r in result["rows"])
+    assert "Je Zeile" in notes_of(result)["fill_summed"]
