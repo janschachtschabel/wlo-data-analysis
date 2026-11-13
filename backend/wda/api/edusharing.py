@@ -39,8 +39,8 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(UnresolvedValue)
     async def unresolved(request: Request, exc: UnresolvedValue) -> JSONResponse:
         return JSONResponse(
-            {"detail": str(exc), "property": exc.property, "text": exc.text,
-             "ambiguous": exc.ambiguous, "suggestions": exc.suggestions},
+            {"detail": str(exc), "kind": "unresolved_value", "property": exc.property,
+             "text": exc.text, "ambiguous": exc.ambiguous, "suggestions": exc.suggestions},
             status_code=422)
 
 

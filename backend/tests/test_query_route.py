@@ -55,6 +55,7 @@ def test_query_errors(api, repo):
     r = api.post("/api/query", json={"instance": "wlo-prod",
                                      "rows": {"property": TAX, "include": ["Mathe"]}})
     assert r.status_code == 422 and r.json()["suggestions"][0]["caption"] == "Mathematik"
+    assert r.json()["kind"] == "unresolved_value"
     r = api.post("/api/query", json={"instance": "wlo-prod", "filters": [
         {"property": "ccm:unbekannt", "values": ["x"]}]})
     assert r.status_code == 422 and r.json()["kind"] == "unknown_property"

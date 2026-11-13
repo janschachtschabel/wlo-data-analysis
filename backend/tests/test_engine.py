@@ -504,3 +504,27 @@ def test_upstream_failure_cancels_remaining_calls(tmp_path):
             {"id": "b", "label": "B", "filters": [{"property": "ccm:unbekannt",
                                                     "values": ["x"]}]}])
     assert info.value.kind == "unknown_property"
+
+
+def test_notes_name_ungrouped_values_and_overlapping_rows(repo, tmp_path):
+    """Befund aus dem Live-Test: Tabellen, deren Zeilen sich nicht zur Gesamtzahl summieren,
+    sagen das."""
+    r = query(repo, tmp_path, rows={"property": LIC, "groups": [
+        {"id": "a", "label": "A", "values": ["CC_0", "PDM", "CC_BY", "CC_BY_SA"]}]})
+    loose = [n for n in r["provenance"]["notes"] if "in keiner Gruppe" in n]
+    occurring = {v for d in repo.docs for v in d[LIC]} - OER
+    assert len(loose) == 1 and loose[0].startswith(f"{len(occurring)} vorkommende Werte")
+    r = query(repo, tmp_path, rows={"property": TAX, "groups": [
+        {"label": "Mathe", "values": [M]}]})
+    assert any("in keiner Gruppe" in n for n in r["provenance"]["notes"])
+    # mehrwertiges Feld als Zeilen: Hinweis auf Überschneidung; einwertig: keiner
+    r = query(repo, tmp_path, rows={"property": TAX})
+    assert any("in mehreren Zeilen" in n for n in r["provenance"]["notes"])
+    r = query(repo, tmp_path, rows={"property": LIC})
+    assert not any("in mehreren Zeilen" in n for n in r["provenance"]["notes"])
+
+
+def test_prefix_message_for_columns_does_not_talk_about_a_filter(repo, tmp_path):
+    with pytest.raises(QueryError, match="taugt nicht als Spaltenfeld") as info:
+        query(repo, tmp_path, columns={"property": LIC})
+    assert "Filter" not in str(info.value)

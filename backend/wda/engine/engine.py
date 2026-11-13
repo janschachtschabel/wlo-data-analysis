@@ -153,7 +153,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         _check_prefix_shape(col.criteria, prefix_fields)
     await _check_prefix_values(
         run, client, [c for col in data_columns for c in col.criteria] + list(base),
-        prefix_fields, notes)
+        prefix_fields, notes, spec.columns.property if spec.columns else None)
 
     # ---- Ausführung -----------------------------------------------------------
     main = await asyncio.gather(*[
@@ -204,6 +204,21 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 row.members = (row.key,)
                 for col in data_columns:
                     col.cells[row.key] = cell(col, row.key)
+            if not single and len(rows) > 1:
+                notes.append(
+                    f"Ein Dokument kann mehrere Werte von '{row_prop}' tragen und steht dann "
+                    "in mehreren Zeilen; die Zeilen summieren sich nicht zur Gesamtzahl.")
+
+        if groups:
+            grouped = {m for g in groups for m in g.members}
+            loose = sorted({v for fc in facet_counts.values() for v, n in fc.items() if n}
+                           - grouped)
+            if loose:
+                shown = ", ".join(f"'{v}'" if v else "(leer)" for v in loose[:5])
+                notes.append(
+                    f"{len(loose)} vorkommende Werte von '{row_prop}' stehen in keiner Gruppe "
+                    f"und sind nicht dargestellt ({shown}{' …' if len(loose) > 5 else ''}). "
+                    "Die Zeilen summieren sich deshalb nicht zur Gesamtzahl.")
 
     # ---- Formeln, Sortierung, top/other, „ohne Wert" --------------------------
     _apply_formulas(columns, [r.key for r in rows])
@@ -320,7 +335,8 @@ def _check_prefix_shape(criteria, prefix_fields: set[str]) -> None:
 
 
 async def _check_prefix_values(run: _Run, client: EduSharingClient, criteria,
-                               prefix_fields: set[str], notes: list[str]) -> None:
+                               prefix_fields: set[str], notes: list[str],
+                               column_prop: str | None = None) -> None:
     """Ein Kriterium auf einem Präfix-Feld zählt auch alle längeren Schlüssel mit. Erlaubt
     sind deshalb nur Werte, die kein Anfang eines anderen vorkommenden Schlüssels sind."""
     wanted: dict[str, set[str]] = {}
@@ -343,6 +359,11 @@ async def _check_prefix_values(run: _Run, client: EduSharingClient, criteria,
         keys = [v.value for v in facet.values]
         for value in sorted(values):
             longer = sorted(k for k in keys if k != value and k.startswith(value))
+            if longer and prop == column_prop:
+                raise QueryError(
+                    f"'{prop}' taugt nicht als Spaltenfeld: Die Spalte '{value}' würde auch "
+                    f"{', '.join(longer[:6])} mitzählen (das Repositorium vergleicht hier nur "
+                    f"den Anfang). Stattdessen '{prop}' als Zeilen verwenden.")
             if longer:
                 raise QueryError(
                     f"Der Filter '{prop}' = '{value}' würde auch {', '.join(longer[:6])} "
