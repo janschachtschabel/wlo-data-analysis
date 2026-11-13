@@ -13,12 +13,13 @@ Zerlegung (Zähl-Semantik siehe docs/edu-sharing-api-erkenntnisse.md):
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..edusharing.client import MAX_VALUES, Aggregate, Criterion, EduSharingClient
 from ..edusharing.vocab import VocabStore
-from ..errors import QueryError
+from ..errors import Notes, QueryError
 from ..filters import (
     FilterIn,
     check_prefix_shape,
@@ -30,6 +31,7 @@ from .formula import Formula, compile_formula
 from .spec import MAX_CALLS, MAX_SERIES, QuerySpec, Series
 
 Number = int | float
+SCHEMA_VERSION = 1  # Form des Ergebnisses; gespeicherte Läufe tragen sie mit
 
 
 @dataclass
@@ -97,7 +99,7 @@ async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore
 
 async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore, run: _Run
                    ) -> dict[str, Any]:
-    notes: list[str] = []
+    notes = Notes()
     prefix_fields = set(client.instance.prefix_fields)
     base_list, base_described = await resolve_filters(vocab, spec.filters)
     base = tuple(base_list)
@@ -121,12 +123,14 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 raise QueryError(
                     f"'{row_prop}' ist einwertig: Gruppen gehen hier nur als Summe "
                     "(group_mode sum oder auto).")
-            for pos, group in enumerate(rows_spec.groups, 1):
+            for group in rows_spec.groups:
                 members = await resolve_values(vocab, rows_spec.property, group.values)
-                groups.append(_Row(group.id or f"g{pos}", group.label, "group",
+                groups.append(_Row(group.id or _slug(group.label), group.label, "group",
                                    tuple(m["value"] for m in members)))
             if len({g.key for g in groups}) != len(groups):
-                raise QueryError("Die IDs der Gruppen müssen eindeutig sein.")
+                raise QueryError(
+                    "Die IDs der Gruppen müssen eindeutig sein (ohne ID entsteht sie aus dem "
+                    "Namen der Gruppe).")
         if rows_spec.include:
             include = await resolve_values(vocab, rows_spec.property, rows_spec.include)
         if row_prop in base_props:
@@ -135,7 +139,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 raise QueryError(
                     f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern. Das geht nicht "
                     "zusammen mit Gruppen, „Übrige“ oder der Zeile „ohne Wert“.")
-            notes.append(
+            notes.add("rows_filtered", 
                 f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern: Die Zeilen zeigen "
                 "nur die gefilterten Werte.")
 
@@ -178,7 +182,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             if facet.truncated:
                 cut.add(col.id)
     if cut:
-        notes.append(
+        notes.add("facet_truncated", 
             f"Die Werteliste von '{row_prop}' wurde vom Repositorium gekürzt; "
             "seltene Werte fehlen.")
 
@@ -205,7 +209,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 for g in groups:
                     col.cells[g.key] = _sum(cell(col, m) for m in set(g.members))
             if not single:
-                notes.append(
+                notes.add("groups_summed", 
                     "Gruppen sind Summen der Einzelwerte. Trägt ein Dokument mehrere Werte "
                     "einer Gruppe, zählt es mehrfach.")
         else:
@@ -215,7 +219,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 for col in data_columns:
                     col.cells[row.key] = cell(col, row.key)
             if not single and len(rows) > 1:
-                notes.append(
+                notes.add("rows_overlap", 
                     f"Ein Dokument kann mehrere Werte von '{row_prop}' tragen und steht dann "
                     "in mehreren Zeilen; die Zeilen summieren sich nicht zur Gesamtzahl.")
 
@@ -225,7 +229,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                            - grouped)
             if loose:
                 shown = ", ".join(f"'{v}'" if v else "(leer)" for v in loose[:5])
-                notes.append(
+                notes.add("values_ungrouped", 
                     f"{len(loose)} vorkommende Werte von '{row_prop}' stehen in keiner Gruppe "
                     f"und sind nicht dargestellt ({shown}{' …' if len(loose) > 5 else ''}). "
                     "Die Zeilen summieren sich deshalb nicht zur Gesamtzahl.")
@@ -235,7 +239,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
     rows = _sort_rows(rows, columns, rows_spec, include, bool(groups))
     if rows_spec and rows_spec.top is not None and len(rows) > rows_spec.top:
         kept, rest = rows[: rows_spec.top], rows[rows_spec.top:]
-        notes.append(f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
+        notes.add("rows_top",
+                  f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
         if rows_spec.other:
             # Werte, die in keiner angezeigten Zeile stecken
             shown = {m for r in kept for m in r.members}
@@ -249,14 +254,14 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                     col.cells[other.key] = _sum(cell(col, v) for v in rest_values)
             elif len(rest_values) > MAX_VALUES:
                 other = None
-                notes.append("„Übrige“ entfällt: zu viele verschiedene Werte.")
+                notes.add("other_dropped", "„Übrige“ entfällt: zu viele verschiedene Werte.")
             else:
                 counted = await asyncio.gather(*[
                     run.call(base + col.criteria + (Criterion(rows_spec.property, rest_values),))
                     for col in data_columns])
                 for col, agg in zip(data_columns, counted, strict=True):
                     col.cells[other.key] = agg.total
-                notes.append(
+                notes.add("other_overlap", 
                     "„Übrige“ zählt die Dokumente mit mindestens einem der nicht gezeigten "
                     "Werte; ein Dokument kann zugleich in einer gezeigten Zeile stehen.")
             if other is not None:
@@ -279,16 +284,17 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             col.cells[missing.key] = (None if counted is None or col.total is None
                                       else max(col.total - counted, 0))
         if any(c is None for c in with_value):
-            notes.append(
+            notes.add("missing_unknown", 
                 "„Ohne Wert“ fehlt, wo die Werteliste gekürzt ist oder zu viele Werte hat.")
         rows.append(missing)
         _apply_formulas(columns, [missing.key])
 
     _apply_formula_totals(columns)
     if any(c.derived for c in columns):
-        notes.append("Spalten mit Formel sind aus anderen Spalten berechnet, nicht gezählt.")
+        notes.add("derived_columns",
+                  "Spalten mit Formel sind aus anderen Spalten berechnet, nicht gezählt.")
     if spec.percent == "row" and len(data_columns) > 1:
-        notes.append(
+        notes.add("row_percent", 
             "Zeilenanteile beziehen sich auf die Summe der gezählten Spalten. Das ist nur "
             "sinnvoll, wenn sich die Spalten nicht überschneiden.")
 
@@ -309,7 +315,9 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         out_rows.append(entry)
 
     fetched = [r.fetched_at for r in run.results]
+    inst = client.instance
     return {
+        "schema_version": SCHEMA_VERSION,
         "instance": spec.instance,
         "columns": [{"id": c.id, "label": c.label, "derived": c.derived, "total": c.total}
                     for c in columns],
@@ -319,12 +327,24 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             "oldest_fetched_at": min(fetched) if fetched else None,
             "cached": bool(run.results) and all(r.cached for r in run.results),
             "queries": len(run.results),
-            "notes": notes,
+            "notes": list(notes),
+            "instance": {"id": inst.id, "base_url": inst.base_url, "repository": inst.repository,
+                         "metadataset": inst.metadataset, "query": inst.query},
+            "spec": spec.model_dump(mode="json", exclude={"refresh"}),
+            "rows": ({"property": row_prop, "mode": mode,
+                      "groups": [{"key": g.key, "label": g.label, "values": list(g.members)}
+                                 for g in groups]} if rows_spec else None),
             "filters": base_described,
             "columns": [{"id": c.id, "filters": c.filters,
                          "formula": c.formula.text if c.formula else None} for c in columns],
         },
     }
+
+
+def _slug(label: str) -> str:
+    """Stabile ID aus dem Namen einer Gruppe, unabhängig von ihrer Position."""
+    text = re.sub(r"[^a-z0-9]+", "_", label.casefold()).strip("_")
+    return "g_" + (text or "x")[:36]
 
 
 def _sum(values) -> int | None:
@@ -338,7 +358,7 @@ def _sum(values) -> int | None:
 
 async def _plan_columns(
     spec: QuerySpec, vocab: VocabStore, run: _Run, base: tuple[Criterion, ...] | list[Criterion],
-    base_props: set[str], row_prop: str | None, notes: list[str],
+    base_props: set[str], row_prop: str | None, notes: Notes,
 ) -> list[_Column]:
     base = tuple(base)
     if spec.columns:
@@ -358,13 +378,14 @@ async def _plan_columns(
             chosen = [{"value": v.value, "label": await vocab.label(prop, v.value)}
                       for v in top]
             if len(facet.values) > len(top) or facet.truncated:
-                notes.append(
+                notes.add("columns_top", 
                     f"Spalten: die {len(top)} häufigsten Werte von '{prop}'; weitere "
                     "Werte sind nicht dargestellt.")
-        return [_Column(f"c{pos}", item["label"],
+        # ID ist der Wert selbst: bleibt über Läufe gleich, auch wenn sich die Rangfolge ändert
+        return [_Column(item["value"], item["label"],
                         (Criterion(prop, (item["value"],)),),
                         filters=[{"property": prop, "values": [item]}])
-                for pos, item in enumerate(chosen, 1)]
+                for item in chosen]
     series = spec.series or [Series(id="anzahl", label="Anzahl")]
     columns: list[_Column] = []
     for item in series:

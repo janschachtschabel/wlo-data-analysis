@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from ..edusharing.client import MAX_FACET_LIMIT, EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore, _norm
+from ..errors import Notes
 from ..filters import (
     FilterIn,
     Name,
@@ -122,7 +123,7 @@ async def aggregate(instance_id: str, body: AggregateIn, request: Request) -> di
     criteria, resolved_filters = await resolve_filters(vocab, body.filters)
 
     # Dieselbe Regel wie in der Abfrage-Engine: kein Filter, der still mehr zählt.
-    notes: list[str] = []
+    notes = Notes()
     prefix_fields = set(client.instance.prefix_fields)
     check_prefix_shape(criteria, prefix_fields)
 
@@ -156,7 +157,7 @@ async def aggregate(instance_id: str, body: AggregateIn, request: Request) -> di
         "total": result.total,
         "facets": facets_out,
         "filters": resolved_filters,
-        "notes": notes,
+        "notes": list(notes),
         "fetched_at": result.fetched_at,
         "cached": result.cached,
     }

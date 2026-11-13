@@ -120,8 +120,9 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   `COPYRIGHT_OTHERS`).
 - Jede Spalte nennt ihre echte Gesamtzahl (jedes Dokument einmal). Bei mehrwertigen
   Feldern ist das weniger als die Summe der Zeilen.
-- `provenance` nennt Abrufzeitpunkt, Zahl der Einzelabfragen, die aufgelösten Filter und
-  in `notes` jede Besonderheit der Zählung (gekürzte Wertelisten, Summen-Gruppen,
+- `provenance` nennt Abrufzeitpunkt, Zahl der Einzelabfragen, Instanz, die Abfrage selbst,
+  die aufgelösten Filter und Gruppen und in `notes` (je Eintrag `code` und `text`) jede
+  Besonderheit der Zählung (gekürzte Wertelisten, Summen-Gruppen,
   berechnete Spalten).
 
 ## Entwicklung

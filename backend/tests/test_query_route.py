@@ -33,7 +33,7 @@ def test_query_success(api, repo):
     })
     assert r.status_code == 200, r.text
     body = r.json()
-    assert set(body) == {"instance", "columns", "rows", "provenance"}
+    assert set(body) == {"schema_version", "instance", "columns", "rows", "provenance"}
     assert [c["id"] for c in body["columns"]] == ["gesamt", "oer", "anteil"]
     assert set(body["rows"][0]) == {"key", "label", "kind", "values"}
     assert body["rows"][-1]["kind"] == "missing"

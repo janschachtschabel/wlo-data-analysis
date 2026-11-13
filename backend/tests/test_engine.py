@@ -90,7 +90,7 @@ def test_rows_by_series_filters(repo, tmp_path):
 def test_columns_from_field(repo, tmp_path):
     r = query(repo, tmp_path, rows={"property": TAX}, columns={"property": LVL, "top": 3})
     assert len(r["columns"]) == 3
-    assert [c["id"] for c in r["columns"]] == ["c1", "c2", "c3"]
+    assert {c["id"] for c in r["columns"]} <= {u for d in repo.docs for u in d[LVL]}  # Wert als ID
     totals = [c["total"] for c in r["columns"]]
     assert totals == sorted(totals, reverse=True)
     label_to_uri = {"Sekundarstufe I": S1, "Hochschule": HS, "Elementarbereich": EL,
@@ -99,7 +99,7 @@ def test_columns_from_field(repo, tmp_path):
         uri = label_to_uri[col["label"]]
         assert col["total"] == repo.brute(repo.has(LVL, uri))
         assert cells(r, pos)[M] == repo.brute(lambda d, u=uri: u in d[LVL] and M in d[TAX])
-    assert any("häufigsten" in n for n in r["provenance"]["notes"])
+    assert any("häufigsten" in n["text"] for n in r["provenance"]["notes"])
     assert r["provenance"]["queries"] == 4
     r = query(repo, tmp_path, columns={"property": LVL, "include": ["Hochschule", "political"
                                                                     ][:1]})
@@ -115,8 +115,8 @@ def test_groups_distinct_overlapping_and_unknown(repo, tmp_path):
     ]})
     got = cells(r)
     assert got["mint"] == repo.brute(repo.has(TAX, M, P, DISC + "320"))
-    assert got["g2"] == repo.brute(repo.has(TAX, M, D))
-    assert got["g3"] == 0
+    assert got["g_mathe_und_deutsch"] == repo.brute(repo.has(TAX, M, D))
+    assert got["g_fremd"] == 0
     assert [x["label"] for x in r["rows"]] == ["MINT", "Mathe und Deutsch", "Fremd"]
     assert all(x["kind"] == "group" for x in r["rows"])
     assert r["provenance"]["queries"] == 4
@@ -147,7 +147,7 @@ def test_group_mode_explicit_overrides_auto(repo, tmp_path):
     summed = query(repo, tmp_path, rows={"property": TAX, "groups": groups,
                                          "group_mode": "sum"})
     assert cells(summed)["mp"] == repo.brute(repo.has(TAX, M)) + repo.brute(repo.has(TAX, P))
-    assert any("zählt es mehrfach" in n for n in summed["provenance"]["notes"])
+    assert any("zählt es mehrfach" in n["text"] for n in summed["provenance"]["notes"])
     before = len(repo.searches)
     with pytest.raises(QueryError, match="einwertig"):  # einwertiges Feld verträgt kein ODER
         query(repo, tmp_path, rows={"property": LIC, "group_mode": "distinct", "groups": [
@@ -189,7 +189,7 @@ def test_row_field_also_in_filters(repo, tmp_path):
     assert set(cells(r)) == {M, P}
     assert cells(r)[M] == repo.brute(repo.has(TAX, M))
     assert r["columns"][0]["total"] == repo.brute(repo.has(TAX, M, P))
-    assert any("nur die gefilterten" in n for n in r["provenance"]["notes"])
+    assert any("nur die gefilterten" in n["text"] for n in r["provenance"]["notes"])
     for rows in ({"property": TAX, "missing": True},
                  {"property": TAX, "top": 1, "other": True},
                  {"property": TAX, "groups": [{"label": "x", "values": [M]}]},
@@ -212,8 +212,8 @@ def test_include_sort_top_other(repo, tmp_path):
             if u not in {x["key"] for x in r["rows"]}]
     assert r["rows"][-1]["values"] == [repo.brute(repo.has(TAX, *rest))]
     assert r["rows"][-1]["values"][0] < sum(repo.brute(repo.has(TAX, u)) for u in rest)
-    assert any("Übrige" in n for n in r["provenance"]["notes"])
-    assert any("ersten 2 von 5" in n for n in r["provenance"]["notes"])
+    assert any("Übrige" in n["text"] for n in r["provenance"]["notes"])
+    assert any("ersten 2 von 5" in n["text"] for n in r["provenance"]["notes"])
     assert r["provenance"]["queries"] == 2
     # einwertig: „Übrige" ist die Summe des Rests
     r = query(repo, tmp_path, rows={"property": LIC, "top": 3, "other": True, "missing": True})
@@ -247,7 +247,7 @@ def test_formulas_chain_and_totals(repo, tmp_path):
     assert [c["derived"] for c in r["columns"]] == [True, False, False, False, True, True]
     assert r["provenance"]["queries"] == 3
     assert r["provenance"]["columns"][4]["formula"] == "gesamt - mit"
-    assert any("Formel" in n for n in r["provenance"]["notes"])
+    assert any("Formel" in n["text"] for n in r["provenance"]["notes"])
 
 
 @pytest.mark.parametrize("series", [
@@ -373,7 +373,7 @@ def test_license_key_prefix_is_never_silently_wrong(repo, tmp_path):
         {"id": "mit", "label": "mit", "filters": [{"property": LIC, "values": [""]}]}])
     assert r["columns"][0]["total"] == repo.brute(repo.has(LIC, "CC_0"))
     assert r["columns"][1]["total"] == repo.brute(lambda d: bool(d[LIC]))
-    assert any("leere Wert" in n for n in r["provenance"]["notes"])
+    assert any("leere Wert" in n["text"] for n in r["provenance"]["notes"])
     # der exakte Weg: Lizenz als Zeilen, das andere Feld als Spalten
     r = query(repo, tmp_path, rows={"property": LIC}, columns={"property": SRC})
     col = next(pos for pos, c in enumerate(r["columns"]) if c["label"] == "oersi_spider")
@@ -432,7 +432,7 @@ def test_percent_skips_derived_columns(repo, tmp_path):
                for row in r["rows"])
     r = query(repo, tmp_path, percent="row", rows={"property": TAX}, series=series)
     assert all(row["percent"][2] is None for row in r["rows"])
-    assert any("nicht überschneiden" in n for n in r["provenance"]["notes"])
+    assert any("nicht überschneiden" in n["text"] for n in r["provenance"]["notes"])
 
 
 def test_truncated_facet_gives_unknown_not_zero(tmp_path):
@@ -462,7 +462,7 @@ def test_truncated_facet_gives_unknown_not_zero(tmp_path):
     got = cells(r)
     assert got["quelle_00"] == 14 and got["selten"] is None
     assert got["__missing__"] is None
-    assert any("gekürzt" in n for n in r["provenance"]["notes"])
+    assert any("gekürzt" in n["text"] for n in r["provenance"]["notes"])
 
 
 def test_budget_is_checked_before_any_call(repo, tmp_path):
@@ -511,20 +511,48 @@ def test_notes_name_ungrouped_values_and_overlapping_rows(repo, tmp_path):
     sagen das."""
     r = query(repo, tmp_path, rows={"property": LIC, "groups": [
         {"id": "a", "label": "A", "values": ["CC_0", "PDM", "CC_BY", "CC_BY_SA"]}]})
-    loose = [n for n in r["provenance"]["notes"] if "in keiner Gruppe" in n]
+    loose = [n for n in r["provenance"]["notes"] if "in keiner Gruppe" in n["text"]]
     occurring = {v for d in repo.docs for v in d[LIC]} - OER
-    assert len(loose) == 1 and loose[0].startswith(f"{len(occurring)} vorkommende Werte")
+    assert len(loose) == 1 and loose[0]["text"].startswith(f"{len(occurring)} vorkommende Werte")
     r = query(repo, tmp_path, rows={"property": TAX, "groups": [
         {"label": "Mathe", "values": [M]}]})
-    assert any("in keiner Gruppe" in n for n in r["provenance"]["notes"])
+    assert any("in keiner Gruppe" in n["text"] for n in r["provenance"]["notes"])
     # mehrwertiges Feld als Zeilen: Hinweis auf Überschneidung; einwertig: keiner
     r = query(repo, tmp_path, rows={"property": TAX})
-    assert any("in mehreren Zeilen" in n for n in r["provenance"]["notes"])
+    assert any("in mehreren Zeilen" in n["text"] for n in r["provenance"]["notes"])
     r = query(repo, tmp_path, rows={"property": LIC})
-    assert not any("in mehreren Zeilen" in n for n in r["provenance"]["notes"])
+    assert not any("in mehreren Zeilen" in n["text"] for n in r["provenance"]["notes"])
 
 
 def test_prefix_message_for_columns_does_not_talk_about_a_filter(repo, tmp_path):
     with pytest.raises(QueryError, match="taugt nicht als Spaltenfeld") as info:
         query(repo, tmp_path, columns={"property": LIC})
     assert "Filter" not in str(info.value)
+
+
+def test_result_carries_what_a_stored_run_needs(repo, tmp_path):
+    """Aus dem übergreifenden Review: Ein gespeichertes Ergebnis muss für sich verständlich
+    und mit späteren Läufen vergleichbar sein."""
+    r = query(repo, tmp_path, refresh=True, rows={"property": TAX, "groups": [
+        {"label": "MINT Fächer", "values": ["Mathematik", "Physik"]},
+        {"id": "deutsch", "label": "Deutsch", "values": ["Deutsch"]}]})
+    assert r["schema_version"] == 1
+    prov = r["provenance"]
+    assert prov["instance"] == {"id": "t", "base_url": "https://r.example",
+                                "repository": "-home-", "metadataset": "mds_oeh",
+                                "query": "ngsearch"}
+    assert "refresh" not in prov["spec"] and prov["spec"]["rows"]["property"] == TAX
+    assert prov["rows"] == {"property": TAX, "mode": "distinct", "groups": [
+        {"key": "g_mint_f_cher", "label": "MINT Fächer", "values": sorted([M, P])},
+        {"key": "deutsch", "label": "Deutsch", "values": [D]}]}
+    assert all(set(n) == {"code", "text"} for n in prov["notes"])
+    assert "values_ungrouped" in {n["code"] for n in prov["notes"]}
+    # Gruppen-IDs hängen am Namen, nicht an der Position
+    swapped = query(repo, tmp_path, rows={"property": TAX, "groups": [
+        {"id": "deutsch", "label": "Deutsch", "values": ["Deutsch"]},
+        {"label": "MINT Fächer", "values": ["Mathematik", "Physik"]}]})
+    assert cells(swapped) == cells(r)
+    assert query(repo, tmp_path)["provenance"]["rows"] is None
+    with pytest.raises(QueryError, match="eindeutig"):
+        query(repo, tmp_path, rows={"property": TAX, "groups": [
+            {"label": "A b", "values": [M]}, {"label": "a-B", "values": [P]}]})

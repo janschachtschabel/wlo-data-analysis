@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from .edusharing.client import MAX_VALUE_LENGTH, Criterion, Facet
 from .edusharing.errors import EduSharingError
 from .edusharing.vocab import VocabStore
-from .errors import QueryError
+from .errors import Notes, QueryError
 
 Name = Annotated[StrictStr, Field(min_length=1, max_length=200, pattern=r"^\S+$")]
 Value = Annotated[StrictStr, Field(max_length=MAX_VALUE_LENGTH)]
@@ -77,7 +77,7 @@ def check_prefix_shape(criteria, prefix_fields: set[str]) -> None:
 
 async def check_prefix_values(
     occurring: Callable[[str], Awaitable[Facet]], criteria, prefix_fields: set[str],
-    notes: list[str], column_prop: str | None = None,
+    notes: Notes, column_prop: str | None = None,
 ) -> None:
     """Ein Kriterium auf einem Präfix-Feld zählt auch alle längeren Schlüssel mit. Erlaubt
     sind deshalb nur Werte, die kein Anfang eines anderen vorkommenden Schlüssels sind."""
@@ -87,7 +87,7 @@ async def check_prefix_values(
             wanted.setdefault(crit.property, set()).update(crit.values)
     for prop, values in wanted.items():
         if "" in values:
-            notes.append(
+            notes.add("prefix_empty", 
                 f"Der leere Wert für '{prop}' zählt alle Dokumente, bei denen das Feld "
                 "gesetzt ist.")
             values = values - {""}

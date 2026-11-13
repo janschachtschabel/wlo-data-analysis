@@ -177,7 +177,7 @@ def test_response_keys_are_closed(api):
     assert body["notes"] == []
     noted = api.post("/api/instances/wlo-prod/aggregate", json={"filters": [
         {"property": "ccm:commonlicense_key", "values": [""]}]}).json()
-    assert "leere Wert" in noted["notes"][0]
+    assert "leere Wert" in noted["notes"][0]["text"]
     assert set(body["facets"][0]) == {"property", "caption", "other_count", "truncated", "values"}
     assert set(body["facets"][0]["values"][0]) == {"value", "label", "count"}
 
