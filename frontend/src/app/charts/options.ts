@@ -134,3 +134,58 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
     },
   };
 }
+
+export interface HistoryInput {
+  series: { label: string }[];
+  points: { started_at: string; definition_version: number; values: (number | null)[] }[];
+}
+
+/** Verlauf über die Zeit: je Reihe eine Linie; fehlende Werte sind Lücken, nie 0. */
+export function historyPlan(input: HistoryInput, palette: Palette): ChartPlan {
+  const notes: string[] = [];
+  const points = input.points.filter((p) => !Number.isNaN(Date.parse(p.started_at)));
+  let series = input.series.map((s, index) => ({ ...s, index }));
+  if (!points.length || !series.length) return { option: null, notes, height: 0 };
+  if (series.length > MAX_SERIES) {
+    notes.push(`Die Grafik zeigt die ersten ${MAX_SERIES} von ${series.length} Reihen.`);
+    series = series.slice(0, MAX_SERIES);
+  }
+  if (points.length === 1) notes.push('Bisher gibt es einen Lauf; eine Linie entsteht ab dem zweiten.');
+  const gaps = points.filter((p) => series.some((s) => typeof p.values[s.index] !== 'number')).length;
+  if (gaps) notes.push(`${gaps} ${gaps === 1 ? 'Lauf hat' : 'Läufe haben'} hier keinen Wert; die Linie ist dort unterbrochen.`);
+  // Wo sich die Definition geändert hat, sind die Zahlen davor und danach nicht dasselbe.
+  const changes = points.filter((p, n) => n > 0 && p.definition_version !== points[n - 1].definition_version)
+    .map((p) => ({ xAxis: Date.parse(p.started_at) }));
+  if (changes.length) notes.push('Gestrichelte Linie: Die Definition wurde geändert.');
+  const legend = series.length > 1
+    ? { top: 0, left: 0, type: 'scroll', textStyle: { color: palette.text }, icon: 'roundRect', itemWidth: 12, itemHeight: 12 }
+    : undefined;
+  return {
+    notes, height: 360,
+    option: {
+      color: palette.series, legend,
+      tooltip: {
+        trigger: 'axis', backgroundColor: palette.surface, borderColor: palette.grid, textStyle: { color: palette.text },
+        valueFormatter: (value: unknown) => formatNumber(typeof value === 'number' ? value : null),
+      },
+      grid: { left: 8, right: 24, top: legend ? 40 : 16, bottom: 8, containLabel: true },
+      xAxis: {
+        type: 'time', axisLabel: { color: palette.muted, fontSize: 12, hideOverlap: true },
+        axisLine: { lineStyle: { color: palette.grid } }, splitLine: { show: false },
+      },
+      yAxis: {
+        type: 'value', scale: true, axisLabel: { color: palette.muted, fontSize: 12, formatter: (v: number) => formatNumber(v) },
+        splitLine: { lineStyle: { color: palette.grid, width: 1 } },
+      },
+      series: series.map((s, position) => ({
+        name: s.label, type: 'line', lineStyle: { width: 2 }, symbol: 'circle', symbolSize: 7,
+        showSymbol: points.length <= 60, connectNulls: false,
+        itemStyle: { borderColor: palette.surface, borderWidth: 2 },
+        data: points.map((p) => [Date.parse(p.started_at), typeof p.values[s.index] === 'number' ? p.values[s.index] : null]),
+        markLine: position === 0 && changes.length
+          ? { symbol: 'none', silent: true, label: { show: false }, lineStyle: { type: 'dashed', color: palette.muted }, data: changes }
+          : undefined,
+      })),
+    },
+  };
+}

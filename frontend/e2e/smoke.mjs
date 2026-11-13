@@ -87,6 +87,50 @@ assert.match(csv[1], /text\/csv/);
 await page.goto(base + '/laeufe');
 await page.waitForSelector('table.data a:has-text("OER-Statistik")');
 
+// Historie: zweiter Lauf, Vergleich mit dem vorigen, Verlauf, Zeitplan mit „Jetzt ausführen“
+const firstRun = page.url();
+await page.goBack();
+await page.waitForURL(/\/lauf\//);
+const firstRunUrl = page.url();
+await page.locator('select[name=compare]').selectOption('previous');
+await page.waitForSelector('.notice:has-text("keinen früheren Lauf")');
+assert.equal(await page.locator('app-result-table .delta').count(), 0);
+await page.click('.compare a:has-text("Verlauf")');
+await page.waitForURL(/\/verlauf\//);
+const historyUrl = page.url();
+await page.waitForSelector('app-history-page app-chart canvas');
+assert.equal(await page.locator('app-history-page details table tbody tr').count(), 1);
+await page.click('a:has-text("Aktuelle Zahlen")');
+await page.waitForSelector('app-report-view table', { timeout: 60000 });
+await page.click('text=Lauf speichern');
+await page.waitForURL((url) => /\/lauf\//.test(url.pathname) && url.href !== firstRunUrl);
+await page.waitForSelector('app-report-view table');
+await page.locator('select[name=compare]').selectOption('previous');
+await page.waitForSelector('.compare >> text=Veränderung gegenüber dem');
+await page.waitForSelector('app-result-table .delta');
+assert.equal(await page.locator('app-result-table .delta').first().textContent(), '±0');
+const compared = await page.evaluate(async () => {
+  const link = document.querySelector('a[href*="format=csv"]').href;
+  return [link.includes('compare=previous'), (await (await fetch(link)).text()).includes('(vorher)')];
+});
+assert.deepEqual(compared, [true, true]);
+await page.goto(historyUrl);
+await page.waitForFunction(() => document.querySelectorAll('app-history-page details table tbody tr').length === 2);
+await page.click('app-schedules >> text=Zeitplan anlegen');
+await page.locator('app-schedules select[name=every]').selectOption('weekly');
+await page.locator('app-schedules select[name=weekday]').selectOption({ label: 'Sonntag' });
+await page.fill('app-schedules input[name=at]', '07:30');
+await page.click('app-schedules button[type=submit]');
+await page.waitForSelector('app-schedules td:has-text("wöchentlich, Sonntag um 07:30")');
+await page.click('app-schedules >> text=Jetzt ausführen');
+await page.waitForSelector('app-schedules .notice:has-text("Der Lauf ist gespeichert")', { timeout: 60000 });
+await page.waitForFunction(() => document.querySelectorAll('app-history-page details table tbody tr').length === 3);
+await page.waitForSelector('app-history-page details td:has-text("Zeitplan")');
+await page.goto(base + '/laeufe');
+await page.waitForSelector('app-schedules td a:has-text("OER-Statistik")');
+await page.waitForSelector('table.data td:has-text("· Zeitplan")');
+void firstRun;
+
 // Dashboard im Baukasten: Kachel aus der Kennzahl, Breite, Ordnen, Vorschau, Speichern, Ansehen
 await page.goto(base + '/bibliothek');
 await page.click('text=Neues Dashboard');
@@ -168,7 +212,7 @@ assert.equal(await page.locator('[role=dialog]').count(), 0);
 
 // Schmales Fenster: die Seite selbst rollt nicht seitwärts
 await page.setViewportSize({ width: 390, height: 800 });
-for (const path of ['/', '/bibliothek', '/laeufe', '/instanzen']) {
+for (const path of ['/', '/bibliothek', '/laeufe', '/instanzen', new URL(historyUrl).pathname]) {
   await page.goto(base + path);
   await page.waitForSelector('main h1', { state: 'attached' });
   await page.waitForTimeout(400);
@@ -195,6 +239,6 @@ await page.waitForURL(/\/login/);
 assert.equal(await page.evaluate(async () => (await fetch('/api/definitions')).status), 401);
 
 assert.equal(await page.evaluate(() => window.__xss), undefined, 'eingeschleustes HTML wurde ausgeführt');
-assert.deepEqual(problems.filter((p) => !p.includes('401') && !p.includes('422')), []);
+assert.deepEqual(problems.filter((p) => !p.includes('401') && !p.includes('422') && !p.includes('404')), []);
 await browser.close();
 console.log('Durchstich in Ordnung');

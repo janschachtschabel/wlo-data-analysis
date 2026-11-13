@@ -142,3 +142,17 @@ def test_five_hundred_runs_are_read_fast(api):
     assert len(hist["points"]) == 501
     assert hist["points"][-1]["values"] == [400 + 499]
     assert elapsed < 0.5, f"{elapsed:.3f} s"
+
+
+def test_columns_of_blocks_side_by_side_carry_the_block_name(api):
+    bundle = api.get("/api/builtin").json()[0]
+    assert api.post(f"/api/builtin/{bundle['id']}/install").status_code in (200, 201)
+    template = next(d for d in api.get("/api/definitions").json() if d["kind"] == "template")
+    run(api, template["id"])
+    keys = api.get(f"/api/definitions/{template['id']}/history/keys").json()
+    matrix = next(b for b in keys["blocks"] if len(b["columns"]) > 8)
+    labels = [c["label"] for c in matrix["columns"]]
+    assert len(set(labels)) == len(labels)
+    assert all(" · " in label for label in labels)
+    hist = api.get(f"/api/definitions/{template['id']}/history?key={matrix['key']}").json()
+    assert len({s["label"] for s in hist["series"]}) == len(hist["series"]) == 8

@@ -13,6 +13,7 @@ export const routes: Routes = [
       { path: 'bearbeiten/:defId', title: 'Bearbeiten – WLO-Daten', loadComponent: () => import('./library/editor').then((m) => m.Editor),
         canDeactivate: [(editor: { canLeave(): boolean }) => editor.canLeave()] },
       { path: 'ansicht/:defId', title: 'Ansicht – WLO-Daten', loadComponent: () => import('./runs/run-page').then((m) => m.RunPage) },
+      { path: 'verlauf/:defId', title: 'Verlauf – WLO-Daten', loadComponent: () => import('./history/history-page').then((m) => m.HistoryPage) },
       { path: 'lauf/:runId', title: 'Lauf – WLO-Daten', loadComponent: () => import('./runs/run-page').then((m) => m.RunPage) },
       { path: 'instanzen', title: 'Instanzen – WLO-Daten', loadComponent: () => import('./instances/instances-page').then((m) => m.InstancesPage) },
       { path: 'laeufe', title: 'Läufe – WLO-Daten', loadComponent: () => import('./runs/runs').then((m) => m.Runs) },

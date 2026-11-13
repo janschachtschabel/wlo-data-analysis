@@ -84,6 +84,7 @@ interface Builtin { id: string; title: string; description?: string; definitions
                           </select>
                         </td>
                         <td class="actions">
+                          @if (kind.id !== 'filter') { <a [routerLink]="['/verlauf', item.id]">Verlauf</a> }
                           <a [routerLink]="['/bearbeiten', item.id]">Bearbeiten</a>
                           <button type="button" class="link" (click)="duplicate(item)">Duplizieren</button>
                           <button type="button" class="link" (click)="exportOne(item)">Exportieren</button>

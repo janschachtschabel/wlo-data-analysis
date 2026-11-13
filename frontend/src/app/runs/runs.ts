@@ -4,6 +4,7 @@ import { Api, ApiError } from '../core/api';
 import { Auth } from '../core/auth';
 import { formatTime } from '../core/format';
 import { RunHead } from '../core/types';
+import { Schedules } from '../schedules/schedules';
 
 const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise', failed: 'gescheitert' };
 const KIND: Record<string, string> = { metric: 'Kennzahl', dashboard: 'Dashboard', template: 'Template', filter: 'Filter' };
@@ -11,7 +12,7 @@ const PAGE = 50;
 
 @Component({
   selector: 'app-runs',
-  imports: [RouterLink],
+  imports: [RouterLink, Schedules],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="row">
@@ -39,7 +40,7 @@ const PAGE = 50;
             @for (run of runs(); track run.id) {
               <tr>
                 <td><a [routerLink]="['/lauf', run.id]">{{ run.name }}</a></td>
-                <td>{{ kind(run.kind) }}</td><td>{{ time(run.started_at) }}</td>
+                <td>{{ kind(run.kind) }}</td><td>{{ time(run.started_at) }}@if (run.origin === 'schedule') { <span class="muted"> · Zeitplan</span> }</td>
                 <td [class.error]="run.status === 'failed'">{{ status(run.status) }}</td>
                 <td><button type="button" class="link" (click)="remove(run)">Löschen</button></td>
               </tr>
@@ -48,7 +49,10 @@ const PAGE = 50;
         </table></div>
       }
       @if (more()) { <p><button type="button" (click)="load()" [disabled]="loading()">Weitere laden</button></p> }
-    </div>`,
+    </div>
+    <h2 class="top">Zeitpläne</h2>
+    <div class="card"><app-schedules (ran)="refresh()" /></div>`,
+  styles: `.top { margin-top: 24px; }`,
 })
 export class Runs {
   private readonly api = inject(Api);
@@ -68,6 +72,8 @@ export class Runs {
   }
 
   private turn = 0;
+
+  protected refresh(): void { this.runs.set([]); void this.load(true); }
 
   protected async load(fresh = false): Promise<void> {
     const turn = fresh ? ++this.turn : this.turn;

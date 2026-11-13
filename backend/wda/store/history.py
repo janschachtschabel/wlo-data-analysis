@@ -92,8 +92,15 @@ class History:
             report = build_report(load_run(con, row))
         except (ValueError, KeyError, TypeError):
             return {"run_id": row["id"], "blocks": []}
-        blocks = [{"key": block.key, "title": block.title,
-                   "columns": [{"id": c.id, "label": c.label} for c in block.columns],
+        def columns(block: Table) -> list[dict[str, str]]:
+            # Bei Blöcken nebeneinander heißen die Spalten gleich; der Block gehört zum Namen.
+            groups = [name for name, span in (block.header_groups or []) for _ in range(span)]
+            return [{"id": c.id,
+                     "label": f"{groups[n]} · {c.label}" if n < len(groups) and groups[n]
+                     else c.label}
+                    for n, c in enumerate(block.columns)]
+
+        blocks = [{"key": block.key, "title": block.title, "columns": columns(block),
                    "rows": [{"key": row_key(r.kind, r.key), "label": r.label, "kind": r.kind}
                             for r in block.rows]}
                   for block in report.blocks if isinstance(block, Table)]

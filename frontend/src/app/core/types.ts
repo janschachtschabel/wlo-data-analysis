@@ -17,6 +17,8 @@ export interface ResultColumn { id: string; label: string; derived: boolean; tot
 export interface ResultRow {
   key: string; label: string; kind: 'value' | 'group' | 'other' | 'missing' | 'total';
   values: (number | null)[]; percent?: (number | null)[] | null; level?: number;
+  /** Vergleich mit einem früheren Lauf: dessen Werte; `new`: die Zeile gab es dort nicht */
+  previous?: (number | null)[] | null; new?: boolean;
 }
 export interface QueryResult {
   schema_version: number; instance: string; columns: ResultColumn[]; rows: ResultRow[];
@@ -47,6 +49,7 @@ export interface Group { id: string; name: string }
 export interface RunHead {
   id: string | null; seq?: number; definition_id: string | null; kind: Kind; name: string;
   status: 'ok' | 'partial' | 'failed'; started_at: string; finished_at: string;
+  origin?: 'manual' | 'schedule'; instance?: string | null;
 }
 export interface ReportTable {
   type: 'table'; key: string; title: string;
@@ -61,8 +64,35 @@ export interface Report {
   report_version: number; title: string; kind: Kind; run_id: string | null;
   status: 'ok' | 'partial' | 'failed'; started_at: string; finished_at: string;
   notes: Note[]; blocks: ReportBlock[];
+  definition_id?: string | null; compare?: { run_id: string; started_at: string } | null;
 }
 export interface AppSettings {
   version: string; export: { formats: string[]; pdf_available: boolean };
   llm: { base_url: string; model: string; api_key_set: boolean };
+}
+export interface Schedule {
+  id: string; definition_id: string; definition_name: string; definition_kind: Kind;
+  instance: string | null; every: 'daily' | 'weekly' | 'monthly'; at: string;
+  weekday: number | null; day: number | null; enabled: boolean; next_due: string;
+  attempts: number; last_run_id: string | null; last_status: string | null;
+  last_error: string | null; last_started_at: string | null;
+}
+export interface HistoryKeys {
+  run_id: string | null;
+  blocks: { key: string; title: string; columns: { id: string; label: string }[];
+    rows: { key: string; label: string; kind: string }[] }[];
+}
+export interface HistoryPoint {
+  run_id: string; started_at: string; status: string; definition_version: number;
+  origin: string; values: (number | null)[];
+}
+export interface HistoryData {
+  block?: { key: string; title: string };
+  series: { key: string; row: string; column: string; label: string }[];
+  points: HistoryPoint[]; notes: Note[];
+}
+/** Antwort auf einen als Auftrag gestarteten Lauf, solange er läuft oder gescheitert ist. */
+export interface JobState {
+  id: string; status: 'running' | 'failed' | 'ok' | 'partial'; saved?: boolean;
+  progress?: { done: number; total: number }; error?: { detail: string; kind: string };
 }

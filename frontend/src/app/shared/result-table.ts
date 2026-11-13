@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { formatNumber, formatPercent } from '../core/format';
+import { formatDelta, formatNumber, formatPercent } from '../core/format';
 import { ResultRow } from '../core/types';
 
 /** Ergebnistabelle: die vollständige Fassung jeder Zahl; fehlende Werte sind „–“. */
@@ -28,10 +28,13 @@ import { ResultRow } from '../core/types';
         <tbody>
           @for (row of rows(); track row.key + row.kind) {
             <tr [class.group]="row.kind === 'group'" [class.total]="row.kind === 'total'">
-              <td [class.indent]="indented() && row.kind === 'value'">{{ row.label }}</td>
+              <td [class.indent]="indented() && row.kind === 'value'">{{ row.label }}@if (row.new) {<span class="muted"> (neu)</span>}</td>
               @for (value of row.values; track $index) {
                 <td>
                   {{ number(value) }}
+                  @if (row.previous && delta(value, row.previous[$index]); as change) {
+                    <span class="delta" [title]="'vorher ' + number(row.previous[$index])">{{ change }}</span>
+                  }
                   @if (row.percent && row.percent[$index] !== null && row.percent[$index] !== undefined) {
                     <span class="muted pct">{{ percent(row.percent[$index]) }}</span>
                   }
@@ -45,6 +48,7 @@ import { ResultRow } from '../core/types';
   styles: `
     .scroll { overflow: auto; max-height: 70vh; }
     .pct { margin-left: 6px; font-size: 12px; }
+    .delta { margin-left: 6px; font-size: 12px; color: var(--muted); }
     th.block { text-align: center; border-left: 1px solid var(--border); }
     /* zwei Kopfzeilen: die zweite klebt unter der ersten, statt sie zu verdecken */
     tr.blocks th { height: 30px; }
@@ -59,4 +63,5 @@ export class ResultTable {
   protected readonly indented = computed(() => this.rows().some((r) => r.kind === 'group'));
   protected readonly number = formatNumber;
   protected readonly percent = formatPercent;
+  protected readonly delta = formatDelta;
 }

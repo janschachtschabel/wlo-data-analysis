@@ -2,13 +2,13 @@ import {
   ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, input, signal, viewChild,
 } from '@angular/core';
 import { BarChart, LineChart, PieChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { ECharts, init, use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { ViewType } from '../core/types';
-import { ChartInput, Palette, chartPlan } from './options';
+import { ChartInput, ChartPlan, Palette, chartPlan } from './options';
 
-use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
+use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer]);
 
 function readPalette(element: HTMLElement): Palette {
   const style = getComputedStyle(element);
@@ -45,8 +45,10 @@ function readPalette(element: HTMLElement): Palette {
   `,
 })
 export class Chart implements OnDestroy {
-  readonly data = input.required<ChartInput>();
-  readonly view = input.required<ViewType>();
+  readonly data = input<ChartInput>({ columns: [], rows: [] });
+  readonly view = input<ViewType>('bar');
+  /** Eigene Grafik statt einer aus der Tabelle (z. B. der Verlauf über die Zeit) */
+  readonly build = input<((palette: Palette) => ChartPlan) | null>(null);
   readonly label = input('Grafik');
   private readonly plot = viewChild.required<ElementRef<HTMLElement>>('plot');
   private readonly theme = signal(0);
@@ -58,7 +60,8 @@ export class Chart implements OnDestroy {
 
   protected readonly plan = computed(() => {
     this.theme();
-    return chartPlan(this.data(), this.view(), readPalette(this.plot().nativeElement));
+    const palette = readPalette(this.plot().nativeElement);
+    return this.build()?.(palette) ?? chartPlan(this.data(), this.view(), palette);
   });
 
   constructor() {

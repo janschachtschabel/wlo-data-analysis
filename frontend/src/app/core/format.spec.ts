@@ -22,3 +22,21 @@ describe('Zahlenformat', () => {
     expect(formatTime(null)).toBe('–');
   });
 });
+
+import { formatDelta } from './format';
+
+describe('formatDelta', () => {
+  it('zeigt Zuwachs, Rückgang und Gleichstand', () => {
+    expect(formatDelta(112, 100)).toBe('+12');
+    expect(formatDelta(97, 100)).toBe('−3');
+    expect(formatDelta(100, 100)).toBe('±0');
+    expect(formatDelta(12500, 10000)).toBe('+2.500');
+    expect(formatDelta(0.3, 0.1)).toBe('+0,2');
+  });
+  it('bleibt leer, wenn eine Zahl fehlt', () => {
+    expect(formatDelta(null, 100)).toBe('');
+    expect(formatDelta(100, null)).toBe('');
+    expect(formatDelta(100, undefined)).toBe('');
+    expect(formatDelta(Number.NaN, 1)).toBe('');
+  });
+});

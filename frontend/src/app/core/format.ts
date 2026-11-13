@@ -20,3 +20,11 @@ export function formatTime(value: string | number | null | undefined): string {
   if (Number.isNaN(date.getTime())) return '–';
   return date.toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
 }
+
+/** Veränderung gegenüber einem früheren Wert: „+12“, „−3“, „±0“; leer, wenn eine Zahl fehlt. */
+export function formatDelta(value: number | null | undefined, previous: number | null | undefined): string {
+  if (typeof value !== 'number' || typeof previous !== 'number' || !Number.isFinite(value) || !Number.isFinite(previous)) return '';
+  const delta = Math.round((value - previous) * 1e6) / 1e6;
+  if (delta === 0) return '±0';
+  return (delta > 0 ? '+' : '−') + formatNumber(Math.abs(delta));
+}
