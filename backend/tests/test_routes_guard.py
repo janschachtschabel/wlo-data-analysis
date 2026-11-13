@@ -1,7 +1,9 @@
 import json
 
 from fastapi.routing import APIRoute
+from starlette.routing import Mount
 
+from wda.deps import require_admin
 from wda.main import PUBLIC_API_PATHS
 
 from .conftest import ADMIN_PASSWORD, INSTANCE_PASSWORD, LLM_KEY
@@ -24,6 +26,26 @@ def test_every_other_api_route_requires_admin(app, client):
             assert r.status_code == 401, f"{method} {route.path} ist ohne Login erreichbar"
             checked += 1
     assert checked >= 2
+
+
+def test_guard_is_structural(app):
+    """Unabhängig vom Pfadmuster: jede nicht-öffentliche API-Route hängt an require_admin,
+    und unter /api gibt es nichts außer gewöhnlichen Routen (keine Mounts, keine WebSockets)."""
+    for route in app.routes:
+        path = getattr(route, "path", "")
+        if not (path == "/api" or path.startswith("/api/")):
+            assert not isinstance(route, Mount), f"Mount {path} würde Dateien ausliefern"
+            continue
+        assert isinstance(route, APIRoute), f"{path}: unerwarteter Routentyp {type(route).__name__}"
+        if path in PUBLIC_API_PATHS:
+            continue
+        calls = {dep.call for dep in route.dependant.dependencies}
+        assert require_admin in calls, f"{path} hängt nicht an require_admin"
+
+
+def test_bare_api_path_is_json(client, admin):
+    assert admin.get("/api").status_code == 404
+    assert admin.get("/api").headers["content-type"].startswith("application/json")
 
 
 def test_no_docs_routes(client):

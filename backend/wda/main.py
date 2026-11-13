@@ -15,7 +15,7 @@ from .api import settings as settings_api
 from .config import Settings, load_settings
 from .deps import require_admin
 from .instances import InstanceRegistry
-from .security import LoginThrottle, SessionSigner, resolve_session_secret
+from .security import LoginThrottle, SessionSigner, session_signing_key
 
 # Die einzigen API-Pfade, die ohne Admin-Session antworten. Alles andere hängt am
 # geschützten Router; tests/test_routes_guard.py prüft das für jede Route.
@@ -41,7 +41,7 @@ def create_app(
     )
     app.state.settings = settings
     app.state.instances = InstanceRegistry(settings.instances)
-    app.state.signer = SessionSigner(resolve_session_secret(settings), settings.session_max_age)
+    app.state.signer = SessionSigner(session_signing_key(settings), settings.session_max_age)
     app.state.throttle = LoginThrottle(clock=clock)
 
     public = APIRouter(prefix="/api")
@@ -65,9 +65,11 @@ def create_app(
             response.headers["Cache-Control"] = "no-store"
         return response
 
-    @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-                   include_in_schema=False, dependencies=[Depends(require_admin)])
-    def api_not_found(rest: str) -> JSONResponse:
+    methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+    @app.api_route("/api", methods=methods, dependencies=[Depends(require_admin)])
+    @app.api_route("/api/{rest:path}", methods=methods, dependencies=[Depends(require_admin)])
+    def api_not_found(rest: str = "") -> JSONResponse:
         return JSONResponse({"detail": "Nicht gefunden"}, status_code=404)
 
     # Die Oberfläche ist genau eine Datei aus dem Paket. Es gibt bewusst kein

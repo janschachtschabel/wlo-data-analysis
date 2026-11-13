@@ -30,6 +30,10 @@ class Instance(BaseModel):
         parts = urlsplit(value)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise ValueError("muss eine http(s)-URL mit Hostnamen sein")
+        if parts.username or parts.password or "@" in parts.netloc:
+            raise ValueError("darf keine Zugangsdaten enthalten (username/password nutzen)")
+        if parts.query or parts.fragment:
+            raise ValueError("darf weder Abfrage-Teil noch Fragment enthalten")
         return value.rstrip("/")
 
     @property

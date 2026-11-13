@@ -22,15 +22,21 @@ docker compose up --build   # http://localhost:8080
 Für den Aufruf über `http://localhost` muss `WDA_COOKIE_SECURE=false` gesetzt sein,
 sonst nimmt der Browser das Anmelde-Cookie nicht an. Hinter HTTPS bleibt es bei `true`.
 
+Läuft die App hinter einem Reverse-Proxy in einem anderen Container, muss
+`FORWARDED_ALLOW_IPS` auf dessen Adresse gesetzt werden. Sonst sieht die Anmelde-Sperre
+alle Aufrufe unter der Adresse des Proxys, und fünf fremde Fehlversuche sperren für eine
+Minute auch die richtige Anmeldung.
+
 ## Konfiguration
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `WDA_ADMIN_PASSWORD` | – (Pflicht) | Passwort des Admin-Zugangs; ohne startet die App nicht |
+| `WDA_ADMIN_PASSWORD` | – (Pflicht) | Passwort des Admin-Zugangs; ohne startet die App nicht. Ein neues Passwort beendet alle bestehenden Anmeldungen |
 | `WDA_COOKIE_SECURE` | `true` | Anmelde-Cookie nur über HTTPS senden |
 | `WDA_SESSION_MAX_AGE` | `43200` | Gültigkeit einer Anmeldung in Sekunden |
 | `WDA_SESSION_SECRET` | automatisch | Signatur-Geheimnis; sonst in `WDA_DATA_DIR/session.secret` |
 | `WDA_DATA_DIR` | `/data` | internes Datenverzeichnis, wird nie ausgeliefert |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Adressen vertrauenswürdiger Reverse-Proxys (wertet uvicorn aus) |
 | `WDA_INSTANCES` | – | weitere edu-sharing-Instanzen als JSON-Liste |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
@@ -62,5 +68,5 @@ pip install -e ".[dev]"
 pytest -q
 ruff check .
 WDA_ADMIN_PASSWORD=dev WDA_COOKIE_SECURE=false WDA_DATA_DIR=./data \
-  uvicorn wda.main:create_app --factory --reload --port 8080
+  python -m wda
 ```

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import logging
 import math
 import os
 import secrets
@@ -13,6 +15,8 @@ from collections.abc import Callable
 from itsdangerous import BadData, URLSafeTimedSerializer
 
 from .config import Settings
+
+log = logging.getLogger("wda.security")
 
 COOKIE_NAME = "wda_session"
 _SECRET_FILE = "session.secret"  # noqa: S105 - Dateiname, kein Geheimnis
@@ -56,13 +60,31 @@ def resolve_session_secret(settings: Settings) -> str:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(secret)
         os.chmod(path, 0o600)
-    except OSError:
-        pass  # nicht schreibbar: Sessions gelten dann nur bis zum Neustart
+    except OSError as exc:
+        log.warning(
+            "Session-Geheimnis konnte nicht in %s abgelegt werden (%s). "
+            "Anmeldungen gelten nur bis zum nächsten Neustart.",
+            path,
+            exc.__class__.__name__,
+        )
     return secret
 
 
+def session_signing_key(settings: Settings) -> str:
+    """Signaturschlüssel, der am Admin-Passwort hängt.
+
+    Ein neues Passwort entwertet damit alle bestehenden Sessions.
+    """
+    password = settings.admin_password.get_secret_value().encode("utf-8", "surrogatepass")
+    secret = resolve_session_secret(settings).encode("utf-8")
+    return hmac.new(secret, b"wda-session-v1:" + password, hashlib.sha256).hexdigest()
+
+
 def verify_password(given: str, expected: str) -> bool:
-    return hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
+    # surrogatepass: auch kaputte Unicode-Eingaben sind nur ein falsches Passwort, kein Fehler
+    return hmac.compare_digest(
+        given.encode("utf-8", "surrogatepass"), expected.encode("utf-8", "surrogatepass")
+    )
 
 
 class LoginThrottle:

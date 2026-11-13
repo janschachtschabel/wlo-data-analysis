@@ -17,6 +17,13 @@ def test_presets():
     assert reg.get("wlo-staging").base_url == "https://repository.staging.openeduhub.net"
 
 
+def test_config_error_does_not_echo_url_secrets():
+    extra = json.dumps([{"id": "a", "name": "A", "base_url": "https://user:topsecret@a.example"}])
+    with pytest.raises(ConfigError) as info:
+        InstanceRegistry(extra)
+    assert "topsecret" not in str(info.value)
+
+
 def test_unknown_instance():
     with pytest.raises(KeyError):
         InstanceRegistry(None).get("gibt-es-nicht")
@@ -53,6 +60,10 @@ def test_extra_instance_and_override():
     json.dumps([{"id": "Groß Schreibung", "name": "A", "base_url": "https://a.example"}]),
     json.dumps([{"id": "a", "name": "A", "base_url": "https://"}]),
     json.dumps([{"id": "a", "name": "A"}]),
+    json.dumps([{"id": "a", "name": "A", "base_url": "https://user:topsecret@a.example"}]),
+    json.dumps([{"id": "a", "name": "A", "base_url": "https://a.example/?token=abc"}]),
+    json.dumps([{"id": "a", "name": "A", "base_url": "https://a.example",
+                 "search_url": "https://u@s.example"}]),
 ])
 def test_invalid_extra_is_config_error(extra):
     with pytest.raises(ConfigError, match="WDA_INSTANCES"):
