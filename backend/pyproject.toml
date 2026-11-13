@@ -24,7 +24,7 @@ build-backend = "setuptools.build_meta"
 include = ["wda*"]
 
 [tool.setuptools.package-data]
-wda = ["static/*", "builtin/*.json"]
+wda = ["static/**/*", "placeholder.html", "builtin/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

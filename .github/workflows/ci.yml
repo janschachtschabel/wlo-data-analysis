@@ -27,6 +27,22 @@ jobs:
       - run: ruff check .
       - run: pytest -q
 
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx ng test --watch=false
+      - run: npx ng build
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -42,8 +58,12 @@ jobs:
         run: |
           docker run -d --name wda -p 8080:8080 -e WDA_ADMIN_PASSWORD=ci-passwort wlo-data-analysis:ci
           for i in $(seq 1 20); do
-            curl -fsS http://127.0.0.1:8080/api/health && exit 0
+            curl -fsS http://127.0.0.1:8080/api/health && break
             sleep 1
           done
-          docker logs wda
-          exit 1
+          curl -fsS http://127.0.0.1:8080/api/health || { docker logs wda; exit 1; }
+      - name: Oberfläche ist im Image
+        run: |
+          curl -fsS http://127.0.0.1:8080/ | grep -q '<app-root>'
+          script=$(curl -fsS http://127.0.0.1:8080/ | grep -o 'main-[A-Za-z0-9_]*\.js' | head -1)
+          curl -fsS -o /dev/null "http://127.0.0.1:8080/$script"

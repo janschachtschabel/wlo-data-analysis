@@ -24,7 +24,14 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.css"]
+            "styles": [
+              "src/styles.css"
+            ],
+            "outputPath": {
+              "base": "../backend/wda/static",
+              "browser": ""
+            },
+            "deleteOutputPath": true
           },
           "configurations": {
             "production": {
@@ -40,7 +47,17 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": {
+                  "inline": false
+                }
+              }
             },
             "development": {
               "optimization": false,

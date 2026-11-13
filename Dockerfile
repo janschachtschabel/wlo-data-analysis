@@ -1,7 +1,16 @@
+FROM node:22-slim AS web
+WORKDIR /src/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend ./
+# der Bau schreibt nach ../backend/wda/static
+RUN npx ng build
+
 FROM python:3.12-slim AS build
 WORKDIR /src
 COPY backend/pyproject.toml backend/requirements.txt ./
 COPY backend/wda ./wda
+COPY --from=web /src/backend/wda/static ./wda/static
 # Feste Versionen aus requirements.txt, damit jeder Bau dasselbe Image ergibt
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt \
     && pip install --no-cache-dir --prefix=/install --no-deps .

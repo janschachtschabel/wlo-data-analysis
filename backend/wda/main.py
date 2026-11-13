@@ -41,7 +41,8 @@ PUBLIC_API_PATHS: frozenset[str] = frozenset(
 )
 
 _STATIC = Path(__file__).parent / "static"
-_INDEX = _STATIC / "index.html"
+# Solange kein Bau der Oberfläche im Paket liegt, erscheint diese eine Seite.
+_INDEX = Path(__file__).parent / "placeholder.html"
 _HASHED = re.compile(r"[-.][A-Za-z0-9_]{8,}\.(?:js|css|woff2?|svg|png|jpg|webp|ico)$")
 # Die Oberfläche lädt nur vom eigenen Ursprung. Angular setzt Komponenten-Stile als
 # <style>-Elemente, deshalb 'unsafe-inline' nur für Stile.
