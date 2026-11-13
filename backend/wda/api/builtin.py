@@ -50,8 +50,11 @@ async def list_builtin(request: Request) -> list[dict[str, Any]]:
             changed = False
             if d["id"] in existing:
                 have = await store.get(d["id"])
-                mine = (have.name, have.description,
-                        json.dumps(have.spec, ensure_ascii=False, sort_keys=True))
+                try:  # gleich ist, was nach dem Einlesen dasselbe ergibt
+                    spec = dump_spec(parse_spec(have.kind, have.spec))
+                except InvalidDefinition:
+                    spec = json.dumps(have.spec, ensure_ascii=False, sort_keys=True)
+                mine = (have.name, have.description, spec)
                 changed = _shipped(bundle_id, d["id"]) != mine
             items.append({"id": d["id"], "kind": d["kind"], "name": d["name"],
                           "installed": d["id"] in existing, "changed": changed})

@@ -102,6 +102,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                    ) -> dict[str, Any]:
     if spec.fill is not None:
         return await _execute_fill(spec, client, vocab, run)
+    if spec.vocab_check is not None:
+        return await _execute_vocab_check(spec, client, vocab, run)
     notes = Notes()
     prefix_fields = set(client.instance.prefix_fields)
     base_list, base_described = await resolve_filters(vocab, spec.filters)
@@ -111,6 +113,10 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
     row_prop = rows_spec.property if rows_spec else None
     # Einwertiges Feld: Facettenwerte summieren sich exakt; ein Kriterium nimmt nur einen Wert.
     single = row_prop in prefix_fields
+    # Laut Metadatenset höchstens ein Wert je Material: Die Werte summieren sich ebenfalls,
+    # auch wenn das Repositorium das Feld nicht als Filter zählt.
+    row_field = await vocab.field(row_prop) if row_prop else None
+    one_valued = single or (row_field is not None and row_field.type in SINGLE_TYPES)
 
     # ---- Zeilenplanung (ohne Aufrufe) ----------------------------------------
     mode = "facet"
@@ -119,6 +125,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
     include_map: list[str] | None = None
     if rows_spec:
         await vocab.check_facet(rows_spec.property)
+        if rows_spec.vocab:
+            await known_values(vocab, rows_spec.property)  # vor dem ersten Aufruf prüfen
         if rows_spec.groups:
             mode = rows_spec.group_mode
             if mode == "auto":
@@ -221,11 +229,13 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                     "einer Gruppe, zählt es mehrfach.")
         else:
             rows = await _value_rows(rows_spec, vocab, base, include, facet_counts, data_columns)
+            if rows_spec.match or rows_spec.vocab:
+                rows = await _select_rows(rows, rows_spec, vocab, notes)
             for row in rows:
                 row.members = (row.key,)
                 for col in data_columns:
                     col.cells[row.key] = cell(col, row.key)
-            if not single and len(rows) > 1:
+            if not one_valued and len(rows) > 1:
                 notes.add("rows_overlap", 
                     f"Ein Dokument kann mehrere Werte von '{row_prop}' tragen und steht dann "
                     "in mehreren Zeilen; die Zeilen summieren sich nicht zur Gesamtzahl.")
@@ -256,7 +266,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             if not rest_values:
                 for col in data_columns:
                     col.cells[other.key] = 0
-            elif single:
+            elif one_valued:
                 for col in data_columns:
                     col.cells[other.key] = _sum(cell(col, v) for v in rest_values)
             elif len(rest_values) > MAX_VALUES:
@@ -277,7 +287,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         rows = kept
     if rows_spec and rows_spec.missing:
         missing = _Row("__missing__", "ohne Wert", "missing")
-        if single:
+        if one_valued:
             # Einwertig: Die Facettenwerte summieren sich zur Zahl der Dokumente mit Wert.
             with_value: list[int | None] = [
                 None if col.id in cut else sum(facet_counts[col.id].values())
@@ -292,7 +302,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                                       else max(col.total - counted, 0))
         if any(c is None for c in with_value):
             notes.add("missing_unknown", 
-                "„Ohne Wert“ fehlt, wo die Werteliste gekürzt ist oder zu viele Werte hat.")
+                "„Ohne Wert“ fehlt, wo die Werteliste gekürzt ist, zu viele Werte hat oder "
+                "das Repositorium das Feld nicht als Filter zählt.")
         rows.append(missing)
         _apply_formulas(columns, [missing.key])
 
@@ -357,6 +368,103 @@ def _rate(filled: Number | None, total: Number | None) -> float | None:
 def _field_id(prop: str) -> str:
     """Spalten-ID aus dem Feldnamen: gleich über alle Läufe."""
     return (re.sub(r"[^a-z0-9]+", "_", prop.casefold()).strip("_") or "feld")[:40]
+
+
+async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
+                               run: _Run) -> dict[str, Any]:
+    """Je Feld: wie viele der vorkommenden Werte stehen nicht im Vokabular des Feldes, und
+    wie viele Zuordnungen betrifft das. Ein Aufruf je Feld."""
+    check = spec.vocab_check
+    assert check is not None
+    notes = Notes()
+    prefix_fields = set(client.instance.prefix_fields)
+    base_list, base_described = await resolve_filters(vocab, spec.filters)
+    base = tuple(base_list)
+    base_props = {c.property for c in base}
+    check_prefix_shape(base, prefix_fields)
+
+    async def occurring(prop: str):
+        return (await run.call((), prop)).facets[prop]
+
+    await check_prefix_values(occurring, list(base), prefix_fields, notes)
+    known: dict[str, set[str]] = {}
+    labels: dict[str, str] = {}
+    for item in check.fields:  # erst alles prüfen, dann fragen
+        if item.property in base_props:
+            raise QueryError(
+                f"'{item.property}' steht auch in den Filtern; die Facette ignoriert den "
+                "Filter auf dem eigenen Feld. Bitte eines von beiden weglassen.")
+        known[item.property] = await known_values(vocab, item.property)
+        field = await vocab.field(item.property)
+        labels[item.property] = item.label or (field.caption if field and field.caption
+                                               else item.property)
+    main_task = run.call(base)
+
+    async def one(prop: str):
+        try:
+            return (await run.call(base, prop)).facets[prop]
+        except EduSharingError as exc:
+            if exc.kind not in _REFUSED:
+                raise
+            await main_task
+            return None
+
+    facets = await asyncio.gather(*[one(f.property) for f in check.fields])
+    main = await main_task
+    columns = [
+        {"id": "values", "label": "verschiedene Werte", "derived": False, "total": None},
+        {"id": "unknown_values", "label": "davon nicht im Vokabular", "derived": False,
+         "total": None},
+        {"id": "uses", "label": "Zuordnungen", "derived": False, "total": None},
+        {"id": "unknown_uses", "label": "davon mit unbekanntem Wert", "derived": False,
+         "total": None},
+        {"id": "share", "label": "Anteil %", "derived": True, "total": None}]
+    out_rows = []
+    refused, cut = [], []
+    for item, facet in zip(check.fields, facets, strict=True):
+        label = labels[item.property]
+        if facet is None:
+            refused.append(label)
+            values: list[Number | None] = [None] * 5
+        else:
+            if facet.truncated:
+                cut.append(label)
+            outside = [v for v in facet.values if v.value not in known[item.property]]
+            uses, bad = sum(v.count for v in facet.values), sum(v.count for v in outside)
+            values = [len(facet.values), len(outside), uses, bad,
+                      round(100 * bad / uses, 1) if uses else None]
+        out_rows.append({"key": item.property, "label": label, "kind": "value",
+                         "values": values})
+    notes.add("vocab_check",
+              "Verglichen werden die vorkommenden Werte mit der Werteliste des Feldes im "
+              "Metadatenset. „Zuordnungen“ zählt je Wert die Materialien; ein Material mit "
+              "mehreren Werten zählt mehrfach.")
+    if refused:
+        notes.add("vocab_refused",
+                  f"Nicht bestimmbar: {', '.join(refused)} (das Repositorium zählt dieses "
+                  "Feld nicht).")
+    if cut:
+        notes.add("facet_truncated",
+                  f"Die Werteliste von {', '.join(cut)} wurde vom Repositorium gekürzt; "
+                  "seltene Werte fehlen in der Zählung.")
+    fetched = [r.fetched_at for r in run.results]
+    inst = client.instance
+    return {
+        "schema_version": SCHEMA_VERSION, "instance": spec.instance,
+        "columns": columns, "rows": out_rows, "total_row": False, "base_total": main.total,
+        "provenance": {
+            "fetched_at": max(fetched) if fetched else None,
+            "oldest_fetched_at": min(fetched) if fetched else None,
+            "cached": bool(run.results) and all(r.cached for r in run.results),
+            "queries": len(run.results), "notes": list(notes),
+            "instance": {"id": inst.id, "name": inst.name, "base_url": inst.base_url,
+                         "repository": inst.repository, "metadataset": inst.metadataset},
+            "spec": spec.model_dump(mode="json", exclude={"refresh"}),
+            "resolved": {"filters": base_described, "rows": None,
+                         "columns": [{"id": c["id"], "filters": [], "formula": None}
+                                     for c in columns]},
+        },
+    }
 
 
 # Ablehnungen des Repositoriums, die nur das eine Feld betreffen
@@ -662,10 +770,12 @@ async def _plan_columns(
             chosen = await resolve_values(vocab, prop, spec.columns.include)
         else:
             facet = (await run.call(base, prop)).facets[prop]
-            top = sorted(facet.values, key=lambda v: (-v.count, v.value))[: spec.columns.top]
+            offered = [v for v in facet.values
+                       if not spec.columns.match or v.value.startswith(spec.columns.match)]
+            top = sorted(offered, key=lambda v: (-v.count, v.value))[: spec.columns.top]
             chosen = [{"value": v.value, "label": await vocab.label(prop, v.value)}
                       for v in top]
-            if len(facet.values) > len(top) or facet.truncated:
+            if len(offered) > len(top) or facet.truncated:
                 notes.add("columns_top", 
                     f"Spalten: die {len(top)} häufigsten Werte von '{prop}'; weitere "
                     "Werte sind nicht dargestellt.")
@@ -752,6 +862,39 @@ def _apply_formula_totals(columns: list[_Column]) -> None:
         col.total = col.formula.evaluate({c.id: c.total for c in columns})
 
 
+async def known_values(vocab: VocabStore, prop: str) -> set[str]:
+    """Die Werte des Vokabulars. Nur Felder mit Werteliste: Bei freiem Text wäre „nicht im
+    Vokabular“ eine Liste von Werten einzelner Datensätze."""
+    field = await vocab.field(prop)
+    if field is None or not field.values:
+        raise QueryError(
+            f"'{prop}' hat keine Werteliste; ein Abgleich mit dem Vokabular geht nur bei "
+            "Feldern mit Werteliste.")
+    return {v.id for v in field.values}
+
+
+async def _select_rows(rows: list[_Row], rows_spec, vocab: VocabStore, notes: Notes
+                       ) -> list[_Row]:
+    """``match`` und ``vocab``: Auswahl unter den vorkommenden Werten."""
+    total = len(rows)
+    if rows_spec.match:
+        rows = [r for r in rows if r.key.startswith(rows_spec.match)]
+    if rows_spec.vocab:
+        known = await known_values(vocab, rows_spec.property)
+        inside = rows_spec.vocab == "inside"
+        rows = [r for r in rows if (r.key in known) == inside]
+    what = []
+    if rows_spec.match:
+        what.append(f"die mit „{rows_spec.match}“ beginnen")
+    if rows_spec.vocab:
+        what.append("die das Vokabular des Feldes "
+                    + ("kennt" if rows_spec.vocab == "inside" else "nicht kennt"))
+    notes.add("rows_selected",
+              f"Gezeigt sind nur Werte, {' und '.join(what)}: {len(rows)} von {total} "
+              "vorkommenden Werten.")
+    return rows
+
+
 async def _value_rows(rows_spec, vocab: VocabStore, base, include, facet_counts,
                       data_columns: list[_Column]) -> list[_Row]:
     prop = rows_spec.property
@@ -795,7 +938,12 @@ async def _count_with_any_value(run: _Run, criteria: tuple[Criterion, ...], prop
         return None
     if not values:
         return 0
-    return (await run.call(criteria + (Criterion(prop, values),))).total
+    try:
+        return (await run.call(criteria + (Criterion(prop, values),))).total
+    except EduSharingError as exc:
+        if exc.kind != "unknown_property" and exc.status != 400:
+            raise
+        return None  # das Repositorium zählt dieses Feld nicht als Filter
 
 
 def _share(value: Number | None, total: Number | None) -> float | None:

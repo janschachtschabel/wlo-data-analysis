@@ -143,7 +143,8 @@ export function looksLikeUri(text: string): boolean {
 export function fieldChoices(fields: FieldInfo[]): FieldInfo[] {
   const rank = (f: FieldInfo) =>
     !f.caption || f.caption === f.property ? 2 : /^(ccm|cclom|cm):/.test(f.property) ? 0 : 1;
-  const usable = fields.filter((f) => f.value_count > 0);
+  // virtual:* sind Suchhilfen der Redaktionsoberfläche: gleiche Bezeichnung wie das echte Feld, zählen aber nichts
+  const usable = fields.filter((f) => f.value_count > 0 && !f.property.startsWith('virtual:'));
   const seen = new Map<string, number>();
   for (const f of usable) seen.set(f.caption, (seen.get(f.caption) ?? 0) + 1);
   return usable

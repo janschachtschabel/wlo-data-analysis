@@ -27,6 +27,9 @@ class Group(_Model):
     values: list[ValueIn] = Field(min_length=1, max_length=2000)
 
 
+Match = Annotated[StrictStr, Field(min_length=1, max_length=300)]
+
+
 class Rows(_Model):
     property: Name
     include: list[ValueIn] | None = Field(default=None, min_length=1, max_length=2000)
@@ -36,11 +39,19 @@ class Rows(_Model):
     top: int | None = Field(default=None, ge=1, le=5000)
     other: bool = False
     missing: bool = False
+    # nur Werte, die so beginnen (z. B. die URI eines von mehreren Vokabularen im Feld)
+    match: Match | None = None
+    # nur Werte, die das Vokabular des Feldes nicht kennt (outside) bzw. kennt (inside)
+    vocab: Literal["outside", "inside"] | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> Rows:
         if self.groups and self.include:
             raise ValueError("include und groups schließen sich aus")
+        if (self.match or self.vocab) and (self.groups or self.include or self.other
+                                           or self.missing):
+            raise ValueError("match und vocab wählen unter den vorkommenden Werten aus und "
+                             "gehen nicht zusammen mit include, groups, other oder missing")
         if self.other and self.top is None:
             raise ValueError("other braucht top")
         return self
@@ -63,6 +74,14 @@ class Columns(_Model):
     property: Name
     include: list[ValueIn] | None = Field(default=None, min_length=1, max_length=MAX_SERIES)
     top: int = Field(default=12, ge=1, le=MAX_SERIES)
+    match: Match | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Columns:
+        if self.match and self.include:
+            raise ValueError("match geht nicht zusammen mit include")
+        return self
+
 
 
 MAX_FILL_FIELDS = 30
@@ -88,6 +107,19 @@ class Fill(_Model):
         return self
 
 
+class VocabCheck(_Model):
+    """Je Feld: wie viele der vorkommenden Werte das Vokabular nicht kennt."""
+
+    fields: list[FillField] = Field(min_length=1, max_length=MAX_FILL_FIELDS)
+
+    @model_validator(mode="after")
+    def _unique(self) -> VocabCheck:
+        props = [f.property for f in self.fields]
+        if len(props) != len(set(props)):
+            raise ValueError("jedes Feld nur einmal")
+        return self
+
+
 class QuerySpec(_Model):
     instance: Annotated[StrictStr, Field(min_length=1, max_length=64)]
     content_type: StrictStr = "FILES"
@@ -96,6 +128,7 @@ class QuerySpec(_Model):
     series: list[Series] = Field(default_factory=list, max_length=MAX_SERIES)
     columns: Columns | None = None
     fill: Fill | None = None
+    vocab_check: VocabCheck | None = None
     percent: Literal["none", "column", "row"] = "none"
     refresh: bool = False
 
@@ -106,6 +139,10 @@ class QuerySpec(_Model):
         if self.fill and (self.series or self.columns or self.percent != "none"):
             raise ValueError("fill (Füllgrade) geht nicht zusammen mit series, columns "
                              "oder percent")
+        if self.vocab_check and (self.series or self.columns or self.fill or self.rows
+                                 or self.percent != "none"):
+            raise ValueError("vocab_check geht nicht zusammen mit rows, series, columns, "
+                             "fill oder percent")
         ids = [s.id for s in self.series]
         if len(ids) != len(set(ids)):
             raise ValueError("Spalten-IDs müssen eindeutig sein")

@@ -144,6 +144,8 @@ export class FilterBar {
     if (!field) {
       if (!this.open()) return [];
       return this.fields()
+        // Suchhilfen (virtual:*) heißen wie die echten Felder: nur zeigen, wer ausdrücklich danach sucht
+        .filter((f) => !f.property.startsWith('virtual:') || needle.startsWith('virtual'))
         .filter((f) => !needle || f.caption.toLocaleLowerCase('de').includes(needle) || f.property.toLowerCase().includes(needle))
         .sort((a, b) => Number(b.value_count > 0) - Number(a.value_count > 0) || a.caption.localeCompare(b.caption, 'de'))
         .slice(0, 40)

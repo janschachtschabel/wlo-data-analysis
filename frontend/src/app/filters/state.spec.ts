@@ -71,10 +71,11 @@ describe('Feldauswahl', () => {
     const field = (property: string, caption: string, value_count = 5) => ({ property, caption, type: '', value_count });
     const out = fieldChoices([
       field('virtual:taxonid', 'Fach'), field('preview.style', 'preview.style'), field('ccm:taxonid', 'Fach'),
-      field('ccm:leer', 'Leer', 0), field('ccm:educationalcontext', 'Bildungsstufe'),
+      field('ccm:leer', 'Leer', 0), field('ccm:educationalcontext', 'Bildungsstufe'), field('cclom:stufe', 'Bildungsstufe'),
     ]);
+    // virtual:* sind Suchhilfen mit dem Namen des echten Feldes und zählen nichts
     expect(out.map((f) => f.caption)).toEqual(
-      ['Bildungsstufe', 'Fach (ccm:taxonid)', 'Fach (virtual:taxonid)', 'preview.style']);
+      ['Bildungsstufe (cclom:stufe)', 'Bildungsstufe (ccm:educationalcontext)', 'Fach', 'preview.style']);
   });
 });
 
