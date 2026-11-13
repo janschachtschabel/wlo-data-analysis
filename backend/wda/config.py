@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import SecretStr, ValidationError, field_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: SecretStr | None = None
     llm_model: str = "gpt-6-luna"
+    cache_ttl: float = Field(default=900.0, ge=0)
+    vocab_ttl: float = Field(default=86400.0, ge=0)
+    upstream_timeout: float = Field(default=90.0, gt=0)
+    upstream_concurrency: int = Field(default=4, ge=1, le=32)
 
     @field_validator("admin_password")
     @classmethod

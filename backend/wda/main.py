@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from . import __version__
-from .api import auth, health, instances
+from .api import auth, edusharing, health, instances
 from .api import settings as settings_api
 from .config import Settings, load_settings
 from .deps import require_admin
 from .instances import InstanceRegistry
 from .security import LoginThrottle, SessionSigner, session_signing_key
+from .services import Services
 
 # Die einzigen API-Pfade, die ohne Admin-Session antworten. Alles andere hängt am
 # geschützten Router; tests/test_routes_guard.py prüft das für jede Route.
@@ -30,9 +33,17 @@ def create_app(
     settings: Settings | None = None,
     *,
     clock: Callable[[], float] = time.monotonic,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or load_settings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        await app.state.services.aclose()
+
     app = FastAPI(
+        lifespan=lifespan,
         title="WLO-Daten-Dashboard",
         version=__version__,
         docs_url=None,
@@ -43,6 +54,7 @@ def create_app(
     app.state.instances = InstanceRegistry(settings.instances)
     app.state.signer = SessionSigner(session_signing_key(settings), settings.session_max_age)
     app.state.throttle = LoginThrottle(clock=clock)
+    app.state.services = Services(settings, app.state.instances, transport=transport)
 
     public = APIRouter(prefix="/api")
     public.include_router(health.router)
@@ -51,6 +63,8 @@ def create_app(
     protected = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
     protected.include_router(instances.router)
     protected.include_router(settings_api.router)
+    protected.include_router(edusharing.router)
+    edusharing.register_error_handlers(app)
 
     app.include_router(public)
     app.include_router(protected)

@@ -8,7 +8,7 @@ gespeicherten Templates Dashboards und Zahlen-Dokumente.
 Datensätze aus einem Cache, und alles außer Anmeldung und Health-Check verlangt die
 Admin-Anmeldung.
 
-Stand: Paket 1 von 10 (Grundgerüst). Design und Paketfolge stehen in
+Stand: Paket 2 von 10 (Grundgerüst und edu-sharing-Client). Design und Paketfolge stehen in
 [`docs/superpowers/specs/`](docs/superpowers/specs/), die Umsetzungspläne in
 [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
@@ -38,6 +38,10 @@ Minute auch die richtige Anmeldung.
 | `WDA_DATA_DIR` | `/data` | internes Datenverzeichnis, wird nie ausgeliefert |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Adressen vertrauenswürdiger Reverse-Proxys (wertet uvicorn aus) |
 | `WDA_INSTANCES` | – | weitere edu-sharing-Instanzen als JSON-Liste |
+| `WDA_CACHE_TTL` | `900` | Sekunden, die eine Aggregat-Antwort im Speicher gilt (0 = aus) |
+| `WDA_VOCAB_TTL` | `86400` | Sekunden, die Felder und Vokabulare einer Instanz gelten |
+| `WDA_UPSTREAM_TIMEOUT` | `90` | Timeout für Abfragen an eine Instanz in Sekunden |
+| `WDA_UPSTREAM_CONCURRENCY` | `4` | gleichzeitige Abfragen je Instanz |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
 | `WDA_LLM_API_KEY` | – | Schlüssel für die KI-Anbindung |
@@ -48,7 +52,7 @@ derselben `id` überschreibt die Vorbelegung. Felder je Instanz: `id`, `name`, `
 optional `repository` (`-home-`), `metadataset` (`mds_oeh`), `query` (`ngsearch`),
 `search_url`, `username`, `password`.
 
-## Schnittstelle (Paket 1)
+## Schnittstelle
 
 | Route | Anmeldung | Inhalt |
 |---|---|---|
@@ -58,6 +62,25 @@ optional `repository` (`-home-`), `metadataset` (`mds_oeh`), `query` (`ngsearch`
 | `GET /api/auth/status` | nein | ob angemeldet |
 | `GET /api/instances` | ja | Instanzen ohne Zugangsdaten |
 | `GET /api/settings` | ja | KI-Basis-URL, Modell, ob ein Schlüssel gesetzt ist |
+| `GET /api/instances/{id}/about` | ja | Erreichbarkeit, Version und Gesamtzahl der Instanz |
+| `GET /api/instances/{id}/fields` | ja | Felder des Metadatensets mit Anzahl der Vokabularwerte |
+| `GET /api/instances/{id}/vocab?property=…&q=…` | ja | Werte eines Feldes (URI, Label, Oberbegriff), durchsuchbar |
+| `POST /api/instances/{id}/aggregate` | ja | Gesamtzahl und Facetten für Filter; Werte als Label oder URI |
+
+Beispiel für eine Aggregat-Abfrage (offene Lizenzen in der Sekundarstufe I nach Fach):
+
+```json
+{"filters": [{"property": "ccm:educationalcontext", "values": ["Sekundarstufe I"]},
+             {"property": "license", "values": ["OPEN", "CC_BY_OPEN"]}],
+ "facets": ["ccm:taxonid"]}
+```
+
+Die Antwort nennt die Gesamtzahl, je Facette die Werte mit Label und Zählung, wie jeder
+Filterwert aufgelöst wurde, den Abrufzeitpunkt und ob sie aus dem Cache stammt. Ein
+Filterwert, der zu keinem oder zu mehreren Vokabular-Einträgen passt, bricht die Abfrage
+mit Vorschlägen ab. Die Abfragen fordern beim Repositorium nie Datensätze an
+(`maxItems=0`). Das gemessene Verhalten der edu-sharing-Suche steht in
+[`docs/edu-sharing-api-erkenntnisse.md`](docs/edu-sharing-api-erkenntnisse.md).
 
 ## Entwicklung
 
