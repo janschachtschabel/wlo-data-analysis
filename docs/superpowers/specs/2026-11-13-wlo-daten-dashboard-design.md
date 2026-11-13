@@ -1,6 +1,6 @@
 # WLO-Daten-Dashboard: Design
 
-Stand: 2026-11-13 · Status: **Entwurf, wartet auf Freigabe durch Jan**
+Stand: 2026-11-13 · Status: **freigegeben** (Jan, 2026-11-13), Abschnitt 8 enthält seine Antworten
 
 ## 1. Absicht
 
@@ -221,7 +221,7 @@ Balken je Bereich, Kennzahl-Kacheln und Export in allen Formaten.
 **Zählregeln (meine Festlegungen, im Bericht ausgewiesen):**
 
 - Grundgesamtheit: was die öffentliche Suche der Instanz anonym als Material
-  liefert (`contentType=FILES`), ohne Sammlungen. Siehe offener Punkt 4.
+  liefert (`contentType=FILES`), ohne Sammlungen.
 - Ein Material mit mehreren Fächern oder Bildungsstufen zählt in jeder
   zutreffenden Zeile und in jedem zutreffenden Bereich, wie in der Vorlage.
   Gesamtzeile und „Total OER" je Bereich sind dagegen eigene Zählabfragen
@@ -241,7 +241,7 @@ Balken je Bereich, Kennzahl-Kacheln und Export in allen Formaten.
 Die Zeilen der Vorlage stehen in Anhang A.
 
 Die Spalten der anderen Referatorien (Mundo, OERSI, Kita.bayern) stammen
-nicht aus WLO. **Offen, siehe Abschnitt 8.**
+teils aus WLO, teils von außen, siehe Abschnitt 8.
 
 ## 7. Pakete
 
@@ -250,11 +250,11 @@ Jedes Paket: Plan → Umsetzung testgetrieben → Review → Befunde beheben.
 
 | # | Paket | Ergebnis |
 |---|---|---|
-| 1 | Grundgerüst | FastAPI, Konfiguration, Admin-Login, Docker, CI, leere SPA |
+| 1 | Grundgerüst | FastAPI, Konfiguration, Instanzen, Admin-Login, Docker, CI, Platzhalter-Seite |
 | 2 | edu-sharing-Client | ngsearch (Zählung, Facetten), MDS, Vokabular Label↔URI, Instanzen, Ergebnis-Cache |
 | 3 | Abfrage-Engine | QuerySpec, Gruppen, Kreuztabellen, Berechnungen, Herkunftsangabe |
 | 4 | Store und Verwaltung | Filter, Kennzahlen, Templates, Dashboards, Gruppen, Läufe |
-| 5 | OER-Statistik und Export | Template, Bericht, JSON/CSV/Markdown/HTML/PDF |
+| 5 | OER-Statistik und Export | Template, OERSI-Abruf, Bericht, JSON/CSV/Markdown/HTML/PDF |
 | 6 | Oberfläche | Filter-Baukasten (Label/URI), Explorer, Dashboards mit Grafiken, Verwaltung |
 | 7 | Historie | geplante Läufe, Snapshots, Zeitreihen, „Veränderung seit" |
 | 8 | Datenqualität I | was Aggregate hergeben: Label-Verteilungen, Füllgrad einwertiger Felder per Differenz, Kennzahlen je Quelle (Spider, Bezugsquelle) |
@@ -264,24 +264,27 @@ Jedes Paket: Plan → Umsetzung testgetrieben → Review → Befunde beheben.
 Nach Paket 5 ist das OER-Template über die API nutzbar, nach Paket 6 in der
 Oberfläche.
 
-## 8. Offene Punkte für Jan
+## 8. Entscheidungen von Jan (2026-11-13)
 
-1. **Fremde Referatorien im OER-Template.** Vorschlag: zuerst nur die
-   WLO-Spalten live; Werte für Mundo, OERSI und Kita.bayern lassen sich im
-   Template von Hand eintragen. Eine Live-Anbindung von OERSI (offene API)
-   kann später folgen.
-2. **Kategorie C („anderer freier Zugang").** Welche WLO-Werte zählen dazu?
-   Vorschlag: alles mit gesetzter Lizenz, das weder A noch B ist, aber als
-   frei zugänglich markiert ist; die genaue Zuordnung bleibt im Template
-   änderbar.
-3. **Netzzugriff der Entwicklungsumgebung.** Die Cloud-Umgebung dieses
-   Projekts blockiert derzeit `redaktion.openeduhub.net`,
-   `repository.staging.openeduhub.net`, `vocabs.openeduhub.de` und
-   `wirlernenonline.de`. Ohne Freigabe kann nur gegen aufgezeichnete
-   Antworten getestet werden, nicht live.
-4. **Grundgesamtheit.** Vorschlag: der anonym sichtbare Bestand der
-   öffentlichen Suche. Falls auch redaktionell noch nicht freigegebene
-   Inhalte zählen sollen, braucht die Instanz Zugangsdaten.
+1. **Referatorien im OER-Template.** OERSI-Daten sind in WLO enthalten und
+   sollen zusätzlich live über die OERSI-API abrufbar sein. Kita.bayern und
+   Mundo liegen eventuell ebenfalls in WLO; das ist unsicher. Folge: Jede
+   Referatorien-Spalte hat im Template eine von drei Herkunftsarten:
+   *WLO-Filter* (z. B. nach Quelle), *externer Abruf* (zuerst OERSI) oder
+   *Handeintrag*. Beim ersten Live-Lauf wird über die Quellen-Facette
+   geprüft, welche Referatorien in WLO vorkommen. Der OERSI-Abruf ist Teil
+   von Paket 5, weitere externe Quellen nur bei Bedarf.
+2. **Kategorie C.** Frei zugängliche Bildungsinhalte im Netz, deren Lizenz
+   nicht aus dem Lizenz-Vokabular der offenen Lizenzen stammt. Genauer lässt
+   es sich vorab nicht fassen. Folge: C = Lizenzfeld gesetzt, aber weder A
+   noch B; D = Lizenzfeld leer. Die Zuordnung der einzelnen Lizenzwerte bleibt
+   im Template änderbar und wird am Live-Bestand geprüft.
+3. **Grundgesamtheit.** Der anonym sichtbare Bestand reicht für den Anfang.
+   Später optional ein Benutzer-Login je Instanz für mehr Sichtbarkeit; das
+   Instanz-Modell sieht Zugangsdaten deshalb von Beginn an vor.
+4. **Netzzugriff.** Die Cloud-Umgebung bleibt gesperrt. Live-Prüfungen laufen
+   über Jans Rechner; die automatischen Tests arbeiten mit aufgezeichneten
+   Antworten.
 
 ## 9. Dem Bau überlassen
 
