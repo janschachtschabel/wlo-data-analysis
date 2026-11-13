@@ -1,8 +1,10 @@
 FROM python:3.12-slim AS build
 WORKDIR /src
-COPY backend/pyproject.toml ./
+COPY backend/pyproject.toml backend/requirements.txt ./
 COPY backend/wda ./wda
-RUN pip install --no-cache-dir --prefix=/install .
+# Feste Versionen aus requirements.txt, damit jeder Bau dasselbe Image ergibt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt \
+    && pip install --no-cache-dir --prefix=/install --no-deps .
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 WDA_DATA_DIR=/data

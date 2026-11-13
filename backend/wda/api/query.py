@@ -8,8 +8,8 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ..engine.engine import run_query
-from ..engine.formula import QueryError
 from ..engine.spec import QuerySpec
+from ..errors import QueryError
 
 router = APIRouter()
 

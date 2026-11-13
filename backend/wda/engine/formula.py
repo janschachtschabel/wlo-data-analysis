@@ -10,15 +10,13 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from ..errors import QueryError
+
 MAX_LENGTH = 500
 MAX_NODES = 200
 MAX_MAGNITUDE = 1e15  # darüber ist ein Ergebnis keine sinnvolle Kennzahl mehr
 FUNCTIONS = {"round": (1, 2), "max": (1, 8), "min": (1, 8)}
 Number = int | float
-
-
-class QueryError(Exception):
-    """Die Abfrage-Beschreibung ist fehlerhaft; die Meldung ist für die Oberfläche bestimmt."""
 
 
 @dataclass(frozen=True)

@@ -42,6 +42,7 @@ Minute auch die richtige Anmeldung.
 | `WDA_VOCAB_TTL` | `86400` | Sekunden, die Felder und Vokabulare einer Instanz gelten |
 | `WDA_UPSTREAM_TIMEOUT` | `90` | Timeout für Abfragen an eine Instanz in Sekunden |
 | `WDA_UPSTREAM_CONCURRENCY` | `4` | gleichzeitige Abfragen je Instanz |
+| `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
 | `WDA_LLM_API_KEY` | – | Schlüssel für die KI-Anbindung |
@@ -50,7 +51,8 @@ Vorbelegte Instanzen: `wlo-prod` (`https://redaktion.openeduhub.net`) und `wlo-s
 (`https://repository.staging.openeduhub.net`). Ein Eintrag in `WDA_INSTANCES` mit
 derselben `id` überschreibt die Vorbelegung. Felder je Instanz: `id`, `name`, `base_url`,
 optional `repository` (`-home-`), `metadataset` (`mds_oeh`), `query` (`ngsearch`),
-`search_url`, `username`, `password` (nur mit `https`) und `facet_fields`.
+`search_url`, `username`, `password` (nur mit `https`), `facet_fields` und `prefix_fields`
+(einwertige Felder, die als Filter per Wortanfang treffen; Standard: Lizenzschlüssel).
 
 Facetten sind nur auf Feldern erlaubt, die im Metadatenset eine Werteliste haben, sowie
 auf den in `facet_fields` freigegebenen Feldern (Standard: Lizenzschlüssel, Quelle,
@@ -112,7 +114,7 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   Wert eines Feldes.
 - `percent`: Anteile je Spalte oder je Zeile.
 - Der Lizenzschlüssel (`ccm:commonlicense_key`) trifft beim Repositorium als Filter per
-  Wortanfang (`CC_BY` zählte alle `CC_BY…` mit). Die Engine lehnt solche Filter ab und
+  Wortanfang (`CC_BY` zählte alle `CC_BY…` mit). Beide Abfrage-Routen lehnen solche Filter ab und
   verweist auf die exakten Wege: den Schlüssel als Zeilen verwenden (mit Gruppen für
   Lizenzkategorien) oder über `license` filtern (`OPEN`, `CC_BY_OPEN`, `CC_BY_RESTRICTED`,
   `COPYRIGHT_OTHERS`).
@@ -127,7 +129,7 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
 ```bash
 cd backend
 python -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt && pip install --no-deps -e .
 pytest -q
 ruff check .
 WDA_ADMIN_PASSWORD=dev WDA_COOKIE_SECURE=false WDA_DATA_DIR=./data \

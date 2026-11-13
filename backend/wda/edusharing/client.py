@@ -26,7 +26,7 @@ CONTENT_TYPES = frozenset({"FILES", "FOLDERS", "FILES_AND_FOLDERS", "COLLECTIONS
 # und jede Quellenliste, verhindert aber, dass eine Facette zur Datensatzliste wird.
 MAX_FACET_LIMIT = 5000
 _ABOUT_KEYS = ("repository", "renderservice", "major", "minor")
-_RETRY_STATUS = frozenset({502, 503, 504})
+_RETRY_STATUS = frozenset({429, 502, 503, 504})
 _NAME = r"([\w:.\-]{1,120})"
 
 
@@ -143,7 +143,10 @@ class EduSharingClient:
                 "invalid_query", f"facet_limit muss zwischen 1 und {MAX_FACET_LIMIT} liegen.")
         if content_type not in CONTENT_TYPES:
             raise EduSharingError("invalid_query", f"Unbekannter Inhaltstyp '{content_type}'.")
-        key = (self.instance.id, content_type, norm_criteria, norm_facets, facet_limit)
+        # Auch Adresse und Abfrage-Profil: Dieselbe ID kann später woandershin zeigen.
+        inst = self.instance
+        key = (inst.id, inst.base_url, inst.repository, inst.metadataset, inst.query,
+               inst.username, content_type, norm_criteria, norm_facets, facet_limit)
 
         async def load() -> Aggregate:
             return await self._search(norm_criteria, norm_facets, facet_limit, content_type)
@@ -214,6 +217,16 @@ class EduSharingClient:
         pagination = data.get("pagination")
         if not isinstance(pagination, dict) or not _is_count(pagination.get("total")):
             raise bad
+        ignored = data.get("ignored")
+        if ignored:
+            # Ein still ignorierter Filter ergäbe eine zu große Zahl; lieber keine als diese.
+            names = [x for x in ignored if isinstance(x, str)
+                     and re.fullmatch(r"[\w:.\-]{1,100}", x)] \
+                if isinstance(ignored, list) else []
+            raise EduSharingError(
+                "ignored",
+                f"{self.instance.name} hat Teile der Abfrage nicht ausgewertet"
+                + (f": {', '.join(names[:10])}." if names else "."), 200)
         raw_facets = data.get("facets")
         if raw_facets is None:
             raw_facets = []
@@ -294,6 +307,14 @@ class EduSharingClient:
         if status >= 500:
             return EduSharingError(
                 "unavailable", f"{name} meldet einen Serverfehler ({status}).", status)
+        if status == 429:
+            return EduSharingError(
+                "throttled", f"{name} drosselt gerade die Abfragen (429). Später erneut "
+                "versuchen.", status)
+        if status == 404:
+            return EduSharingError(
+                "rejected", f"{name} kennt diese Adresse nicht (404). Basis-URL, Repositorium, "
+                "Metadatenset und Abfrage der Instanz prüfen.", status)
         if status in (401, 403):
             return EduSharingError(
                 "rejected", f"{name} verweigert den Zugriff ({status}).", status)

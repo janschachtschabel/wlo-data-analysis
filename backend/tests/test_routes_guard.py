@@ -1,8 +1,5 @@
 import json
 
-from fastapi.routing import APIRoute
-from starlette.routing import Mount
-
 from wda.deps import require_admin
 from wda.main import PUBLIC_API_PATHS
 
@@ -14,33 +11,105 @@ def test_public_paths_are_exactly_these():
         "/api/health", "/api/auth/login", "/api/auth/status", "/api/auth/logout"})
 
 
+def all_routes(routes):
+    """Alle Routen der App mit vollem Pfad, auch die aus eingehängten Routern. Je nach
+    FastAPI-Version stehen diese direkt in ``app.routes`` oder in einem Router-Objekt."""
+    for route in routes:
+        if hasattr(route, "effective_route_contexts"):
+            for ctx in route.effective_route_contexts():
+                yield ctx.path, set(ctx.methods), ctx.dependant, "APIRoute"
+        else:
+            yield (getattr(route, "path", None), set(getattr(route, "methods", None) or ()),
+                   getattr(route, "dependant", None), type(route).__name__)
+
+
+# Jede neue Route muss hier eingetragen werden. So fällt auf, wenn die Aufzählung der Routen
+# (und damit die Prüfung unten) einmal nichts mehr findet.
+PROTECTED = {
+    "/api", "/api/{rest:path}", "/api/instances", "/api/settings", "/api/query",
+    "/api/instances/{instance_id}/about", "/api/instances/{instance_id}/fields",
+    "/api/instances/{instance_id}/vocab", "/api/instances/{instance_id}/aggregate",
+}
+OUTSIDE_API = {"/{rest:path}"}  # nur die Oberfläche
+
+
+def is_api(path):
+    return path == "/api" or path.startswith("/api/")
+
+
+def test_route_list_is_complete(app):
+    found = {path for path, *_ in all_routes(app.routes)}
+    assert found == PROTECTED | PUBLIC_API_PATHS | OUTSIDE_API
+
+
 def test_every_other_api_route_requires_admin(app, client):
-    checked = 0
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not route.path.startswith("/api"):
+    checked = set()
+    for path, methods, _, _ in all_routes(app.routes):
+        if not is_api(path) or path in PUBLIC_API_PATHS:
             continue
-        if route.path in PUBLIC_API_PATHS:
-            continue
-        for method in route.methods - {"HEAD", "OPTIONS"}:
-            r = client.request(method, route.path)
-            assert r.status_code == 401, f"{method} {route.path} ist ohne Login erreichbar"
-            checked += 1
-    assert checked >= 2
+        for method in methods - {"HEAD", "OPTIONS"}:
+            r = client.request(method, path)
+            assert r.status_code == 401, f"{method} {path} ist ohne Login erreichbar"
+            checked.add(path)
+    assert checked == PROTECTED
 
 
 def test_guard_is_structural(app):
-    """Unabhängig vom Pfadmuster: jede nicht-öffentliche API-Route hängt an require_admin,
-    und unter /api gibt es nichts außer gewöhnlichen Routen (keine Mounts, keine WebSockets)."""
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        if not (path == "/api" or path.startswith("/api/")):
-            assert not isinstance(route, Mount), f"Mount {path} würde Dateien ausliefern"
+    """Jede nicht-öffentliche API-Route hängt an require_admin, und es gibt nur gewöhnliche
+    Routen (keine Mounts, keine WebSockets)."""
+    for path, _, dependant, kind in all_routes(app.routes):
+        assert kind == "APIRoute", f"{path}: unerwarteter Routentyp {kind}"
+        if not is_api(path) or path in PUBLIC_API_PATHS:
             continue
-        assert isinstance(route, APIRoute), f"{path}: unerwarteter Routentyp {type(route).__name__}"
-        if path in PUBLIC_API_PATHS:
-            continue
-        calls = {dep.call for dep in route.dependant.dependencies}
+        calls = {dep.call for dep in dependant.dependencies}
         assert require_admin in calls, f"{path} hängt nicht an require_admin"
+
+
+def test_gate_protects_routes_that_forgot_the_dependency(settings):
+    """Die Sperre sitzt vor der Routenwahl: Auch eine Route ohne require_admin, ein Mount
+    oder ein Pfad außerhalb von /api gibt ohne Login nichts her."""
+    from fastapi import APIRouter
+    from fastapi.testclient import TestClient
+    from starlette.responses import PlainTextResponse
+    from starlette.routing import Mount, Route, WebSocketRoute
+
+    from wda.main import create_app
+
+    app = create_app(settings)
+    leak = APIRouter(prefix="/api/leak")
+
+    @leak.get("/x")
+    def x():
+        return {"geheim": 1}
+
+    async def plain(request):
+        return PlainTextResponse("geheim")
+
+    async def ws(websocket):
+        await websocket.accept()
+        await websocket.send_text("geheim")
+        await websocket.close()
+
+    app.include_router(leak)
+    app.router.routes.insert(0, Route("/api/plain", plain, methods=["GET", "POST"]))
+    app.router.routes.insert(0, Mount("/api/files", app=plain))
+    app.router.routes.insert(0, Route("/export/report.json", plain, methods=["GET", "POST"]))
+    app.router.routes.insert(0, WebSocketRoute("/ws", ws))
+    client = TestClient(app)
+    for path in ("/api/leak/x", "/api/plain", "/api/files/a", "/api/files"):
+        r = client.get(path)
+        assert r.status_code == 401 and "geheim" not in r.text, path
+    assert client.post("/api/plain").status_code == 401
+    assert client.post("/export/report.json").status_code == 405
+    import pytest
+    with pytest.raises(Exception):  # noqa: B017, PT011
+        with client.websocket_connect("/ws") as conn:
+            conn.receive_text()
+    # und die Aufzählung bemerkt die fremden Routen
+    kinds = {kind for *_, kind in all_routes(app.routes)}
+    assert kinds - {"APIRoute"} == {"Route", "Mount", "WebSocketRoute"}
+    found = {path for path, *_ in all_routes(app.routes)}
+    assert "/api/leak/x" in found
 
 
 def test_bare_api_path_is_json(client, admin):

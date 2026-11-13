@@ -14,13 +14,19 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from ..edusharing.client import MAX_FACET_LIMIT, EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore, _norm
-from ..filters import FilterIn, Name, resolve_filters
+from ..filters import (
+    FilterIn,
+    Name,
+    check_prefix_shape,
+    check_prefix_values,
+    resolve_filters,
+)
 
 router = APIRouter(prefix="/instances/{instance_id}")
 
 # Fehler, die an der Abfrage liegen, sind 422; alles andere liegt am Repositorium.
 _STATUS = {"timeout": 504, "invalid_query": 422, "unknown_property": 422,
-           "unknown_facet": 422, "single_value": 422}
+           "unknown_facet": 422, "single_value": 422, "ignored": 422, "throttled": 503}
 
 
 def status_for(exc: EduSharingError) -> int:
@@ -115,10 +121,17 @@ async def aggregate(instance_id: str, body: AggregateIn, request: Request) -> di
     client, vocab = _services(request, instance_id)
     criteria, resolved_filters = await resolve_filters(vocab, body.filters)
 
-    notes = [
-        f"'{c.property}' trifft als Filter per Wortanfang: '{c.values[0]}' zählt auch alle "
-        "Schlüssel mit, die so beginnen. Exakte Zahlen je Schlüssel stehen in der Facette."
-        for c in criteria if c.property in client.instance.prefix_fields]
+    # Dieselbe Regel wie in der Abfrage-Engine: kein Filter, der still mehr zählt.
+    notes: list[str] = []
+    prefix_fields = set(client.instance.prefix_fields)
+    check_prefix_shape(criteria, prefix_fields)
+
+    async def occurring(prop: str):
+        found = await client.aggregate((), [prop], content_type=body.content_type,
+                                       refresh=body.refresh)
+        return found.facets[prop]
+
+    await check_prefix_values(occurring, criteria, prefix_fields, notes)
     facet_props = list(dict.fromkeys(body.facets))
     for prop in facet_props:
         await vocab.check_facet(prop)

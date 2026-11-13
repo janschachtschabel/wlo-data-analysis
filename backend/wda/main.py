@@ -15,7 +15,7 @@ from . import __version__
 from .api import auth, edusharing, health, instances, query
 from .api import settings as settings_api
 from .config import Settings, load_settings
-from .deps import require_admin
+from .deps import AdminGate, require_admin
 from .instances import InstanceRegistry
 from .security import LoginThrottle, SessionSigner, session_signing_key
 from .services import Services
@@ -80,6 +80,8 @@ def create_app(
         if request.url.path.startswith("/api"):
             response.headers["Cache-Control"] = "no-store"
         return response
+
+    app.add_middleware(AdminGate, public_paths=PUBLIC_API_PATHS)
 
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 

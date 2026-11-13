@@ -5,6 +5,8 @@ KINDS = frozenset({
     "unknown_property",   # Repositorium kennt das Filterfeld nicht
     "unknown_facet",      # Repositorium kennt das Facettenfeld nicht
     "single_value",       # mehrere Werte für ein einwertiges Feld
+    "ignored",            # Repositorium hat Teile der Abfrage nicht ausgewertet
+    "throttled",          # Repositorium drosselt (429)
     "rejected",           # sonstige Ablehnung (4xx), Grund vom Repositorium verborgen
     "unavailable",        # 5xx oder keine Verbindung
     "timeout",

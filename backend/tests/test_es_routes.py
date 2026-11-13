@@ -159,10 +159,10 @@ def test_facet_values_can_be_used_as_literal_filters(api, repo):
         {"property": "ccm:educationalcontext",
          "values": ["Sekundarstufe I", {"value": "political", "literal": True},
                     {"value": "", "literal": True}]},
-        {"property": "ccm:commonlicense_key", "values": ["CUSTOM", "CC_BY_SA", ""]}]})
+        {"property": "ccm:commonlicense_key", "values": ["CUSTOM"]}]})
     assert r.status_code == 200, r.text
-    assert repo.bodies()[0]["criteria"] == [
-        {"property": "ccm:commonlicense_key", "values": ["", "CC_BY_SA", "CUSTOM"]},
+    assert repo.bodies()[-1]["criteria"] == [
+        {"property": "ccm:commonlicense_key", "values": ["CUSTOM"]},
         {"property": "ccm:educationalcontext",
          "values": ["", EC + "sekundarstufe_1", "political"]}]
     hows = [v["how"] for v in r.json()["filters"][0]["values"]]
@@ -176,8 +176,8 @@ def test_response_keys_are_closed(api):
                          "cached"}
     assert body["notes"] == []
     noted = api.post("/api/instances/wlo-prod/aggregate", json={"filters": [
-        {"property": "ccm:commonlicense_key", "values": ["CC_BY"]}]}).json()
-    assert "Wortanfang" in noted["notes"][0]
+        {"property": "ccm:commonlicense_key", "values": [""]}]}).json()
+    assert "leere Wert" in noted["notes"][0]
     assert set(body["facets"][0]) == {"property", "caption", "other_count", "truncated", "values"}
     assert set(body["facets"][0]["values"][0]) == {"value", "label", "count"}
 
@@ -254,3 +254,14 @@ def test_routes_require_login(settings, repo):
     assert client.get("/api/instances/wlo-prod/about").status_code == 401
     assert client.post("/api/instances/wlo-prod/aggregate", json={}).status_code == 401
     assert repo.requests == []
+
+
+def test_prefix_field_rule_is_the_same_as_in_the_query_engine(api, repo):
+    """Befund aus dem übergreifenden Review: /aggregate zählte CC_BY… still mit."""
+    r = api.post("/api/instances/wlo-prod/aggregate", json={"filters": [
+        {"property": "ccm:commonlicense_key", "values": ["CC_BY"]}]})
+    assert r.status_code == 422 and r.json()["kind"] == "invalid_query"
+    assert "CC_BY_SA" in r.json()["detail"]
+    r = api.post("/api/instances/wlo-prod/aggregate", json={"filters": [
+        {"property": "ccm:commonlicense_key", "values": ["CUSTOM", "CC_BY_SA"]}]})
+    assert r.status_code == 422 and "nur einen Wert" in r.json()["detail"]

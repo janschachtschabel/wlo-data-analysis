@@ -322,3 +322,55 @@ def test_error_message_never_contains_credentials():
     with pytest.raises(EduSharingError) as info:
         run(make(repo, inst).aggregate([]))
     assert "streng-geheim" not in str(info.value) and "streng-geheim" not in info.value.message
+
+
+def test_ignored_criteria_are_an_error_not_a_bigger_number():
+    """Befund aus dem übergreifenden Review: ``ignored`` wurde verworfen."""
+    repo = FakeRepo()
+    repo.script = [httpx.Response(200, json={
+        "pagination": {"total": 318912}, "facets": [],
+        "ignored": ["ccm:foo", "<script>böse</script>"]})]
+    with pytest.raises(EduSharingError) as info:
+        run(make(repo).aggregate([Criterion("ccm:foo", ("x",))]))
+    assert info.value.kind == "ignored" and "ccm:foo" in info.value.message
+    assert "script" not in info.value.message
+    for harmless in (None, []):
+        repo = FakeRepo()
+        repo.script = [httpx.Response(200, json={
+            "pagination": {"total": 5}, "facets": [], "ignored": harmless})]
+        assert run(make(repo).aggregate([])).total == 5
+
+
+def test_same_instance_id_with_other_address_does_not_share_cache():
+    repo = FakeRepo()
+    http = httpx.AsyncClient(transport=repo.transport())
+    cache = TTLCache(ttl=900)
+    one = EduSharingClient(INSTANCE, http, cache)
+    two = EduSharingClient(
+        Instance(id="t", name="T", base_url="https://anderes-repo.example"), http, cache)
+
+    async def scenario():
+        a = await one.aggregate([])
+        b = await two.aggregate([])
+        c = await one.aggregate([])
+        return a.cached, b.cached, c.cached
+
+    assert run(scenario()) == (False, False, True)
+    assert len(repo.searches) == 2
+
+
+def test_throttling_is_retried_and_named():
+    repo = FakeRepo()
+    repo.script = [httpx.Response(429, text="x")]
+    client = make(repo)
+    assert run(client.aggregate([])).total == 318912 and client.slept == [0.5]
+    repo = FakeRepo()
+    repo.script = [httpx.Response(429, text="x")] * 3
+    with pytest.raises(EduSharingError) as info:
+        run(make(repo).aggregate([]))
+    assert info.value.kind == "throttled" and "drosselt" in info.value.message
+    repo = FakeRepo()
+    repo.script = [httpx.Response(404, text="x")]
+    with pytest.raises(EduSharingError) as info:
+        run(make(repo).aggregate([]))
+    assert "404" in info.value.message and "Basis-URL" in info.value.message

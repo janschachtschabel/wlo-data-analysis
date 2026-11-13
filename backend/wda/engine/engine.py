@@ -18,8 +18,15 @@ from typing import Any
 
 from ..edusharing.client import MAX_VALUES, Aggregate, Criterion, EduSharingClient
 from ..edusharing.vocab import VocabStore
-from ..filters import FilterIn, resolve_filters, resolve_values
-from .formula import Formula, QueryError, compile_formula
+from ..errors import QueryError
+from ..filters import (
+    FilterIn,
+    check_prefix_shape,
+    check_prefix_values,
+    resolve_filters,
+    resolve_values,
+)
+from .formula import Formula, compile_formula
 from .spec import MAX_CALLS, MAX_SERIES, QuerySpec, Series
 
 Number = int | float
@@ -146,13 +153,16 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         raise QueryError(
             f"Die Abfrage bräuchte bis zu {planned} Einzelabfragen, erlaubt sind {MAX_CALLS}. "
             "Weniger Spalten oder Gruppen wählen.")
-    _check_prefix_shape(base, prefix_fields)
+    check_prefix_shape(base, prefix_fields)
     columns = await _plan_columns(spec, vocab, run, base, base_props, row_prop, notes)
     data_columns = [c for c in columns if not c.derived]
     for col in data_columns:
-        _check_prefix_shape(col.criteria, prefix_fields)
-    await _check_prefix_values(
-        run, client, [c for col in data_columns for c in col.criteria] + list(base),
+        check_prefix_shape(col.criteria, prefix_fields)
+    async def occurring(prop: str):
+        return (await run.call((), prop)).facets[prop]
+
+    await check_prefix_values(
+        occurring, [c for col in data_columns for c in col.criteria] + list(base),
         prefix_fields, notes, spec.columns.property if spec.columns else None)
 
     # ---- Ausführung -----------------------------------------------------------
@@ -324,51 +334,6 @@ def _sum(values) -> int | None:
             return None
         total += value
     return total
-
-
-def _check_prefix_shape(criteria, prefix_fields: set[str]) -> None:
-    for crit in criteria:
-        if crit.property in prefix_fields and len(crit.values) > 1:
-            raise QueryError(
-                f"'{crit.property}' nimmt als Filter nur einen Wert. Für mehrere Lizenzen "
-                "das Feld als Zeilen mit Gruppen verwenden oder über 'license' filtern.")
-
-
-async def _check_prefix_values(run: _Run, client: EduSharingClient, criteria,
-                               prefix_fields: set[str], notes: list[str],
-                               column_prop: str | None = None) -> None:
-    """Ein Kriterium auf einem Präfix-Feld zählt auch alle längeren Schlüssel mit. Erlaubt
-    sind deshalb nur Werte, die kein Anfang eines anderen vorkommenden Schlüssels sind."""
-    wanted: dict[str, set[str]] = {}
-    for crit in criteria:
-        if crit.property in prefix_fields:
-            wanted.setdefault(crit.property, set()).update(crit.values)
-    for prop, values in wanted.items():
-        if "" in values:
-            notes.append(
-                f"Der leere Wert für '{prop}' zählt alle Dokumente, bei denen das Feld "
-                "gesetzt ist.")
-            values = values - {""}
-        if not values:
-            continue
-        facet = (await run.call((), prop)).facets[prop]
-        if facet.truncated:
-            raise QueryError(
-                f"Die Werte von '{prop}' lassen sich nicht vollständig prüfen; das Feld "
-                "kann deshalb nicht als Filter dienen.")
-        keys = [v.value for v in facet.values]
-        for value in sorted(values):
-            longer = sorted(k for k in keys if k != value and k.startswith(value))
-            if longer and prop == column_prop:
-                raise QueryError(
-                    f"'{prop}' taugt nicht als Spaltenfeld: Die Spalte '{value}' würde auch "
-                    f"{', '.join(longer[:6])} mitzählen (das Repositorium vergleicht hier nur "
-                    f"den Anfang). Stattdessen '{prop}' als Zeilen verwenden.")
-            if longer:
-                raise QueryError(
-                    f"Der Filter '{prop}' = '{value}' würde auch {', '.join(longer[:6])} "
-                    f"mitzählen (das Repositorium vergleicht hier nur den Anfang). "
-                    f"Stattdessen '{prop}' als Zeilen verwenden oder über 'license' filtern.")
 
 
 async def _plan_columns(
