@@ -143,3 +143,28 @@ def test_the_assistant_sees_topics_in_short(api):
     short = compact(result)
     assert short["themen"][0][0] == "Mathematik"
     assert "bruchrechnung" in short["themen"][0][1].casefold()
+
+
+def test_excel_export_has_a_sheet_per_table_numbers_and_topics(api):
+    import io
+    import zipfile
+    made = api.post("/api/definitions", json={"kind": "metric", "name": "=SUM(A1) Karte", "spec": {
+        "query": {"instance": "wlo-prod", "rows": {"property": TAX, "include": ["Mathematik"]},
+                  "topics": {"property": KEY}}}})
+    run = api.post(f"/api/definitions/{made.json()['id']}/run", json={"save": True}).json()
+    got = api.get(f"/api/runs/{run['id']}/export", params={"format": "xlsx"})
+    assert got.status_code == 200, got.text
+    assert got.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    book = zipfile.ZipFile(io.BytesIO(got.content))
+    assert book.testzip() is None
+    names = book.namelist()
+    assert "xl/workbook.xml" in names and "xl/worksheets/sheet2.xml" in names
+    sheet = book.read("xl/worksheets/sheet2.xml").decode()
+    assert "<v>" in sheet and "Themen je Zelle" in sheet and "ruchrechnung" in sheet
+    # Texte sind Text, nie Formel
+    assert "<f>" not in sheet and 't="inlineStr"' in sheet
+    import xml.dom.minidom
+    for name in names:
+        if name.endswith((".xml", ".rels")):
+            xml.dom.minidom.parseString(book.read(name))  # noqa: S318 - eigene Datei

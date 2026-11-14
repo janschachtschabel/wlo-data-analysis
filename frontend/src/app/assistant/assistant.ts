@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { formatNumber } from '../core/format';
 import { Instances } from '../core/instances';
 import { Proposal } from '../core/types';
 import { encodeState } from '../filters/state';
@@ -52,7 +53,8 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
       }
       @for (turn of turns(); track $index; let ti = $index) {
         @if (turn.role === 'user') {
-          <div class="bubble mine"><span class="sr-only">Du: </span>{{ turn.text }}</div>
+          <div class="bubble mine"><span class="sr-only">Du: </span>{{ turn.text }}
+            @if (turn.template) { <span class="with">mit Vorlage „{{ turn.template }}“</span> }</div>
         } @else {
           <div class="answer" aria-live="polite" [attr.aria-busy]="turn.pending ? 'true' : null">
             @if (turn.steps.length) {
@@ -105,14 +107,24 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
         }
       }
     </div>
+    @if (chat.template(); as doc) {
+      <p class="attached" role="status">Vorlage: <strong>{{ doc.name }}</strong>
+        <span class="muted">({{ number(doc.chars) }} Zeichen{{ doc.pages ? ', ' + doc.pages + (doc.pages === 1 ? ' Seite' : ' Seiten') : '' }}{{ doc.truncated ? ', gekürzt auf den Anfang' : '' }})</span>
+        <button type="button" class="link" (click)="chat.template.set(null)">entfernen</button>
+        <span class="muted">Geht mit der nächsten Frage an das Sprachmodell und wird nicht gespeichert.</span></p>
+    }
+    @if (chat.templateError()) { <p class="error" role="alert">{{ chat.templateError() }}</p> }
     <form class="ask card" (ngSubmit)="ask(draft)">
+      <input #file type="file" class="sr-only" tabindex="-1" aria-hidden="true" accept=".pdf,.docx,.txt,.md,.csv,.tsv,.json" (change)="pick(file)">
+      <button type="button" (click)="file.click()" [disabled]="chat.reading() || ready() === false"
+              title="PDF, Word (docx) oder Textdatei als Vorlage anhängen, etwa eine Statistik, die nachgebaut werden soll. Die Datei wird nur in Text umgewandelt und nicht gespeichert.">{{ chat.reading() ? 'Liest …' : 'Vorlage' }}</button>
       <label class="sr-only" for="question">Frage an den Assistenten</label>
       <textarea id="question" name="question" rows="2" [(ngModel)]="draft" [maxlength]="maxText" placeholder="Frage stellen …"
                 (keydown.enter)="enter($event)" [disabled]="ready() === false"></textarea>
       @if (busy()) { <button type="button" (click)="chat.stop()">Abbrechen</button> }
       @else { <button class="primary" type="submit" [disabled]="!draft.trim() || ready() === false">Fragen</button> }
     </form>
-    <p class="muted small">An das Sprachmodell gehen deine Fragen, Feldnamen, Werte der Felder (auch frei erfasste wie Quellen) und Zählungen, nie einzelne Materialien. Zahlen in den Karten stammen aus der Zählung, nicht vom Modell.</p>`,
+    <p class="muted small">An das Sprachmodell gehen deine Fragen, angehängte Vorlagen, Feldnamen, Werte der Felder (auch frei erfasste wie Quellen) und Zählungen, nie einzelne Materialien. Zahlen in den Karten stammen aus der Zählung, nicht vom Modell.</p>`,
   host: { '[class.dock]': 'dock()' },
   styles: `
     /* ein Fenster: Der Verlauf rollt, die Eingabe bleibt unten stehen */
@@ -143,6 +155,8 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
     .intro p { margin-top: 0; max-width: 80ch; }
     .ask { display: flex; gap: 8px; align-items: end; }
     .ask textarea { flex: 1; resize: vertical; min-height: 44px; font: inherit; }
+    .attached { margin: 0 0 6px; font-size: 13px; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+    .with { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
     .small { font-size: 12px; margin: 6px 0 0; } .context { margin: 0 0 var(--gap); } .thinking { margin: 0; }
   `,
 })
@@ -176,6 +190,13 @@ export class Assistant {
       const box = this.talk()?.nativeElement;
       if (box) queueMicrotask(() => { box.scrollTop = box.scrollHeight; });
     });
+  }
+
+  protected readonly number = formatNumber;
+  protected pick(input: HTMLInputElement): void {
+    const file = input.files?.[0];
+    input.value = ''; // dieselbe Datei lässt sich noch einmal wählen
+    if (file) void this.chat.attach(file);
   }
 
   protected enter(event: Event): void {

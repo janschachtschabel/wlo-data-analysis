@@ -319,6 +319,10 @@ await page.click('.tabs >> text=Wissenslandkarte');
 await page.waitForSelector('app-report-view ol.topics li', { timeout: 60000 });
 const themes = (await page.locator('app-report-view ol.topics li').allInnerTexts()).join(' ').toLowerCase();
 assert.ok(themes.includes('bruchrechnung') && !themes.includes('nachhilfe'), 'Themen sind bereinigt');
+// jede Tabelle lässt sich als CSV mitnehmen
+const csvFile = page.waitForEvent('download');
+await page.locator('app-report-view button:has-text("CSV herunterladen")').first().click();
+assert.match((await csvFile).suggestedFilename(), /\.csv$/, 'CSV je Tabelle');
 await page.click('.tabs >> text=Datenprobleme');
 await page.waitForSelector('app-report-view td.gap, app-report-view td.h3, app-report-view td.h4, app-report-view td.h5, app-report-view td.h6', { timeout: 60000 });
 await page.waitForSelector('app-report-view td:has-text("political")');
@@ -383,9 +387,14 @@ await page.waitForSelector('text=Es gelten wieder die Werte der Umgebung.');
 // Assistent: Frage, Schritt, Vorschlag mit Heatmap, Antwort; Speichern löst der Admin aus
 await page.click('nav >> text=Assistent');
 await page.waitForSelector('.examples button');
+// Vorlage anhängen: nur umgewandelt, geht einmal mit der nächsten Frage mit
+await page.setInputFiles('input[type=file]', { name: 'statistik.txt', mimeType: 'text/plain', buffer: Buffer.from('Fach;Anzahl\nMathematik;12\n') });
+await page.waitForSelector('.attached:has-text("statistik.txt")');
 await page.fill('#question', 'Wo fehlt Angebot?');
 await page.keyboard.press('Enter');
 await page.waitForSelector('.steps li:has-text("Bereitet eine Ansicht vor")');
+await page.waitForSelector('.with:has-text("statistik.txt")');
+assert.equal(await page.locator('.attached').count(), 0, 'Vorlage geht nur einmal mit');
 await page.waitForSelector('.proposal app-report-view td.h6', { timeout: 30000 });
 await page.waitForSelector('.bubble.prose strong:has-text("Mathematik")');
 await page.click('.proposal button:has-text("Als Kennzahl speichern")');

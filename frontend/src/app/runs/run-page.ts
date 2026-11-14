@@ -10,7 +10,7 @@ import { ReportView } from './report-view';
 /** der Router setzt fehlende Eingaben auf undefined */
 const EMPTY: Filter[] = [];
 const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise', failed: 'gescheitert' };
-const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Markdown', html: 'HTML', pdf: 'PDF' };
+const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Markdown', html: 'HTML', xlsx: 'Excel', pdf: 'PDF' };
 
 /**
  * Zwei Wege zu einem Bericht: ein gespeicherter Lauf (/lauf/:runId, mit Export) oder die
@@ -121,7 +121,7 @@ export class RunPage {
   private waiting: AbortController | null = null;
 
   protected readonly formats = computed(() =>
-    (this.settings()?.export.formats ?? ['json', 'csv', 'md', 'html', 'pdf']).map((id) => ({
+    (this.settings()?.export.formats ?? ['json', 'csv', 'md', 'html', 'xlsx', 'pdf']).map((id) => ({
       id, label: FORMAT_LABEL[id] ?? id,
       available: id !== 'pdf' || (this.settings()?.export.pdf_available ?? true) })));
   protected readonly widths = computed(() => {

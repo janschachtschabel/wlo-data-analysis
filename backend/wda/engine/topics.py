@@ -35,6 +35,27 @@ CELL_FACET_LIMIT = 40      # das Repositorium liefert das Fünffache: 200 Werte 
 BASE_FACET_LIMIT = 2000    # Vergleichsbasis: die 10.000 häufigsten Werte des Bestands
 MIN_COUNT = 2              # ein Wert, den nur ein Material trägt, ist kein Thema
 MIN_LIFT = 1.2
+BLOCK_SIZE = 4             # so viele Werte mit fast gleicher Zahl sind der Satz eines Kanals
+BLOCK_SPREAD = 0.03
+BLOCK_MIN = 20
+_YEAR = re.compile(r"(19|20)\d\d")
+
+
+def _blocks(items: list[tuple[str, str, int]]) -> set[str]:
+    """Schlüssel von Werten, die in einer Zelle zu viert oder mehr fast dieselbe Zahl tragen:
+    Ein Kanal hängt denselben Satz Schlagwörter an alle seine Materialien. Themen, die der
+    Bestand wirklich trägt, verteilen sich nie so gleichmäßig."""
+    ranked = sorted((item for item in items if item[2] >= BLOCK_MIN), key=lambda i: -i[2])
+    out: set[str] = set()
+    start = 0
+    while start < len(ranked):
+        end = start + 1
+        while end < len(ranked) and ranked[end][2] >= ranked[start][2] * (1 - BLOCK_SPREAD):
+            end += 1
+        if end - start >= BLOCK_SIZE:
+            out |= {key for key, _, _ in ranked[start:end]}
+        start = end
+    return out
 
 # Wörter aus Video-Schlagwörtern, die nichts über das Thema sagen
 FILLER = frozenset("""
@@ -47,8 +68,15 @@ student schnell leicht verstehen verständlich grundlagen einführung zusammenfa
 wiederholung education learning school teaching lesson howto explained science oer english
 deutsch german youtube podcast audio material materialien arbeitsblatt arbeitsblätter mint
 klasse gymnasium realschule hauptschule grundschule unterstufe mittelstufe oberstufe
-bildungsmaterial
+bildungsmaterial freude spaß spass simpel gut schlecht kontra contra original footage
+documentary learn speak read berechnen rechnen lernhilfe mathehilfe nachhilfelehrer ausbildung
+worksheet template workshop seminar medienpaket multimediales general main lehre digitale
+mensch jahr name stadt meter million wort einwohner music förderschule lernmaterial
 """.split()) | {
+    "mathe nachhilfe", "video tutorial", "online class", "learn english", "mp4-version",
+    "webm-version", "akademische grundlagen", "selbstgesteuertes lernen",
+    "außerschulische bildung", "kids & family", "religion & spirituality", "places & travel",
+    "self-improvement", "tv & film", "society & culture",
     "einfach erklärt", "schnell erklärt", "leicht erklärt", "how to", "online learning",
     "open educational resources", "lehr- und lernmaterial"}
 
@@ -191,6 +219,9 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
         blocked |= {norm(c.label) for c in columns}
     out_rows = []
     merged_any = False
+    blocks_any = False
+    known = {v.id for v in field.values} if field is not None and not free else set()
+    labels = {v.id: v.caption for v in field.values} if field is not None and not free else {}
     for r, row in enumerate(rows):
         row_names = _names(row.label)
         values: list[int | None] = []
@@ -208,9 +239,17 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                 merged_any = merged_any or len(merged) < len(found)
                 names = row_names | column_names[c]
                 items = [(key, label, count) for key, (label, count) in merged.items()
-                         if key not in blocked and not _is_name(key, names)]
+                         if key not in blocked and not _is_name(key, names)
+                         and len(key) > 2 and not _YEAR.fullmatch(key)]
+                boilerplate = _blocks(items) if spec.topics.stopwords else set()
+                if boilerplate:
+                    blocks_any = True
+                    items = [item for item in items if item[0] not in boilerplate]
             else:
-                items = [(value, value, count) for value, count in found]
+                # nur Werte, die das Vokabular kennt, und nicht den Namen der Zeile selbst
+                items = [(value, value, count) for value, count in found
+                         if value in known and norm(labels[value]) not in row_names
+                         and norm(labels[value]) != norm(row.label)]
             ranked = []
             for key, label, count in items:
                 if count < MIN_COUNT:
@@ -225,11 +264,13 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                     score = count * math.log(lift)
                 ranked.append((score, count, key, label, lift))
             ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
+            # ausgewählt nach dem, was typisch ist; gezeigt nach der Zahl der Materialien
+            chosen = sorted(ranked[: topics.top], key=lambda item: (-item[1], item[2]))
             cells.append([
-                {"label": label if free else await vocab.label(prop, key), "count": count,
+                {"label": label if free else labels[key], "count": count,
                  "share": round(100 * count / answer.total, 1) if answer.total else None,
                  **({"lift": round(lift, 1)} if lift is not None else {})}
-                for _, count, key, label, lift in ranked[: topics.top]])
+                for _, count, key, label, lift in chosen])
         out_rows.append({"key": row.key, "label": row.label, "kind": "value",
                          "values": values, "topics": cells})
 
@@ -241,10 +282,14 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                   "zusammengeführt, der Name von Zeile und Spalte"
                   + (", Füllwörter" if topics.stopwords else "")
                   + (", Namen von Anbietern und Quellen" if topics.exclude_fields else "")
-                  + " fehlen. Trägt ein Material zwei Schreibweisen, zählt es doppelt.")
+                  + " fehlen"
+                  + (", ebenso Sätze von Schlagwörtern mit fast gleicher Zahl (ein Kanal "
+                     "hängt sie an alle seine Materialien)" if blocks_any else "")
+                  + ". Trägt ein Material zwei Schreibweisen, zählt es doppelt.")
     notes.add("topics",
               ("Gezeigt ist, was in der Zelle deutlich häufiger vorkommt als im Bestand "
-               "(sortiert nach Anzahl mal Logarithmus des Verhältnisses). "
+               "(ausgewählt nach Anzahl mal Logarithmus des Verhältnisses, gereiht nach "
+               "Anzahl). "
                if typical else "Gezeigt sind die häufigsten Werte je Zelle. ")
               + f"Je Zelle höchstens {topics.top}, nur Werte mit mindestens {MIN_COUNT} "
               f"Materialien, ausgewertet unter den {CELL_FACET_LIMIT * 5} häufigsten der "

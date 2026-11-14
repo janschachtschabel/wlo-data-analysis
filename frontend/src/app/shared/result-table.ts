@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { formatDelta, formatNumber, formatPercent } from '../core/format';
 import { ResultRow } from '../core/types';
+import { fileName, save, tableCsv } from './download';
 import { HeatOptions, HeatScale, heatClasses } from './heat';
 
 /** Ergebnistabelle: die vollständige Fassung jeder Zahl; fehlende Werte sind „–“. */
@@ -55,6 +56,9 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
         </tbody>
       </table>
     </div>
+    @if (rows().length) {
+      <p class="get"><button type="button" class="link" (click)="csv()" title="Diese Tabelle als CSV-Datei (für Excel und andere Programme)">CSV herunterladen</button></p>
+    }
     @if (heat(); as scale) {
       <p class="legend muted">
         @if (scale === 'rate') {
@@ -69,6 +73,8 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
   styles: `
     .scroll { overflow: auto; max-height: 70vh; }
     .pct { margin-left: 6px; font-size: 12px; }
+    .get { margin: 4px 0 0; font-size: 12px; text-align: right; }
+    @media print { .get { display: none; } }
     /* Wissenslandkarte: oben die Anzahl, darunter die Themen der Zelle */
     table.data tr td.cell-topics { text-align: left; vertical-align: top; min-width: 150px; white-space: normal; }
     .cell-topics .n { display: block; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -104,6 +110,8 @@ export class ResultTable {
   readonly columns = input.required<{ id: string; label: string; derived: boolean }[]>();
   readonly rows = input.required<ResultRow[]>();
   readonly rowTitle = input('');
+  /** Titel der Auswertung: Überschrift und Dateiname beim Herunterladen */
+  readonly name = input('');
   readonly headerGroups = input<[string, number][] | null | undefined>(null);
   /** Zellen einfärben: nach Zählung oder nach Anteil, im selben Farbschema */
   readonly heat = input<HeatScale | null>(null);
@@ -114,6 +122,10 @@ export class ResultTable {
   });
   protected readonly topical = computed(() => this.rows().some((r) => !!r.topics));
   protected readonly indented = computed(() => this.rows().some((r) => r.kind === 'group'));
+  protected csv(): void {
+    const title = this.name() || this.rowTitle() || 'Auswertung';
+    save(tableCsv(title, this.columns(), this.rows(), this.rowTitle()), fileName(title, 'csv'));
+  }
   protected topicTitle(topic: { count: number; share?: number | null; lift?: number }): string {
     const share = topic.share === null || topic.share === undefined ? '' : `, ${formatNumber(topic.share)} % der Zelle`;
     const lift = topic.lift ? `, ${formatNumber(topic.lift)}-mal so häufig wie im Bestand` : '';

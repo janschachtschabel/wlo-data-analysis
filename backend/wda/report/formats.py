@@ -23,6 +23,7 @@ STATUS_LABELS = {"ok": "vollständig", "partial": "teilweise (einzelne Abfragen 
 FORMATS = {
     "json": ("application/json", "json"), "csv": ("text/csv; charset=utf-8", "csv"),
     "md": ("text/markdown; charset=utf-8", "md"), "html": ("text/html; charset=utf-8", "html"),
+    "xlsx": ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"),
     "pdf": ("application/pdf", "pdf")}
 
 
@@ -407,6 +408,9 @@ def render(report: Report, fmt: str) -> bytes:
         return to_markdown(report)
     if fmt == "html":
         return to_html(report)
+    if fmt == "xlsx":
+        from .xlsx import to_xlsx
+        return to_xlsx(report, _meta(report), source_lines)
     if fmt == "pdf":
         return to_pdf(report)
     raise ValueError(fmt)

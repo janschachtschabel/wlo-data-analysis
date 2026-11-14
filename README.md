@@ -127,6 +127,16 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   verweist auf die exakten Wege: den Schlüssel als Zeilen verwenden (mit Gruppen für
   Lizenzkategorien) oder über `license` filtern (`OPEN`, `CC_BY_OPEN`, `CC_BY_RESTRICTED`,
   `COPYRIGHT_OTHERS`).
+- `topics` (Wissenslandkarte): statt einer Zahl trägt jede Zelle die Themen aus einem Feld,
+  etwa `{"property": "cclom:general_keyword", "top": 10}` zu Zeilen (Fach) und Spalten
+  (Bildungsstufe). Je Zelle läuft eine Zählung; höchstens 480 Zellen. `rank: "typical"`
+  (Vorgabe) stellt nach vorn, was in der Zelle deutlich häufiger ist als im Gesamtbestand,
+  `"frequent"` zählt schlicht. Freie Schlagwörter werden bereinigt: Schreibweisen
+  zusammengeführt, Füllwörter („einfach erklärt“), Namen von Zeile und Spalte, Jahreszahlen
+  und Schlagwortsätze, die ein Kanal an alle seine Materialien hängt, fallen weg
+  (`stopwords: false` schaltet das ab, `exclude` nennt weitere Wörter). Ein Hinweis in
+  `provenance.notes` sagt, dass bereinigt wurde. Mitgeliefert als Dashboard
+  „Wissenslandkarte“ (Reiter unter Qualität).
 - Jede Spalte nennt ihre echte Gesamtzahl (jedes Dokument einmal). Bei mehrwertigen
   Feldern ist das weniger als die Summe der Zeilen.
 - `provenance` nennt Abrufzeitpunkt, Zahl der Einzelabfragen, Instanz, die Abfrage selbst,
@@ -254,6 +264,12 @@ Rechner mit mindestens fünf Materialien einzeln.
   speichert; Vorschläge legt erst der Admin an. Zahlen in den Karten stammen aus der
   Zählung, nicht vom Modell.
 - Grenzen je Frage: 16 Runden, 32 Werkzeugaufrufe, 8 Minuten, 30 Nachrichten Verlauf.
+- **Vorlagen:** Im Chat lässt sich eine Datei anhängen (PDF, Word `.docx`, Text, Markdown,
+  CSV, JSON; bis 8 MB), etwa eine Statistik, die nachgebaut werden soll.
+  `POST /api/assistant/document` wandelt sie in Text um (höchstens 60 Seiten und
+  24.000 Zeichen) und speichert nichts; der Text geht einmal mit der nächsten Frage an
+  das Sprachmodell und gilt dort als Material, nicht als Anweisung. Gescannte PDFs ohne
+  Textebene werden abgewiesen.
 
 ## Verwaltung und Läufe
 
@@ -286,10 +302,14 @@ gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
 
 ## Berichte, Export und die OER-Statistik
 
-- `GET /api/runs/{id}/export?format=json|csv|md|html|pdf` liefert einen gespeicherten Lauf
+- `GET /api/runs/{id}/export?format=json|csv|md|html|pdf|xlsx` liefert einen gespeicherten Lauf
   als Datei. HTML und PDF sind in sich vollständig (Grafiken als SVG, nichts wird
   nachgeladen); CSV ist UTF-8 mit BOM und `;` als Trenner. Jede Tabelle nennt Quelle,
   Abrufzeitpunkt und die Hinweise zur Zählung; fehlende Werte stehen als „–", nie als 0.
+  Excel (`xlsx`) trägt ein Blatt „Übersicht“ und ein Blatt je Tabelle, Zahlen als Zahlen.
+- In der Oberfläche steht unter jeder Tabelle „CSV herunterladen“ und unter jeder Grafik
+  „PNG herunterladen“, auch im Explorer, in Vorschauen und im Chat. Beides entsteht im
+  Browser aus dem, was gerade zu sehen ist.
 - Templates kennen neben Text, Tabelle und Grafik den Abschnitt `matrix`: Zeilen in Gruppen
   mit Zwischensummen, Spaltenblöcke je Quelle. Eine Quelle ist eine Abfrage an die Instanz
   (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen) oder ein Handeintrag (`manual`).

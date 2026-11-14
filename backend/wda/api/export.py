@@ -57,7 +57,7 @@ def file_name(title: str, started_at: str, extension: str) -> str:
 @router.get("/runs/{run_id}/export")
 async def export_run(
     run_id: str, request: Request,
-    format: Literal["json", "csv", "md", "html", "pdf"] = "html",
+    format: Literal["json", "csv", "md", "html", "xlsx", "pdf"] = "html",
     download: bool = True,
     compare: Compare = None,
 ) -> Response:

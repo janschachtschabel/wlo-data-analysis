@@ -59,6 +59,8 @@ pydantic-settings==2.16.3
     # via wda (pyproject.toml)
 pydyf==0.13.0
     # via weasyprint
+pypdf==7.1.0
+    # via wda (pyproject.toml)
 pyphen==0.18.1
     # via weasyprint
 python-dotenv==1.2.4

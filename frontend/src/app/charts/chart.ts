@@ -6,6 +6,7 @@ import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } f
 import { ECharts, init, use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { ViewType } from '../core/types';
+import { fileName, save } from '../shared/download';
 import { ChartInput, ChartPlan, Palette, chartPlan, fillChartData } from './options';
 
 use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer]);
@@ -26,6 +27,9 @@ function readPalette(element: HTMLElement): Palette {
   template: `
     <div #plot class="plot" role="img" [attr.aria-label]="label()" [style.height.px]="plan().height"
          [hidden]="!plan().option"></div>
+    @if (plan().option) {
+      <p class="get"><button type="button" class="link" (click)="png()" title="Diese Grafik als Bild speichern">PNG herunterladen</button></p>
+    }
     @for (note of plan().notes; track note) { <p class="muted small">{{ note }}</p> }
     @if (!plan().option) { <p class="muted">Für diese Darstellung gibt es nichts zu zeichnen.</p> }`,
   styles: `
@@ -42,6 +46,8 @@ function readPalette(element: HTMLElement): Palette {
     }
     .plot { width: 100%; }
     .small { font-size: 12px; margin: 4px 0 0; }
+    .get { margin: 2px 0 0; font-size: 12px; text-align: right; }
+    @media print { .get { display: none; } }
   `,
 })
 export class Chart implements OnDestroy {
@@ -83,6 +89,14 @@ export class Chart implements OnDestroy {
       this.chart.resize({ height: plan.height });
       this.chart.setOption({ animationDuration: 200, textStyle: { fontFamily }, ...plan.option }, true);
     });
+  }
+
+  /** Die Grafik als Bild in doppelter Auflösung, auf der Fläche der Karte. */
+  protected png(): void {
+    if (!this.chart) return;
+    const background = getComputedStyle(this.plot().nativeElement).getPropertyValue('--surface').trim() || '#ffffff';
+    const url = this.chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: background });
+    save(url, fileName(this.label().replace(/^Grafik:\s*/, '') || 'grafik', 'png'));
   }
 
   ngOnDestroy(): void {

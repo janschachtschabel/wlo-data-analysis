@@ -90,7 +90,7 @@ def test_check_lists_every_problem_with_its_place(api):
 
 def test_settings_name_the_export_formats(api):
     export = api.get("/api/settings").json()["export"]
-    assert export["formats"] == ["json", "csv", "md", "html", "pdf"]
+    assert export["formats"] == ["json", "csv", "md", "html", "xlsx", "pdf"]
     assert export["pdf_available"] is pdf_available()
 
 

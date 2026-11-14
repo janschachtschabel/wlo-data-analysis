@@ -4,8 +4,14 @@ import { Instances } from '../core/instances';
 import { AppSettings, Definition, Proposal } from '../core/types';
 
 export interface Shown extends Proposal { saved?: Definition; saving?: boolean; error?: string; widths?: Record<string, number> | null }
+/** Eine Vorlage: der Text einer Datei, nur im Browser gehalten, bis die Frage gestellt ist */
+export interface Template { name: string; text: string; chars: number; truncated: boolean; pages?: number | null }
+export const MAX_FILE = 8 * 1024 * 1024;
+
 export interface Turn {
   role: 'user' | 'assistant'; text: string; html?: string;
+  /** Name der Vorlage, die an dieser Frage hing */
+  template?: string;
   steps: string[]; proposals: Shown[]; error?: string; pending?: boolean;
 }
 export interface About { run_id?: string; definition_id?: string; label: string }
@@ -34,14 +40,35 @@ export class Chat {
   readonly open = signal(false);
   /** eine geöffnete Bearbeitung, in die sich Vorschläge übernehmen lassen */
   readonly target = signal<Target | null>(null);
+  /** die Vorlage für die nächste Frage */
+  readonly template = signal<Template | null>(null);
+  readonly reading = signal(false);
+  readonly templateError = signal('');
   private controller: AbortController | null = null;
+
+  /** Wandelt eine Datei auf dem Server in Text. Gespeichert wird dort nichts. */
+  async attach(file: File): Promise<void> {
+    this.templateError.set('');
+    if (file.size > MAX_FILE) { this.templateError.set('Die Datei ist größer als 8 MB.'); return; }
+    this.reading.set(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let binary = '';
+      for (let n = 0; n < bytes.length; n += 0x8000) binary += String.fromCharCode(...bytes.subarray(n, n + 0x8000));
+      this.template.set(await this.api.post<Template>('/assistant/document', { name: file.name.slice(0, 200) || 'Datei', data: btoa(binary) }));
+    } catch (error) {
+      this.templateError.set(error instanceof ApiError ? error.message : 'Die Datei lässt sich nicht lesen.');
+    } finally {
+      this.reading.set(false);
+    }
+  }
 
   /** ob ein Sprachmodell eingerichtet ist */
   check(): void {
     this.api.get<AppSettings>('/settings').then((all) => this.ready.set(all.llm.ready), () => this.ready.set(null));
   }
 
-  restart(): void { this.stop(); this.turns.set([]); }
+  restart(): void { this.stop(); this.turns.set([]); this.template.set(null); this.templateError.set(''); }
   stop(): void { this.controller?.abort(); }
 
   private update(change: (turn: Turn) => Turn): void {
@@ -56,7 +83,9 @@ export class Chat {
       role: t.role, content: t.text.slice(0, MAX_TEXT),
       ...(t.role === 'assistant' && t.proposals.length ? { memo: memo(t.proposals) } : {}),
     }));
-    this.turns.update((all) => [...all, { role: 'user', text: question, steps: [], proposals: [] },
+    const template = this.template();
+    this.template.set(null);
+    this.turns.update((all) => [...all, { role: 'user', text: question, steps: [], proposals: [], ...(template ? { template: template.name } : {}) },
       { role: 'assistant', text: '', steps: [], proposals: [], pending: true }]);
     this.busy.set(true);
     const controller = (this.controller = new AbortController());
@@ -65,6 +94,7 @@ export class Chat {
     try {
       await this.api.stream('/assistant/chat', {
         instance, messages: [...history, { role: 'user', content: question }],
+        ...(template ? { document: { name: template.name, text: template.text } } : {}),
         ...(about?.run_id ? { run_id: about.run_id } : {}), ...(about?.definition_id ? { definition_id: about.definition_id } : {}),
       }, (event) => {
         if (event?.type === 'step') this.update((t) => ({ ...t, steps: [...t.steps, String(event.text ?? '')] }));
