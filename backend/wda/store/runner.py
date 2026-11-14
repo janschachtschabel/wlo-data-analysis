@@ -87,6 +87,15 @@ def _narrow(query: QuerySpec, scope: list[FilterIn]) -> tuple[QuerySpec, list[Fi
                 raise QueryError(_DROPPED.format(prop))
             query = query.model_copy(update={"vocab_check": query.vocab_check.model_copy(
                 update={"fields": fields})})
+        if query.topics is not None:
+            # Themen je Zelle: Das Themenfeld selbst kann kein Kontext sein; auf dem Feld
+            # der Zeilen wird der Kontext zur Auswahl der Zeilen.
+            if query.topics.property == prop:
+                raise QueryError(_DROPPED.format(prop))
+            if values and rows is not None and rows.property == prop:
+                query = query.model_copy(update={"rows": Rows(
+                    property=prop, include=values, sort=rows.sort)})
+                continue
         if rows is not None and rows.property == prop and (rows.groups or rows.rollup):
             raise QueryError(_DROPPED.format(prop))
         if values and rows is not None and rows.property == prop and query.profile is not None:

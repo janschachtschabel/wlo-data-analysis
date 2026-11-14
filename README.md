@@ -132,7 +132,7 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   (Bildungsstufe). Je Zelle läuft eine Zählung; höchstens 480 Zellen. `rank: "typical"`
   (Vorgabe) stellt nach vorn, was in der Zelle deutlich häufiger ist als im Gesamtbestand,
   `"frequent"` zählt schlicht. Freie Schlagwörter werden bereinigt: Schreibweisen
-  zusammengeführt, Füllwörter („einfach erklärt“), Namen von Zeile und Spalte, Jahreszahlen
+  zusammengeführt, Füllwörter („einfach erklärt“), Namen von Zeile und Spalte, Bruchstücke
   und Schlagwortsätze, die ein Kanal an alle seine Materialien hängt, fallen weg
   (`stopwords: false` schaltet das ab, `exclude` nennt weitere Wörter). Ein Hinweis in
   `provenance.notes` sagt, dass bereinigt wurde. Mitgeliefert als Dashboard
@@ -270,7 +270,8 @@ Rechner mit mindestens fünf Materialien einzeln.
   das Sprachmodell den Aufbau sieht: Überschriften, Listen und Tabellen (bei Word aus den
   Formatvorlagen, bei PDF geschätzt aus Schriftgröße und Tabellenlinien, bei Excel eine
   Tabelle je Blatt, bei PowerPoint ein Abschnitt je Folie). Höchstens 60 Seiten und
-  32.000 Zeichen; gespeichert wird nichts. Der Text geht einmal mit der nächsten Frage an
+  32.000 Zeichen; gespeichert und protokolliert wird nichts. PDF und Office-Dateien
+  werden in einem eigenen Prozess gelesen (20 Sekunden, höchstens zwei zugleich). Der Text geht einmal mit der nächsten Frage an
   das Sprachmodell und gilt dort als Material, nicht als Anweisung. Gescannte PDFs ohne
   Textebene werden abgewiesen.
 

@@ -83,8 +83,8 @@ export class Chat {
       role: t.role, content: t.text.slice(0, MAX_TEXT),
       ...(t.role === 'assistant' && t.proposals.length ? { memo: memo(t.proposals) } : {}),
     }));
+    // die Vorlage bleibt angehängt, bis die Anfrage wirklich angekommen ist
     const template = this.template();
-    this.template.set(null);
     this.turns.update((all) => [...all, { role: 'user', text: question, steps: [], proposals: [], ...(template ? { template: template.name } : {}) },
       { role: 'assistant', text: '', steps: [], proposals: [], pending: true }]);
     this.busy.set(true);
@@ -97,6 +97,7 @@ export class Chat {
         ...(template ? { document: { name: template.name, text: template.text } } : {}),
         ...(about?.run_id ? { run_id: about.run_id } : {}), ...(about?.definition_id ? { definition_id: about.definition_id } : {}),
       }, (event) => {
+        if (template && this.template() === template) this.template.set(null);
         if (event?.type === 'step') this.update((t) => ({ ...t, steps: [...t.steps, String(event.text ?? '')] }));
         else if (event?.type === 'proposal') this.update((t) => ({ ...t, proposals: [...t.proposals, { ...(event as Shown), widths: tileWidths(event as Shown) }] }));
         else if (event?.type === 'final') { done = true; this.update((t) => ({ ...t, text: String(event.text ?? ''), html: event.html, pending: false })); }

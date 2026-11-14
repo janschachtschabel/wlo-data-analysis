@@ -11,7 +11,8 @@ from xml.sax.saxutils import escape
 
 from .model import Failure, Report, Table, Text
 
-_BAD = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+# in XML verboten: Steuerzeichen, einzelne Surrogate, U+FFFE und U+FFFF
+_BAD = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
 _SHEET = re.compile(r"[\[\]:*?/\\]")
 MAX_ROWS = 1_000_000
 
@@ -55,12 +56,17 @@ def _table_lines(table: Table, with_previous: bool) -> list[tuple[list[Any], int
     lines: list[tuple[list[Any], int]] = [([table.title], 1), ([], 0)]
     with_percent = any(r.percent for r in table.rows)
     header: list[Any] = [""]
-    for column in table.columns:
-        header.append(column.label)
+    # Spaltenblöcke (etwa je Quelle) stehen vor dem Namen, sonst gäbe es gleichnamige Spalten
+    blocks = [label for label, span in table.header_groups or [] for _ in range(span)]
+    for pos, column in enumerate(table.columns):
+        label = column.label
+        if pos < len(blocks) and blocks[pos]:
+            label = f"{blocks[pos]} · {label}"
+        header.append(label)
         if with_percent:
-            header.append(column.label + " (%)")
+            header.append(label + " (%)")
         if with_previous:
-            header.append(column.label + " (vorher)")
+            header.append(label + " (vorher)")
     lines.append((header, 1))
     for row in table.rows:
         line: list[Any] = [("  " * row.level) + row.label]
@@ -89,14 +95,14 @@ def _table_lines(table: Table, with_previous: bool) -> list[tuple[list[Any], int
 
 def to_xlsx(report: Report, meta: str, source_lines: Any) -> bytes:
     sheets: list[tuple[str, str]] = []
-    used: set[str] = set()
+    used: set[str] = {"übersicht", "history"}  # das erste Blatt; „History“ sperrt Excel
 
     def name(title: str) -> str:
-        base = _SHEET.sub(" ", _BAD.sub("", title)).strip().strip("'")[:28] or "Tabelle"
+        base = _SHEET.sub(" ", _BAD.sub("", title)).strip(" '")[:28].strip(" '") or "Tabelle"
         candidate, n = base, 1
         while candidate.casefold() in used:
             n += 1
-            candidate = f"{base[:25]} {n}"
+            candidate = base[:25].strip(" '") + f" {n}"
         used.add(candidate.casefold())
         return candidate
 
@@ -115,7 +121,7 @@ def to_xlsx(report: Report, meta: str, source_lines: Any) -> bytes:
         overview.append(([sheet, item.title], 0))
         sheets.append((sheet, _sheet(lines)))
     overview += [(["Hinweis: " + str(note.get("text", ""))], 0) for note in report.notes]
-    sheets.insert(0, (name("Übersicht"), _sheet(overview)))
+    sheets.insert(0, ("Übersicht", _sheet(overview)))
 
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as book:

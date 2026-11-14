@@ -4,7 +4,9 @@ import { ResultRow } from '../core/types';
 export function fileName(title: string, extension: string): string {
   const plain = title.normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/ß/g, 'ss');
   const slug = plain.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'auswertung';
-  return `${slug}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+  const now = new Date();  // der Tag am Ort des Nutzers, nicht der in UTC
+  const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return `${slug}-${day}.${extension}`;
 }
 
 /** Text, den eine Tabellenkalkulation als Formel lesen würde, wird entschärft. */
@@ -23,17 +25,23 @@ function field(value: string | number | null | undefined): string {
  * Eine Ergebnistabelle als CSV, wie der Export des Servers: Semikolon, Dezimalkomma, mit
  * BOM, damit Excel Umlaute liest. Themen je Zelle folgen als lange Liste.
  */
-export function tableCsv(title: string, columns: { label: string }[], rows: ResultRow[], rowTitle = ''): string {
+export function tableCsv(title: string, columns: { label: string }[], rows: ResultRow[], rowTitle = '',
+  groups: [string, number][] | null = null): string {
+  // Spaltenblöcke stehen vor dem Namen, sonst gäbe es gleichnamige Spalten
+  const blocks = (groups ?? []).flatMap(([label, span]) => Array<string>(span).fill(label));
+  const names = columns.map((c, n) => (blocks[n] ? `${blocks[n]} · ${c.label}` : c.label));
+  const withBefore = rows.some((r) => r.previous?.some((p) => p !== null && p !== undefined));
+  const parts = <T>(n: number, value: T, percent: T, before: T): T[] => [value, ...(withPercent ? [percent] : []), ...(withBefore ? [before] : [])];
   const withPercent = rows.some((r) => r.percent?.some((p) => p !== null && p !== undefined));
   const lines: (string | number | null | undefined)[][] = [];
   if (title) lines.push([title], []);
-  lines.push([rowTitle, ...columns.flatMap((c) => (withPercent ? [c.label, c.label + ' (%)'] : [c.label]))]);
+  lines.push([rowTitle, ...names.flatMap((name, n) => parts(n, name, name + ' (%)', name + ' (vorher)'))]);
   for (const row of rows) {
     lines.push(['  '.repeat(row.level ?? 0) + row.label,
-      ...columns.flatMap((_, n) => (withPercent ? [row.values[n], row.percent?.[n]] : [row.values[n]]))]);
+      ...columns.flatMap((_, n) => parts<string | number | null | undefined>(n, row.values[n], row.percent?.[n], row.previous?.[n]))]);
   }
   const topics = rows.flatMap((row) => (row.topics ?? []).flatMap((cell, n) =>
-    cell.map((t) => [row.label, columns[n]?.label ?? '', t.label, t.count, t.share])));
+    cell.map((t) => [row.label, names[n] ?? '', t.label, t.count, t.share])));
   if (topics.length) lines.push([], ['Themen je Zelle'], ['Zeile', 'Spalte', 'Thema', 'Materialien', 'Anteil der Zelle (%)'], ...topics);
   return '﻿' + lines.map((line) => line.map(field).join(';')).join('\r\n') + '\r\n';
 }

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import HTTPException, Request, status
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -14,6 +16,12 @@ def is_admin(request: Request) -> bool:
 
 
 MAX_BODY_BYTES = 6 * 1024 * 1024  # der Import erlaubt 5 MB, sonst braucht nichts so viel
+# Eine Vorlage für den Assistenten: 8 MB Datei, als Base64 ein Drittel mehr
+BODY_LIMITS = {"/api/assistant/document": 12 * 1024 * 1024}
+
+
+class _TooLarge(Exception):
+    pass
 
 
 class AdminGate:
@@ -35,10 +43,11 @@ class AdminGate:
             return
         path = scope["path"]
         length = dict(scope["headers"]).get(b"content-length", b"")
-        if length.isdigit() and int(length) > MAX_BODY_BYTES:
-            response = JSONResponse(
-                {"detail": "Die Anfrage ist zu groß.", "kind": "too_large"}, status_code=413)
-            await response(scope, receive, send)
+        limit = BODY_LIMITS.get(path, MAX_BODY_BYTES)
+        too_large = JSONResponse(
+            {"detail": "Die Anfrage ist zu groß.", "kind": "too_large"}, status_code=413)
+        if length.isdigit() and int(length) > limit:
+            await too_large(scope, receive, send)
             return
         if (path == "/api" or path.startswith("/api/")) and path not in self.public_paths:
             request = Request(scope)
@@ -55,7 +64,33 @@ class AdminGate:
                     {"detail": "Nicht erlaubt", "kind": "method_not_allowed"}, status_code=405)
                 await response(scope, receive, send)
                 return
-        await self.app(scope, receive, send)
+        # ohne Content-Length (in Stücken gesendet) zählt die Grenze beim Lesen
+        seen = 0
+        over = started = False
+
+        async def counted() -> Any:
+            nonlocal seen, over
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > limit:
+                    over = True
+                    raise _TooLarge
+            return message
+
+        async def tracked(message: Any) -> None:
+            nonlocal started
+            if over and not started:
+                return  # die Antwort der Route auf den Abbruch zählt nicht
+            started = started or message["type"] == "http.response.start"
+            await send(message)
+
+        try:
+            await self.app(scope, counted, tracked)
+        except _TooLarge:
+            pass
+        if over and not started:
+            await too_large(scope, receive, send)
 
 
 def require_admin(request: Request) -> None:

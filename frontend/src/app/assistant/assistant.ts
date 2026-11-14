@@ -54,7 +54,7 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
       @for (turn of turns(); track $index; let ti = $index) {
         @if (turn.role === 'user') {
           <div class="bubble mine"><span class="sr-only">Du: </span>{{ turn.text }}
-            @if (turn.template) { <span class="with">mit Vorlage „{{ turn.template }}“</span> }</div>
+            @if (turn.template) { <span class="with">mit Vorlage „{{ turn.template }}“ (nur für diese Frage)</span> }</div>
         } @else {
           <div class="answer" aria-live="polite" [attr.aria-busy]="turn.pending ? 'true' : null">
             @if (turn.steps.length) {
@@ -108,15 +108,15 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
       }
     </div>
     @if (chat.template(); as doc) {
-      <p class="attached" role="status">Vorlage: <strong>{{ doc.name }}</strong>
+      <p class="attached"><span role="status">Vorlage: <strong>{{ doc.name }}</strong></span>
         <span class="muted">({{ number(doc.chars) }} Zeichen{{ doc.pages ? ', ' + doc.pages + (doc.pages === 1 ? ' Seite' : ' Seiten') : '' }}{{ doc.truncated ? ', gekürzt auf den Anfang' : '' }})</span>
-        <button type="button" class="link" (click)="chat.template.set(null)">entfernen</button>
+        <button type="button" class="link" (click)="chat.template.set(null)" [attr.aria-label]="'Vorlage ' + doc.name + ' entfernen'">entfernen</button>
         <span class="muted">Geht mit der nächsten Frage an das Sprachmodell und wird nicht gespeichert.</span></p>
     }
     @if (chat.templateError()) { <p class="error" role="alert">{{ chat.templateError() }}</p> }
     <form class="ask card" (ngSubmit)="ask(draft)">
       <input #file type="file" class="sr-only" tabindex="-1" aria-hidden="true" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json" (change)="pick(file)">
-      <button type="button" (click)="file.click()" [disabled]="chat.reading() || ready() === false"
+      <button type="button" (click)="file.click()" [disabled]="chat.reading() || ready() === false" aria-label="Vorlage anhängen: PDF, Word, Excel, PowerPoint oder Textdatei"
               title="PDF, Word, Excel, PowerPoint oder Textdatei als Vorlage anhängen, etwa eine Statistik, die nachgebaut werden soll. Die Datei wird nur in Markdown umgewandelt (Überschriften, Listen, Tabellen) und nicht gespeichert.">{{ chat.reading() ? 'Liest …' : 'Vorlage' }}</button>
       <label class="sr-only" for="question">Frage an den Assistenten</label>
       <textarea id="question" name="question" rows="2" [(ngModel)]="draft" [maxlength]="maxText" placeholder="Frage stellen …"

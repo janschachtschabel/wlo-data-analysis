@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -136,6 +137,7 @@ ccm:oeh_publisher_combined. Materialart: ccm:oeh_lrt_aggregated.
 _PROPERTY = re.compile(r"[\w:.\-]{1,120}")
 MAX_ANSWER_CHARS = 20000
 MAX_SECONDS = 480  # Zeitbudget einer Frage; danach wird mit dem Vorhandenen geantwortet
+MIN_STEP_SECONDS = 20     # so viel bekommt auch der letzte Schritt noch
 
 
 def _one_line(text: str) -> str:
@@ -234,7 +236,13 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
                     yield {"type": "step", "tool": name[:40],
                            "text": toolbox.describe(name, args if isinstance(args, dict)
                                                     else {})}
-                    result = await toolbox.call(name, args)
+                    # die Zeit der Frage gilt auch mitten in einem Schritt
+                    left = max(MIN_STEP_SECONDS, MAX_SECONDS - (time.monotonic() - started))
+                    try:
+                        result = await asyncio.wait_for(toolbox.call(name, args), left)
+                    except TimeoutError:
+                        result = ('{"fehler":"Der Schritt hat zu lange gedauert und wurde '
+                                  'abgebrochen. Antworte mit dem, was du hast."}')
                 messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
                 while proposals:
                     shown += 1

@@ -46,4 +46,33 @@
 
 ## Stand nach Review
 
-(folgt)
+Review durch einen frischen Reviewer (Stand e632026, Dokumente an 800cb40). Nichts Kritisches: kein Weg, auf dem Rohdaten nach außen gehen, die Vorlage gespeichert wird oder der Assistent selbst speichert. Zehn wichtige und neun kleine Befunde.
+
+**Behoben**
+
+- W1 Dateien über etwa 4,5 MB scheiterten an der allgemeinen Grenze für Anfragen: eigene Grenze für `/api/assistant/document` (12 MB für 8 MB Datei als Base64).
+- W2 Kaputte Dateien gaben 500: Jeder Fehler eines fremden Lesers wird zur schlichten Meldung (422), ohne Protokoll.
+- W3 pdfminer schrieb Bruchstücke des Inhalts ins Log: Die Logger von `pdfminer` und `pdfplumber` sind stumm; Test mit `caplog`.
+- W4 Winzige Dateien konnten den Server minutenlang binden: PDF und Office-Dateien laufen in einem eigenen Prozess mit 20 Sekunden und 1,5 GB (Speichergrenze nur unter Linux), höchstens zwei zugleich (sonst 429). Entpackt höchstens 12 MB, Tabellenzeilen nur direkt und höchstens 200, Tabellensuche im PDF nur bis 4000 Linien je Seite.
+- W5 Blockregel: gesucht wird jetzt in allen Werten der Zelle (auch Füllwörtern), ein Block braucht fünf Werte, die je mindestens ein Zehntel der Zelle tragen. Vier gleich große echte Themen bleiben.
+- W6 Namensregel: nur noch der Name, seine Wörter und Kurzformen des ganzen Namens („Mathe“); „Physikdidaktik“, „Deutschland“, „Mathematikgeschichte“ bleiben. Jahreszahlen bleiben. Ein oder zwei Zeichen fallen nur weg, wenn es kein Kürzel ist (KI, EU, 3D bleiben), und nur mit `stopwords`. Aus der Füllwortliste sind fachliche Wörter heraus (Stadt, Mensch, Wort, rechnen, Ausbildung, MINT). Der Hinweis nennt alle Regeln. Die Namen von Zeile und Spalte fallen immer weg, auch mit `stopwords: false`: Der Name der Zelle ist kein Thema.
+- W7 Kontext auf dem Feld der Zeilen wählt jetzt die Zeile; auf dem Themenfeld entfällt die Kachel mit einem Satz (`not_applicable`) statt als Fehler.
+- W8 Excel: U+FFFE, U+FFFF und einzelne Surrogate werden entfernt.
+- W9 Spaltenblöcke stehen in Excel und im CSV des Browsers vor dem Spaltennamen („WLO · Anzahl“); das CSV trägt auch die Vergleichswerte.
+- W10 Die Zeit der Frage gilt auch mitten in einem Schritt (`wait_for`, mindestens 20 Sekunden je Schritt).
+- G1 XML wird über expat mit Abbruch bei DOCTYPE und Entity gelesen, gleich in welcher Kodierung.
+- G2 Anfragen ohne `Content-Length` werden beim Lesen gezählt (413).
+- G3 Ein Thema braucht zwei Materialien in seiner häufigsten Schreibweise; der Anteil ist auf 100 % begrenzt.
+- G4 Die Vorlage bleibt angehängt, bis die Anfrage angekommen ist; an der Frage steht „nur für diese Frage“.
+- G5 Blattnamen: „History“ und „Übersicht“ sind vergeben, kein Rand aus Leerzeichen oder Apostroph.
+- G6 Meldung je Dateiart (der Satz zum gescannten PDF nur beim PDF).
+- G7 Der Dateiname der Vorlage wird auf Buchstaben, Ziffern und wenige Zeichen gekürzt.
+- G8 Fällt eine Zelle der Karte aus, bleibt die Karte; ein Hinweis nennt es. Nur wenn alle ausfallen, scheitert der Lauf.
+- G9 Beschriftungen für Vorleseprogramme, „keine Themen“, Datum im Dateinamen nach Ortszeit.
+
+**Bewusst offen**
+
+- Excel-Datumswerte kommen als Seriennummer, Text aus Word-Textfeldern ohne Trennung (G6).
+- Die Endmarke der Vorlage ist fest; Doppelgänger in Unicode werden nicht ersetzt. Das Modell kann auch bei gelungener Täuschung nur zählen und vorschlagen (G7).
+- Kein eigenes Budget für Abfragen am Repositorium je Frage; begrenzt sind Zeit, Runden und Schritte (W10).
+- Die Vorlage reist in jeder Runde der einen Frage mit (bis 32.000 Zeichen).

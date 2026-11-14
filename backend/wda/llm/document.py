@@ -7,16 +7,22 @@ nächsten Frage an das Modell und wird danach verworfen."""
 from __future__ import annotations
 
 import io
+import logging
+import multiprocessing
 import re
 import zipfile
 from collections import Counter
 from typing import Any
-from xml.etree import ElementTree  # noqa: S405 - defusedxml fehlt; Entities sind unten gesperrt
+from xml.etree import ElementTree  # noqa: S405 - gelesen wird nur über _parse
+from xml.parsers import expat  # noqa: S406 - DOCTYPE und Entities brechen in _parse ab
 
 MAX_BYTES = 8 * 1024 * 1024
 MAX_TEXT = 32_000          # Zeichen, die an das Modell gehen
 MAX_PAGES = 60
-MAX_UNPACKED = 30 * 1024 * 1024
+MAX_UNPACKED = 12 * 1024 * 1024
+MAX_SECONDS = 20           # so lange darf eine Umwandlung dauern
+MAX_MEMORY = 1536 * 1024 * 1024
+MAX_MARKS = 4000           # Linien und Flächen je PDF-Seite, bis zu denen Tabellen gesucht werden
 MAX_ROWS = 200             # Zeilen je Tabelle
 MAX_COLUMNS = 30
 MAX_SHEETS = 12
@@ -78,10 +84,33 @@ class _Book:
         self.spent += info.file_size
         if self.spent > MAX_UNPACKED:
             raise DocumentError("Das Dokument ist zu groß.")
-        raw = self.book.read(info)
-        if b"<!DOCTYPE" in raw[:4096] or b"<!ENTITY" in raw:
-            raise DocumentError(_UNREADABLE)
-        return ElementTree.fromstring(raw)  # noqa: S314 - DOCTYPE und ENTITY oben abgewiesen
+        return _parse(self.book.read(info))
+
+
+def _refuse(*_: Any) -> None:
+    raise DocumentError(_UNREADABLE)
+
+
+def _parse(raw: bytes) -> ElementTree.Element:
+    """XML ohne DOCTYPE und ohne Entities, gleich in welcher Kodierung sie stehen."""
+    builder = ElementTree.TreeBuilder()
+    parser = expat.ParserCreate(namespace_separator="}")
+    parser.buffer_text = True
+
+    def name(raw: str) -> str:
+        return "{" + raw if "}" in raw else raw
+
+    parser.StartDoctypeDeclHandler = _refuse
+    parser.EntityDeclHandler = _refuse
+    parser.StartElementHandler = lambda tag, attrs: builder.start(
+        name(tag), {name(key): value for key, value in attrs.items()})
+    parser.EndElementHandler = lambda tag: builder.end(name(tag))
+    parser.CharacterDataHandler = builder.data
+    try:
+        parser.Parse(raw, True)
+        return builder.close()
+    except (expat.ExpatError, AssertionError):
+        raise DocumentError(_UNREADABLE) from None
 
 
 def _on(node: ElementTree.Element | None) -> bool:
@@ -162,7 +191,7 @@ def _docx(book: _Book) -> str:
             rows = [["<br>".join(filter(None, (_runs(p, False).strip()
                                                for p in cell.iter(_W + "p"))))
                      for cell in row.findall(_W + "tc")]
-                    for row in block.iter(_W + "tr")]
+                    for row in block.findall(_W + "tr")[:MAX_ROWS]]
             table = _table(rows)
             if table:
                 out += ["", table, ""]
@@ -235,9 +264,9 @@ def _xlsx(book: _Book) -> tuple[str, bool]:
     strings: list[str] = []
     shared = book.xml("xl/sharedStrings.xml")
     for item in shared.iter(_S + "si") if shared is not None else ():
-        strings.append("".join(
-            node.text or "" for node in item.iter(_S + "t")
-            if not any(node in list(p.iter()) for p in item.findall(_S + "rPh"))))
+        phonetic = {id(node) for part in item.findall(_S + "rPh") for node in part.iter()}
+        strings.append("".join(node.text or "" for node in item.iter(_S + "t")
+                               if id(node) not in phonetic))
     out, cut = [], False
     sheets = list(workbook.iter(_S + "sheet"))
     cut = len(sheets) > MAX_SHEETS
@@ -324,8 +353,7 @@ def _office(data: bytes) -> tuple[str, str, int | None, bool]:
                 return "pptx", text, pages, cut
     except DocumentError:
         raise
-    except (zipfile.BadZipFile, ElementTree.ParseError, OSError, RuntimeError, ValueError,
-            NotImplementedError, RecursionError, KeyError):
+    except (zipfile.BadZipFile, ElementTree.ParseError):
         raise DocumentError(_UNREADABLE) from None
     raise DocumentError("Gelesen werden Word (docx), Excel (xlsx) und PowerPoint (pptx), "
                         "keine anderen gepackten Dateien.")
@@ -344,6 +372,10 @@ def _pdf(data: bytes) -> tuple[str, int, bool]:
     except ImportError:
         raise DocumentError("PDF-Dateien kann dieser Server nicht lesen "
                             "(pdfplumber fehlt).") from None
+    for noisy in ("pdfminer", "pdfplumber"):
+        # pdfminer schreibt Bruchstücke des Inhalts in seine Warnungen; nichts davon ins Log
+        logging.getLogger(noisy).setLevel(logging.CRITICAL)
+        logging.getLogger(noisy).propagate = False
     try:
         with pdfplumber.open(io.BytesIO(data)) as pdf:
             pages = len(pdf.pages)
@@ -353,7 +385,8 @@ def _pdf(data: bytes) -> tuple[str, int, bool]:
             for index, page in enumerate(pdf.pages[:MAX_PAGES]):
                 read += 1
                 boxes = []
-                for table in page.find_tables()[:20]:
+                marks = len(page.lines) + len(page.rects)
+                for table in page.find_tables()[:20] if marks <= MAX_MARKS else ():
                     rows = table.extract()
                     if len(rows) < 2 or max((len(r) for r in rows), default=0) < 2:
                         continue
@@ -390,8 +423,7 @@ def _pdf(data: bytes) -> tuple[str, int, bool]:
         raise
     except PDFPasswordIncorrect:
         raise DocumentError("Das PDF ist verschlüsselt.") from None
-    except (PdfminerException, PDFSyntaxError, ValueError, KeyError, TypeError, IndexError,
-            RecursionError, OSError, AttributeError, AssertionError, ZeroDivisionError):
+    except (PdfminerException, PDFSyntaxError):
         raise DocumentError("Das PDF lässt sich nicht lesen.") from None
 
     weight: Counter[float] = Counter()
@@ -458,11 +490,19 @@ def extract(name: str, data: bytes) -> dict[str, Any]:
     pages: int | None = None
     cut = False
     ending = name.rsplit(".", 1)[-1].casefold() if "." in name else ""
-    if data[:5] == b"%PDF-":
-        kind = "pdf"
-        text, pages, cut = _pdf(data)
-    elif data[:4] == b"PK\x03\x04":
-        kind, text, pages, cut = _office(data)
+    if data[:5] == b"%PDF-" or data[:4] == b"PK\x03\x04":
+        kind = "pdf" if data[:1] == b"%" else "office"
+        try:
+            if kind == "pdf":
+                text, pages, cut = _pdf(data)
+            else:
+                kind, text, pages, cut = _office(data)
+        except DocumentError:
+            raise
+        except Exception:  # noqa: BLE001 - fremde Leser haben einen offenen Fehlerraum
+            # bewusst ohne Protokoll: Die Meldung könnte Inhalt der Datei tragen
+            raise DocumentError("Das PDF lässt sich nicht lesen." if kind == "pdf"
+                                else _UNREADABLE) from None
     elif ending in TEXT_TYPES:
         kind = ending
         text = data.decode("utf-8-sig", errors="replace")
@@ -476,10 +516,52 @@ def extract(name: str, data: bytes) -> dict[str, Any]:
                             "und Textdateien (txt, md, csv, json).")
     text = _tidy(text)
     if not text.strip():
-        raise DocumentError("In der Datei steht kein lesbarer Text (bei einem gescannten PDF "
-                            "sind es nur Bilder).")
+        raise DocumentError(
+            "In dem PDF steht kein lesbarer Text; bei einem gescannten PDF sind es nur Bilder."
+            if kind == "pdf" else "In der Datei steht kein lesbarer Text.")
     total = len(text)
     if total > MAX_TEXT:
         text, cut = text[:MAX_TEXT].rstrip(), True
     return {"name": name, "kind": kind, "chars": total, "pages": pages, "truncated": cut,
             "format": "markdown", "text": text}
+
+
+def _child(pipe: Any, name: str, data: bytes) -> None:
+    try:
+        try:
+            import resource
+            resource.setrlimit(resource.RLIMIT_AS, (MAX_MEMORY, MAX_MEMORY))
+        except (ImportError, ValueError, OSError):
+            pass  # Windows kennt die Grenze nicht; dort schützt nur die Zeit
+        pipe.send((True, extract(name, data)))
+    except DocumentError as exc:
+        pipe.send((False, str(exc)))
+    except BaseException:  # noqa: BLE001 - auch Speichermangel wird zur schlichten Meldung
+        pipe.send((False, _UNREADABLE))
+
+
+def convert(name: str, data: bytes, seconds: float = MAX_SECONDS) -> dict[str, Any]:
+    """Wie ``extract``, aber PDF und Office-Dateien in einem eigenen Prozess mit Zeit- und
+    Speichergrenze: Eine wenige Kilobyte große Datei kann sonst den Server minutenlang binden."""
+    if not data or len(data) > MAX_BYTES or data[:5] != b"%PDF-" and data[:4] != b"PK\x03\x04":
+        return extract(name, data)
+    context = multiprocessing.get_context("spawn")
+    ours, theirs = context.Pipe(duplex=False)
+    worker = context.Process(target=_child, args=(theirs, name, data), daemon=True)
+    worker.start()
+    theirs.close()
+    try:
+        if not ours.poll(seconds):
+            raise DocumentError("Die Umwandlung dauert zu lange; die Datei ist zu aufwendig. "
+                                "Hilft oft: nur die nötigen Seiten als eigene Datei anhängen.")
+        ok, value = ours.recv()
+    except (EOFError, OSError):
+        raise DocumentError("Die Datei ist zu aufwendig für die Umwandlung.") from None
+    finally:
+        if worker.is_alive():
+            worker.kill()
+        worker.join(5)
+        ours.close()
+    if not ok:
+        raise DocumentError(value)
+    return value

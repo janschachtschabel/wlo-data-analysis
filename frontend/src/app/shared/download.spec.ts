@@ -20,6 +20,12 @@ describe('Herunterladen', () => {
     expect(csv).toContain('Mathematik;Primarstufe;Bruchrechnung;7;35');
   });
 
+  it('nennt Spaltenblöcke und Vergleichswerte', () => {
+    const csv = tableCsv('', [{ label: 'Anzahl' }, { label: 'Anzahl' }], [row('Mathematik', [5, 7], { previous: [4, null] })], 'Fach', [['WLO', 1], ['OERSI', 1]]);
+    expect(csv).toContain('Fach;WLO · Anzahl;WLO · Anzahl (vorher);OERSI · Anzahl;OERSI · Anzahl (vorher)');
+    expect(csv).toContain('Mathematik;5;4;7;');
+  });
+
   it('bildet Dateinamen ohne Sonderzeichen', () => {
     expect(fileName('Fächer × Stufe: Lücken?', 'csv')).toMatch(/^Facher-Stufe-Lucken-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(fileName('???', 'png')).toMatch(/^auswertung-/);

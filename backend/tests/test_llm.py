@@ -574,3 +574,22 @@ def test_a_dashboard_preview_too_large_for_the_chat_falls_back_to_titles(api, mo
     assert proposal["report"] is None and proposal["spec"]["tiles"]
     told = json.loads(model.bodies[1]["messages"][-1]["content"])
     assert "zu groß" in told["hinweis"]
+
+
+def test_a_step_that_overruns_the_time_is_stopped(api, model, monkeypatch):
+    import asyncio
+
+    from wda.llm import assistant
+    from wda.llm.tools import Toolbox
+
+    async def slow(self, name, args):
+        await asyncio.sleep(5)
+        return "{}"
+
+    monkeypatch.setattr(Toolbox, "call", slow)
+    monkeypatch.setattr(assistant, "MAX_SECONDS", 0.05)
+    monkeypatch.setattr(assistant, "MIN_STEP_SECONDS", 0.05)
+    model.answers = [call(("list_fields", {})), say("Soweit.")]
+    events = chat(api)
+    assert events[-1] == {**events[-1], "type": "final", "text": "Soweit."}
+    assert "zu lange" in model.bodies[1]["messages"][-2]["content"]

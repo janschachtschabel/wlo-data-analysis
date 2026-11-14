@@ -171,3 +171,52 @@ def test_pdf_keeps_headings_lists_and_tables():
 def test_csv_becomes_a_table():
     assert extract("a.csv", b"Fach;Anzahl\nMathe;12\n")["text"] \
         == "| Fach | Anzahl |\n| --- | --- |\n| Mathe | 12 |"
+
+
+def test_files_up_to_the_promised_size_get_through(api):  # noqa: F811
+    assert send(api, "gross.txt", b"wort " * (7 * 1024 * 1024 // 5)).status_code == 200
+    assert send(api, "zu-gross.txt", b"w" * (9 * 1024 * 1024)).status_code in (413, 422)
+
+
+def test_a_body_without_length_is_counted_while_reading(api):  # noqa: F811
+    def pieces():
+        yield b'{"instance": "wlo-prod", "x": "'
+        for _ in range(8):
+            yield b"a" * (1024 * 1024)
+        yield b'"}'
+    assert api.post("/api/query", content=pieces(),
+                    headers={"content-type": "application/json"}).status_code == 413
+
+
+def test_broken_archives_and_hidden_entities_get_a_plain_message(api):  # noqa: F811
+    good = docx("Text " * 2000)
+    broken = bytearray(good)
+    middle = len(broken) // 2
+    broken[middle:middle + 40] = b"\xff" * 40       # zerstört den gepackten Strom
+    assert send(api, "kaputt.docx", bytes(broken)).status_code == 422
+    hidden = ('<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE d [<!ENTITY a "geheim">]>'
+              f"<w:document {W}><w:body><w:p><w:r><w:t>&a;</w:t></w:r></w:p></w:body>"
+              "</w:document>").encode("utf-16")
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as book:
+        book.writestr("word/document.xml", hidden)
+    with pytest.raises(DocumentError):
+        extract("versteckt.docx", out.getvalue())
+
+
+def test_a_conversion_that_takes_too_long_is_stopped():
+    from wda.llm.document import convert
+    with pytest.raises(DocumentError, match="zu lange"):
+        convert("a.pdf", pdf("Bestand"), seconds=0.001)
+    assert convert("a.docx", docx("Bestand"))["text"] == "Bestand"
+
+
+def test_nothing_from_a_pdf_reaches_the_log(caplog):
+    import logging
+    data = pdf("Bestand").replace(b" rg", b" GEHEIMWORT rg").replace(b" g\n", b" GEHEIMWORT g\n")
+    with caplog.at_level(logging.DEBUG):
+        try:
+            extract("a.pdf", data)
+        except DocumentError:
+            pass
+    assert "GEHEIMWORT" not in caplog.text

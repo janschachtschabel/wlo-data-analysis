@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from tests.esdata import LEVELS, SUBJECTS, DataRepo, make_docs
 from wda.config import Settings
-from wda.engine.topics import norm
+from wda.engine.topics import _blocks, _is_name, _names, _too_short, norm
 from wda.main import create_app
 
 PASSWORD = "themen-passwort"
@@ -22,11 +22,17 @@ def docs():
         words = ["Nachhilfe", "einfach erklärt"]
         if MATH in doc[TAX]:
             words += ["Bruchrechnung" if n % 2 else "bruchrechnung", "Mathematik", "mathe",
-                      "#Geometrie", "bpb"]
+                      "bpb"]
+            if n % 4:
+                words.append("#Geometrie")
+            if n == 1:
+                words += ["Unikat", "#unikat", "unikat "]  # ein Material, drei Schreibweisen
             if n % 3 == 0:
                 words.append("  Bruchrechnung ")  # Rand und Dublette
         if GERMAN in doc[TAX]:
-            words += ["Märchen", "Deutsch", "Grammatik"]
+            words += ["Deutsch", "Grammatik"]
+            if n % 3:
+                words.append("Märchen")
         if PRIMARY in doc[LVL]:
             words.append("Grundschule")
         words.append(f"einzeln-{n}")  # trägt nur ein Material: nie ein Thema
@@ -77,7 +83,8 @@ def test_topics_per_subject_are_cleaned_and_counted(api, repo):
         label.casefold() for label in labels}
     assert not any(label.startswith("einzeln-") for label in labels)
     first = topics[0]
-    assert first["count"] >= in_math and first["share"] >= 100  # Dubletten zählen doppelt
+    assert first["count"] >= in_math and first["share"] == 100  # Dubletten zählen doppelt
+    assert "unikat" not in {label.casefold() for label in labels}
     assert [t["label"] for t in cell(result, "Deutsch")[1]][:2] == ["Grammatik", "Märchen"]
     assert result["topics"] == {"property": KEY, "rank": "typical", "free": True}
     codes = {n["code"] for n in result["provenance"]["notes"]}
@@ -168,3 +175,49 @@ def test_excel_export_has_a_sheet_per_table_numbers_and_topics(api):
     for name in names:
         if name.endswith((".xml", ".rels")):
             xml.dom.minidom.parseString(book.read(name))  # noqa: S318 - eigene Datei
+
+
+def test_block_rule_spares_real_topics_and_finds_a_channels_set():
+    # vier gleich große Themen in einer kleinen Zelle sind kein Satz eines Kanals
+    real = [("prozentrechnung", 20), ("geometrie", 20), ("algebra", 20), ("bruchrechnung", 20)]
+    assert _blocks(real, 400) == set()
+    # sechs Wörter an denselben 66 Materialien, Füllwörter eingeschlossen, sind einer
+    channel = [("simpleclub", 66), ("mechanik", 66), ("einfach erklärt", 66), ("lernvideo", 65),
+               ("nachhilfe", 66), ("physikvideo", 66), ("optik", 30)]
+    assert _blocks(channel, 400) == {key for key, _ in channel[:6]}
+    # und nicht, wenn jedes nur einen kleinen Teil der Zelle trägt
+    assert _blocks(channel, 4000) == set()
+
+
+def test_names_and_short_words():
+    names, whole = _names("Physik"), ("physik",)
+    assert _is_name("physik", names, whole)
+    assert not _is_name("physikdidaktik", names, whole)
+    assert not _is_name("physikalische größen", names, whole)
+    assert _is_name("mathe", _names("Mathematik"), ("mathematik",))
+    assert not _is_name("deutschland", _names("Deutsch"), ("deutsch",))
+    assert not _is_name("bild", _names("Berufliche Bildung"), ("berufliche bildung",))
+    assert _is_name("bildung", _names("Berufliche Bildung"), ("berufliche bildung",))
+    assert not _too_short("ki", "KI") and not _too_short("eu", "EU")
+    assert not _too_short("3d", "3d") and _too_short("zu", "zu") and _too_short("a", "A")
+    assert not _too_short("ddr", "ddr")
+
+
+def run_scoped(api, query, scope):
+    made = api.post("/api/definitions", json={
+        "kind": "metric", "name": "Karte", "spec": {"query": {"instance": "wlo-prod", **query}}})
+    assert made.status_code == 201, made.text
+    out = api.post(f"/api/definitions/{made.json()['id']}/run",
+                   json={"save": False, "scope": scope})
+    assert out.status_code == 200, out.text
+    return out.json()["results"][0]
+
+
+def test_a_context_on_the_row_field_picks_the_row(api):
+    query = {"rows": {"property": TAX, "top": 5}, "topics": {"property": KEY}}
+    out = run_scoped(api, query, [{"property": TAX, "values": ["Mathematik"]}])
+    assert out.get("error") is None, out
+    assert [row["label"] for row in out["result"]["rows"]] == ["Mathematik"]
+    out = run_scoped(api, query, [{"property": KEY, "values": [
+        {"value": "Geometrie", "literal": True}]}])
+    assert out["error"]["kind"] == "not_applicable", out

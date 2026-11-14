@@ -35,17 +35,20 @@ CELL_FACET_LIMIT = 40      # das Repositorium liefert das Fünffache: 200 Werte 
 BASE_FACET_LIMIT = 2000    # Vergleichsbasis: die 10.000 häufigsten Werte des Bestands
 MIN_COUNT = 2              # ein Wert, den nur ein Material trägt, ist kein Thema
 MIN_LIFT = 1.2
-BLOCK_SIZE = 4             # so viele Werte mit fast gleicher Zahl sind der Satz eines Kanals
+BLOCK_SIZE = 5             # so viele Werte mit fast gleicher Zahl sind der Satz eines Kanals
 BLOCK_SPREAD = 0.03
 BLOCK_MIN = 20
-_YEAR = re.compile(r"(19|20)\d\d")
+BLOCK_SHARE = 0.1         # und jeder davon an mindestens einem Zehntel der Zelle
 
 
-def _blocks(items: list[tuple[str, str, int]]) -> set[str]:
-    """Schlüssel von Werten, die in einer Zelle zu viert oder mehr fast dieselbe Zahl tragen:
-    Ein Kanal hängt denselben Satz Schlagwörter an alle seine Materialien. Themen, die der
-    Bestand wirklich trägt, verteilen sich nie so gleichmäßig."""
-    ranked = sorted((item for item in items if item[2] >= BLOCK_MIN), key=lambda i: -i[2])
+def _blocks(items: list[tuple[str, int]], total: int) -> set[str]:
+    """Schlüssel von Werten, die in einer Zelle zu fünft oder mehr fast dieselbe Zahl tragen
+    und je mindestens ein Zehntel der Zelle ausmachen: Ein Kanal hängt denselben Satz
+    Schlagwörter an alle seine Materialien. Gesucht wird in allen Werten der Zelle, auch in
+    Füllwörtern, weil sie zum selben Satz gehören."""
+    least = max(BLOCK_MIN, total * BLOCK_SHARE)
+    ranked = sorted(((key, key, count) for key, count in items if count >= least),
+                    key=lambda i: -i[2])
     out: set[str] = set()
     start = 0
     while start < len(ranked):
@@ -66,12 +69,12 @@ bildung wissen video videos film tutorial tutorials online kostenlos gratis free
 lerntipps abitur abi prüfung klausur klassenarbeit hausaufgaben studium uni universität
 student schnell leicht verstehen verständlich grundlagen einführung zusammenfassung überblick
 wiederholung education learning school teaching lesson howto explained science oer english
-deutsch german youtube podcast audio material materialien arbeitsblatt arbeitsblätter mint
+deutsch german youtube podcast audio material materialien arbeitsblatt arbeitsblätter 
 klasse gymnasium realschule hauptschule grundschule unterstufe mittelstufe oberstufe
 bildungsmaterial freude spaß spass simpel gut schlecht kontra contra original footage
-documentary learn speak read berechnen rechnen lernhilfe mathehilfe nachhilfelehrer ausbildung
+documentary learn speak read berechnen lernhilfe mathehilfe nachhilfelehrer 
 worksheet template workshop seminar medienpaket multimediales general main lehre digitale
-mensch jahr name stadt meter million wort einwohner music förderschule lernmaterial
+jahr name meter million einwohner music förderschule lernmaterial
 """.split()) | {
     "mathe nachhilfe", "video tutorial", "online class", "learn english", "mp4-version",
     "webm-version", "akademische grundlagen", "selbstgesteuertes lernen",
@@ -88,8 +91,10 @@ def norm(value: str) -> str:
     return _SPACE.sub(" ", value.strip().lstrip("#").casefold()).strip(" .,;:!?\"'„“")
 
 
-def _merge(values: list[tuple[str, int]]) -> dict[str, tuple[str, int]]:
-    """Schreibweisen zusammenführen: Schlüssel → (häufigste Schreibweise, Summe)."""
+def _merge(values: list[tuple[str, int]]) -> dict[str, tuple[str, int, int]]:
+    """Schreibweisen zusammenführen: Schlüssel → (häufigste Schreibweise, Summe, Zahl der
+    häufigsten Schreibweise). Die Summe zählt ein Material mit zwei Schreibweisen doppelt;
+    sicher belegt ist nur die Zahl der häufigsten."""
     out: dict[str, tuple[str, int, int]] = {}
     for value, count in values:
         key = norm(value)
@@ -100,7 +105,7 @@ def _merge(values: list[tuple[str, int]]) -> dict[str, tuple[str, int]]:
         if count > best:
             label, best = shown, count
         out[key] = (label, total + count, best)
-    return {key: (label, total) for key, (label, total, _) in out.items()}
+    return out
 
 
 def _names(label: str) -> set[str]:
@@ -110,12 +115,18 @@ def _names(label: str) -> set[str]:
     return {whole} | {w for w in re.split(r"[\s/,()&-]+", whole) if len(w) >= 4}
 
 
-def _is_name(key: str, names: set[str]) -> bool:
+def _is_name(key: str, names: set[str], whole: tuple[str, ...]) -> bool:
+    """Der Name selbst, eines seiner Wörter oder eine Kurzform des ganzen Namens („Mathe“
+    für „Mathematik“). Längere Wörter wie „Mathematikgeschichte“ sind eigene Themen."""
     if key in names:
         return True
-    # Kurzformen wie „Mathe“ für „Mathematik“
-    return len(key) >= 4 and any(name.startswith(key) or key.startswith(name)
-                                 for name in names if len(name) >= 4)
+    return len(key) >= 4 and any(name.startswith(key) for name in whole)
+
+
+def _too_short(key: str, label: str) -> bool:
+    """Ein oder zwei Zeichen sind fast immer Bruchstücke; Kürzel wie KI, EU, 3D bleiben."""
+    return len(key) < 2 or len(key) == 2 and not (label.isupper() or any(
+        char.isdigit() for char in label))
 
 
 async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
@@ -195,23 +206,29 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
         whole = await run.call(base, prop, BASE_FACET_LIMIT)
         stock = whole.total
         listed = [(v.value, v.count) for v in whole.facets[prop].values]
-        baseline = _merge(listed) if free else {v: (v, c) for v, c in listed}
+        baseline = ({key: (label, total) for key, (label, total, _) in _merge(listed).items()}
+                    if free else {v: (v, c) for v, c in listed})
         floor = min((c for _, c in baseline.values()), default=1)
 
     refused = False
+    broken: EduSharingError | None = None
 
     async def cell(row: _Row, column: _Column) -> Aggregate | None:
-        nonlocal refused
+        nonlocal refused, broken
         try:
             return await run.call(base + (Criterion(row_prop, (row.key,)),) + column.criteria,
                                   prop, CELL_FACET_LIMIT)
         except EduSharingError as exc:
-            if not _refused(exc):
-                raise
-            refused = True
+            # eine Zelle von vielen darf ausfallen, ohne dass die ganze Karte verloren ist
+            if _refused(exc):
+                refused = True
+            else:
+                broken = exc
             return None
 
     answers = await asyncio.gather(*[cell(row, column) for row in rows for column in columns])
+    if broken is not None and all(answer is None for answer in answers):
+        raise broken
     column_names = [_names(c.label) if spec.columns else set() for c in columns]
     # andere Fächer und Stufen als Schlagwort sind ebenfalls keine Themen
     blocked |= {norm(row.label) for row in rows}
@@ -238,21 +255,24 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                 merged = _merge(found)
                 merged_any = merged_any or len(merged) < len(found)
                 names = row_names | column_names[c]
-                items = [(key, label, count) for key, (label, count) in merged.items()
-                         if key not in blocked and not _is_name(key, names)
-                         and len(key) > 2 and not _YEAR.fullmatch(key)]
-                boilerplate = _blocks(items) if spec.topics.stopwords else set()
-                if boilerplate:
+                whole = (norm(row.label), *((norm(_column.label),) if spec.columns else ()))
+                boilerplate = _blocks([(key, count) for key, (_, count, _) in merged.items()],
+                                      answer.total) if topics.stopwords else set()
+                items = [(key, label, count, best) for key, (label, count, best)
+                         in merged.items()
+                         if key not in blocked and not _is_name(key, names, whole)
+                         and not (topics.stopwords and _too_short(key, label))]
+                if any(item[0] in boilerplate for item in items):
                     blocks_any = True
                     items = [item for item in items if item[0] not in boilerplate]
             else:
                 # nur Werte, die das Vokabular kennt, und nicht den Namen der Zeile selbst
-                items = [(value, value, count) for value, count in found
+                items = [(value, value, count, count) for value, count in found
                          if value in known and norm(labels[value]) not in row_names
                          and norm(labels[value]) != norm(row.label)]
             ranked = []
-            for key, label, count in items:
-                if count < MIN_COUNT:
+            for key, label, count, best in items:
+                if best < MIN_COUNT:
                     continue
                 score = float(count)
                 lift = None
@@ -268,7 +288,8 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
             chosen = sorted(ranked[: topics.top], key=lambda item: (-item[1], item[2]))
             cells.append([
                 {"label": label if free else labels[key], "count": count,
-                 "share": round(100 * count / answer.total, 1) if answer.total else None,
+                 "share": min(100.0, round(100 * count / answer.total, 1))
+                 if answer.total else None,
                  **({"lift": round(lift, 1)} if lift is not None else {})}
                 for _, count, key, label, lift in chosen])
         out_rows.append({"key": row.key, "label": row.label, "kind": "value",
@@ -279,12 +300,14 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
     if free:
         notes.add("topics_cleaned",
                   "Schlagwörter sind bereinigt: Schreibweisen (Groß/Klein, Raute) sind "
-                  "zusammengeführt, der Name von Zeile und Spalte"
-                  + (", Füllwörter" if topics.stopwords else "")
+                  "zusammengeführt, die Namen der Zeilen und Spalten samt Kurzformen"
+                  + (", Füllwörter, Bruchstücke aus ein oder zwei Zeichen (Kürzel in "
+                     "Großbuchstaben bleiben)" if topics.stopwords else "")
                   + (", Namen von Anbietern und Quellen" if topics.exclude_fields else "")
                   + " fehlen"
-                  + (", ebenso Sätze von Schlagwörtern mit fast gleicher Zahl (ein Kanal "
-                     "hängt sie an alle seine Materialien)" if blocks_any else "")
+                  + (f", ebenso Sätze aus {BLOCK_SIZE} oder mehr Schlagwörtern mit fast "
+                     "gleicher Zahl (ein Kanal hängt sie an alle seine Materialien)"
+                     if blocks_any else "")
                   + ". Trägt ein Material zwei Schreibweisen, zählt es doppelt.")
     notes.add("topics",
               ("Gezeigt ist, was in der Zelle deutlich häufiger vorkommt als im Bestand "
@@ -294,6 +317,10 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
               + f"Je Zelle höchstens {topics.top}, nur Werte mit mindestens {MIN_COUNT} "
               f"Materialien, ausgewertet unter den {CELL_FACET_LIMIT * 5} häufigsten der "
               "Zelle. Die Zahl oben in der Zelle ist die Anzahl der Materialien.")
+    if broken is not None:
+        notes.add("topics_partial", "Einzelne Zellen sind leer, weil das Repositorium auf "
+                                    "ihre Zählung nicht geantwortet hat. Ein neuer Lauf holt "
+                                    "sie nach.")
     if refused:
         notes.add("topics_refused", "Einzelne Zellen sind nicht bestimmbar: Das Repositorium "
                                     "zählt die Kombination nicht.")

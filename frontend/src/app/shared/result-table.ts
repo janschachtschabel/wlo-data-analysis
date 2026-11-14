@@ -41,7 +41,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
                           <li [title]="topicTitle(topic)">{{ topic.label }} <span class="c">{{ number(topic.count) }}</span></li>
                         }
                       </ol>
-                    } @else if (value) { <span class="none">keine typischen Themen</span> }
+                    } @else if (value) { <span class="none">keine Themen</span> }
                   }
                   @if (row.previous && delta(value, row.previous[$index]); as change) {
                     <span class="delta" [title]="'vorher ' + number(row.previous[$index])">{{ change }}</span>
@@ -124,7 +124,7 @@ export class ResultTable {
   protected readonly indented = computed(() => this.rows().some((r) => r.kind === 'group'));
   protected csv(): void {
     const title = this.name() || this.rowTitle() || 'Auswertung';
-    save(tableCsv(title, this.columns(), this.rows(), this.rowTitle()), fileName(title, 'csv'));
+    save(tableCsv(title, this.columns(), this.rows(), this.rowTitle(), this.headerGroups() ?? null), fileName(title, 'csv'));
   }
   protected topicTitle(topic: { count: number; share?: number | null; lift?: number }): string {
     const share = topic.share === null || topic.share === undefined ? '' : `, ${formatNumber(topic.share)} % der Zelle`;
