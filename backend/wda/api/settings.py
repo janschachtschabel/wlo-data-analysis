@@ -26,6 +26,7 @@ def read_settings(request: Request) -> dict[str, Any]:
         "timezone": settings.timezone,
         "export": {"formats": list(FORMATS), "pdf_available": pdf_available()},
         "llm": request.app.state.services.llm.public(),
+        "mail": {"ready": request.app.state.services.notifier.mail_ready},
     }
 
 

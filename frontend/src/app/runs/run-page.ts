@@ -37,6 +37,10 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
       @if (runId(); as id) {
         <a class="btn" routerLink="/assistent" [queryParams]="{ lauf: id, titel: report.value()?.title }"
            title="Den Assistenten zu dieser Auswertung fragen">Fragen</a>
+        @if (settings()?.llm?.ready) {
+          <button type="button" (click)="comment(id)" [disabled]="commenting()"
+                  title="Der Assistent schreibt einen kurzen Kommentar zu den Zahlen dieses Berichts. Gespeichert wird er nicht.">{{ commenting() ? 'Kommentiert …' : 'Kommentieren' }}</button>
+        }
         <span class="muted">Export:</span>
         @for (format of formats(); track format.id) {
           <a class="btn" [class.off]="!format.available" [attr.aria-disabled]="!format.available"
@@ -90,6 +94,16 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
       </div>
       @if (compareNote()) { <p class="notice" role="status">{{ compareNote() }}</p> }
     }
+    @if (commentError()) { <p class="error card" role="alert">{{ commentError() }}</p> }
+    @if (commentText()) {
+      <section class="card comment" aria-label="Kommentar des Assistenten">
+        <div class="row"><strong class="grow">Kommentar des Assistenten</strong>
+          <button type="button" class="link" (click)="copyComment()">{{ copied() ? 'Kopiert' : 'Kopieren' }}</button>
+          <button type="button" class="link" (click)="commentText.set('')">Schließen</button></div>
+        <p class="said">{{ commentText() }}</p>
+        <p class="muted small">Vom Sprachmodell aus den Zahlen dieses Berichts geschrieben; bitte gegenlesen. Der Text ist nicht gespeichert.</p>
+      </section>
+    }
     @if (report.value(); as data) {
       <p class="muted">Stand {{ time(data.started_at) }} · {{ status(data.status) }}
         @if (!runId()) { · nicht gespeichert }</p>
@@ -100,7 +114,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
       <p class="muted card">Zähle … (große Berichte brauchen einige Sekunden)</p>
     }
     @if (storeError()) { <p class="error" role="alert">{{ storeError() }}</p> }`,
-  styles: `.head { margin-bottom: 4px; } h1 { margin: 0; } .off { opacity: .5; pointer-events: none; }
+  styles: `.head { margin-bottom: 4px; } .comment { margin: 8px 0; } .said { white-space: pre-wrap; margin: 8px 0; max-width: 90ch; } .small { font-size: 12px; margin: 0; } h1 { margin: 0; } .off { opacity: .5; pointer-events: none; }
     .compare { margin: 8px 0; align-items: flex-end; } progress { width: 160px; }`,
 })
 export class RunPage {
@@ -130,6 +144,10 @@ export class RunPage {
   protected readonly others = signal<RunHead[]>([]);
   protected readonly other = signal('');
   /** Gesamtzahl je Kachel über die gespeicherten Läufe (nur für den Gesamtbestand) */
+  protected readonly commenting = signal(false);
+  protected readonly commentText = signal('');
+  protected readonly commentError = signal('');
+  protected readonly copied = signal(false);
   protected readonly trends = signal<Trends | null>(null);
   /** nur für Läufe der Reihe, und nur bis zum gezeigten Lauf */
   protected readonly shownTrends = computed(() => trendsUpTo(this.trends(), this.runId()));
@@ -168,7 +186,7 @@ export class RunPage {
       this.api.get<RunHead[]>(`/definitions/${encodeURIComponent(defId)}/runs?limit=100`)
         .then((runs) => this.others.set(runs.filter((r) => r.id !== runId)), () => this.others.set([]));
     });
-    effect(() => { this.runId(); untracked(() => this.other.set('')); });
+    effect(() => { this.runId(); untracked(() => { this.other.set(''); this.commentText.set(''); this.commentError.set(''); }); });
     effect(() => {
       const id = this.trendId();
       untracked(() => this.trends.set(null));
@@ -206,6 +224,25 @@ export class RunPage {
       void this.report.run(async (signal) => (await this.api.post<{ report: Report }>(
         `/definitions/${encodeURIComponent(defId)}/run`, { save: false, report: true, refresh, scope: this.scope() }, signal)).report);
     }
+  }
+
+  /** Ein kurzer Kommentar des Assistenten zu diesem Lauf; er wird nur angezeigt. */
+  protected async comment(runId: string): Promise<void> {
+    this.commenting.set(true);
+    this.commentError.set('');
+    this.copied.set(false);
+    try {
+      const { text } = await this.api.post<{ text: string }>('/assistant/comment', { run_id: runId });
+      if (this.runId() === runId) this.commentText.set(text);
+    } catch (error) {
+      if (this.runId() === runId) this.commentError.set(error instanceof ApiError ? error.message : 'Der Kommentar ließ sich nicht schreiben.');
+    } finally {
+      this.commenting.set(false);
+    }
+  }
+
+  protected async copyComment(): Promise<void> {
+    try { await navigator.clipboard.writeText(this.commentText()); this.copied.set(true); } catch { this.copied.set(false); }
   }
 
   protected async store(): Promise<void> {

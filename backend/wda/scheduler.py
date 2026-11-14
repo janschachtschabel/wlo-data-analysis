@@ -45,7 +45,10 @@ class Scheduler:
     def __init__(self, schedules: Callable[[], ScheduleStore], runner: Callable[[], Runner], *,
                  clock: Callable[[], datetime] = utc_now,
                  sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-                 also: Callable[[datetime], Awaitable[Any]] | None = None) -> None:
+                 also: Callable[[datetime], Awaitable[Any]] | None = None,
+                 deliver: Callable[[dict[str, Any], dict[str, Any]],
+                                   Awaitable[str | None]] | None = None) -> None:
+        self._deliver = deliver  # Versand des Berichts nach dem Lauf; liefert einen Satz
         self._also = also  # weitere regelmäßige Arbeit, etwa das Nachziehen der Abzüge
         self._schedules = schedules
         self._runner = runner
@@ -96,9 +99,18 @@ class Scheduler:
         except Exception:
             log.exception("Zeitplan %s: unerwarteter Fehler", schedule["id"])
             error = "Unerwarteter Fehler beim Lauf; Näheres steht im Protokoll der App."
+        sent: str | None = None
+        if run is not None and status != "failed" and schedule.get("send") and self._deliver:
+            try:  # ein gescheiterter Versand lässt den Lauf gültig
+                sent = await self._deliver(schedule, run)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("Zeitplan %s: Versand gescheitert", schedule["id"])
+                sent = "Versand gescheitert; Näheres steht im Protokoll der App."
         await self._schedules().record(
             schedule, started=started, now=self._clock(), run_id=run["id"] if run else None,
-            status=status, error=error, retry=retry, advance=advance)
+            status=status, error=error, retry=retry, advance=advance, sent=sent)
         return run
 
     async def tick(self) -> int:

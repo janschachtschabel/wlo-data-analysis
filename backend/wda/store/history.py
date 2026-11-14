@@ -124,6 +124,27 @@ class History:
         return History._blocks_of(con, row)
 
     @staticmethod
+    def _missed(con: sqlite3.Connection, definition: sqlite3.Row, head: sqlite3.Row
+                ) -> list[dict[str, Any]]:
+        """Die verfehlten Zielwerte eines Laufs: je Tabelle der Satz aus dem Bericht."""
+        row = con.execute("SELECT * FROM runs WHERE id=?", (head["id"],)).fetchone()
+        try:
+            report = build_report(load_run(con, row))
+        except (ValueError, KeyError, TypeError):
+            return []
+        out = []
+        for table in report.tables:
+            target = table.target
+            if target and target.get("reached") != target.get("of"):
+                out.append({
+                    "definition_id": definition["id"], "name": definition["name"],
+                    "kind": definition["kind"], "run_id": head["id"],
+                    "started_at": head["started_at"], "block": table.title,
+                    "text": next((n["text"] for n in table.notes
+                                  if n.get("code") == "target"), "")})
+        return out
+
+    @staticmethod
     def _blocks_of(con: sqlite3.Connection, row: sqlite3.Row | None) -> dict[str, Any]:
         if row is None:
             return {"run_id": None, "blocks": []}
@@ -189,7 +210,8 @@ class History:
 
         return await self._db.read(fn)
 
-    async def highlights(self, limit: int = 20) -> dict[str, Any]:
+    async def highlights(self, limit: int = 20, definition_id: str | None = None
+                         ) -> dict[str, Any]:
         """Die größten Veränderungen zwischen den beiden jüngsten brauchbaren Läufen jeder
         Definition (ohne abweichende Instanz). Zählungen: mindestens ``MIN_DELTA`` und
         ``MIN_PERCENT`` Prozent; Prozentspalten: mindestens ``MIN_PP`` Prozentpunkte. Läufe
@@ -198,7 +220,12 @@ class History:
         def fn(con: sqlite3.Connection) -> dict[str, Any]:
             items: list[dict[str, Any]] = []
             watched = compared = 0
-            for definition in con.execute("SELECT id, name, kind FROM definitions").fetchall():
+            targets: list[dict[str, Any]] = []
+            chosen = (con.execute("SELECT id, name, kind, spec FROM definitions").fetchall()
+                      if definition_id is None else con.execute(
+                          "SELECT id, name, kind, spec FROM definitions WHERE id=?",
+                          (definition_id,)).fetchall())
+            for definition in chosen:
                 where, args = _scope(definition["id"], None)
                 heads = con.execute(
                     _HEAD + f"WHERE {where}{_USABLE} ORDER BY seq DESC LIMIT 2",  # noqa: S608
@@ -208,6 +235,8 @@ class History:
                 runs = [con.execute("SELECT * FROM runs WHERE id=?", (h["id"],)).fetchone()
                         for h in heads]
                 watched += 1
+                if '"target"' in (definition["spec"] or ""):  # Zielwerte des jüngsten Laufs
+                    targets += self._missed(con, definition, heads[0])
                 if len(heads) < 2 or changed(heads[1], heads[0]):
                     continue
                 compared += 1
@@ -281,7 +310,7 @@ class History:
                 items += found[:PER_DEFINITION]
             items.sort(key=lambda item: -item[0])
             return {"items": [item for _, item in items[:limit]], "watched": watched,
-                    "compared": compared}
+                    "compared": compared, "targets": targets[:50]}
 
         return await self._db.read(fn)
 

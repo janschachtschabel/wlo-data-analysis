@@ -133,7 +133,7 @@ def test_migration_from_version_1_adds_columns_and_backfills_points(world, tmp_p
     db = Database(old)
     assert db.read_now(lambda c: c.execute(
         "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]) == str(SCHEMA_VERSION)
-    assert SCHEMA_VERSION == 2
+    assert SCHEMA_VERSION == 3
     assert db.read_now(lambda c: c.execute("SELECT origin, instance FROM runs").fetchone()[:]
                        ) == ("manual", None)
     assert backfill(db) == 1

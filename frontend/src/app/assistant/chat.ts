@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { Api, ApiError, isAbort } from '../core/api';
 import { Instances } from '../core/instances';
 import { AppSettings, Definition, Proposal } from '../core/types';
@@ -27,7 +27,8 @@ const MAX_MEMO = 8000, MAX_TURNS = 24;
 /**
  * Die Unterhaltung mit dem Assistenten. Sie lebt außerhalb der Ansicht: Das Chatfenster am
  * Rand und die Seite „Assistent“ zeigen dieselbe, und ein Seitenwechsel beendet sie nicht.
- * Nach dem Neuladen der Seite ist sie weg; gespeichert wird nichts.
+ * Sie bleibt im Browser (localStorage) über das Neuladen hinweg erhalten, ohne die Texte
+ * angehängter Vorlagen; „Neu beginnen“ und das Abmelden löschen sie. Auf dem Server liegt nichts.
  */
 @Injectable({ providedIn: 'root' })
 export class Chat {
@@ -47,6 +48,12 @@ export class Chat {
   readonly reading = signal(false);
   readonly templateError = signal('');
   private controller: AbortController | null = null;
+
+  constructor() {
+    this.turns.set(restoreTurns(read()));
+    // nur Fertiges ablegen: eine laufende Antwort gäbe es nach dem Neuladen nicht mehr
+    effect(() => write(this.busy() ? null : storeTurns(this.turns())));
+  }
 
   /** Wandelt eine Datei auf dem Server in Text. Gespeichert wird dort nichts. */
   async attach(file: File): Promise<void> {
@@ -141,6 +148,42 @@ export class Chat {
       patch({ saving: false, error: error instanceof ApiError ? error.message : 'Speichern nicht möglich.' });
     }
   }
+}
+
+export const CHAT_KEY = 'wda.chat.v1';
+const MAX_STORED = 1_500_000;
+
+function read(): string | null {
+  try { return localStorage.getItem(CHAT_KEY); } catch { return null; }
+}
+
+/** null: nichts ändern (es läuft gerade eine Antwort) */
+function write(text: string | null): void {
+  if (text === null) return;
+  try {
+    if (text) localStorage.setItem(CHAT_KEY, text); else localStorage.removeItem(CHAT_KEY);
+  } catch { /* voller oder gesperrter Speicher: dann bleibt die Unterhaltung nur in dieser Sitzung */ }
+}
+
+/** Die Unterhaltung als Text für den Browser-Speicher; leer, wenn es nichts zu behalten gibt. */
+export function storeTurns(turns: Turn[]): string {
+  let kept = turns.filter((turn) => !turn.pending).slice(-2 * MAX_TURNS)
+    .map((turn) => ({ ...turn, proposals: turn.proposals.map(({ saving: _saving, error: _error, ...rest }) => rest) }));
+  let text = kept.length ? JSON.stringify(kept) : '';
+  while (text.length > MAX_STORED && kept.length > 2) { kept = kept.slice(2); text = JSON.stringify(kept); }
+  return text.length > MAX_STORED ? '' : text;
+}
+
+/** Liest eine abgelegte Unterhaltung; alles Unerwartete ergibt eine leere. */
+export function restoreTurns(text: string | null): Turn[] {
+  if (!text) return [];
+  try {
+    const found: unknown = JSON.parse(text);
+    if (!Array.isArray(found)) return [];
+    return found.filter((turn): turn is Turn => !!turn && typeof turn === 'object' && (turn.role === 'user' || turn.role === 'assistant')
+      && typeof turn.text === 'string' && Array.isArray(turn.steps) && Array.isArray(turn.proposals))
+      .map((turn) => ({ ...turn, pending: false }));
+  } catch { return []; }
 }
 
 function memo(proposals: Proposal[]): string {

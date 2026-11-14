@@ -91,7 +91,7 @@ export interface LlmSettings {
 }
 export interface AppSettings {
   version: string; timezone?: string; export: { formats: string[]; pdf_available: boolean };
-  llm: LlmSettings;
+  llm: LlmSettings; mail?: { ready: boolean };
 }
 /** Vorschlag des Assistenten: eine geprüfte Definition, die erst der Admin speichert */
 export interface Proposal {
@@ -104,7 +104,10 @@ export interface Schedule {
   weekday: number | null; day: number | null; enabled: boolean; next_due: string;
   attempts: number; last_run_id: string | null; last_status: string | null;
   last_error: string | null; last_started_at: string | null;
+  send?: ScheduleSend | null; last_send?: string | null;
 }
+/** Versand des Berichts nach dem Lauf */
+export interface ScheduleSend { to: string[]; format: 'pdf' | 'docx' | 'xlsx' | 'html'; webhook: string | null; only_notable: boolean }
 export interface HistoryKeys {
   run_id: string | null;
   blocks: { key: string; title: string; columns: { id: string; label: string }[];

@@ -22,8 +22,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from ..errors import UnknownInstance, error_body
 from ..llm.assistant import converse, system_prompt
+from ..llm.client import LlmError
 from ..llm.document import MAX_BYTES, MAX_TEXT, DocumentError, convert
-from ..llm.tools import Toolbox
+from ..llm.tools import Toolbox, _compact_table
+from .report import report_of
 
 router = APIRouter(prefix="/assistant")
 log = logging.getLogger(__name__)
@@ -174,3 +176,58 @@ async def chat(body: ChatIn, request: Request) -> Any:
 
     return StreamingResponse(stream(), media_type="application/x-ndjson",
                              headers={"X-Accel-Buffering": "no"})
+
+
+class CommentIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: Annotated[StrictStr, Field(min_length=1, max_length=64)]
+
+
+COMMENT_PROMPT = (
+    "Du kommentierst einen Bericht aus einem Daten-Dashboard über Bildungsmaterialien "
+    "(edu-sharing, WirLernenOnline). Du bekommst Titel, Stand und die Tabellen des Berichts "
+    "als JSON. Schreibe auf Deutsch einen kurzen Kommentar in höchstens sechs Sätzen oder "
+    "Stichpunkten: was am meisten auffällt, wo Lücken oder Ausreißer liegen, was sich daraus "
+    "als nächster Schritt anbietet. Nenne nur Zahlen, die in den Tabellen stehen, und rechne "
+    "keine neuen aus, außer einfachen Anteilen. Beachte die Hinweise an den Tabellen (etwa "
+    "Mehrfachzuordnungen). Wenn die Daten keine Aussage tragen, sage das. Keine Anrede, "
+    "keine Einleitung, kein Schlusswort.")
+MAX_COMMENT_TABLES = 12
+MAX_COMMENT_CHARS = 60_000
+
+
+@router.post("/comment")
+async def comment(body: CommentIn, request: Request) -> Any:
+    """Ein kurzer Kommentar des Sprachmodells zu einem gespeicherten Lauf. Das Modell bekommt
+    nur die Zahlen des Berichts und kein Werkzeug; gespeichert wird nichts."""
+    services = request.app.state.services
+    run = await services.runner.get_run(body.run_id)
+    config = services.llm
+    if not config.ready:
+        return JSONResponse(error_body(
+            "llm_not_configured",
+            "Für das Sprachmodell ist kein Schlüssel hinterlegt (Einstellungen)."),
+            status_code=409)
+    data = report_of(run)
+    tables = [_compact_table(b) for b in data.get("blocks", []) if b.get("type") == "table"]
+    facts = {"titel": data.get("title"), "stand": data.get("started_at"),
+             "tabellen": tables[:MAX_COMMENT_TABLES]}
+    if len(tables) > MAX_COMMENT_TABLES:
+        facts["weitere_tabellen"] = len(tables) - MAX_COMMENT_TABLES
+    text = json.dumps(facts, ensure_ascii=False)
+    while len(text) > MAX_COMMENT_CHARS and len(facts["tabellen"]) > 1:
+        facts["tabellen"] = facts["tabellen"][:-1]
+        facts["weitere_tabellen"] = len(tables) - len(facts["tabellen"])
+        text = json.dumps(facts, ensure_ascii=False)
+    try:
+        answer = await services.llm_client(config).chat([
+            {"role": "system", "content": COMMENT_PROMPT},
+            {"role": "user", "content": text[:MAX_COMMENT_CHARS]}])
+    except LlmError as exc:
+        return JSONResponse(error_body(exc.kind, exc.message), status_code=502)
+    said = (answer.get("content") or "").strip()
+    if not said:
+        return JSONResponse(error_body(
+            "llm_bad_answer", "Das Sprachmodell hat keinen Kommentar geliefert."),
+            status_code=502)
+    return {"text": said[:6000]}

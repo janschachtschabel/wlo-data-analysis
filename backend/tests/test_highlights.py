@@ -9,7 +9,8 @@ M = DISC + "380"
 
 
 def test_highlights_name_the_biggest_changes(api, repo):  # noqa: F811
-    assert api.get("/api/highlights").json() == {"items": [], "watched": 0, "compared": 0}
+    assert api.get("/api/highlights").json() == {"items": [], "watched": 0, "compared": 0,
+                                                 "targets": []}
     m = make(api, "metric", "Fächer", {"query": QUERY})
     other = make(api, "metric", "Ruhig", {"query": QUERY})
     run(api, m["id"])

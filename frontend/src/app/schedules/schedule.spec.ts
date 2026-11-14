@@ -3,9 +3,9 @@ import { describeRhythm, emptyForm, formOf, formProblem, rhythmBody } from './sc
 describe('Zeitplan-Formular', () => {
   it('schickt nur, was zum Rhythmus gehört', () => {
     const form = { ...emptyForm(), weekday: 3, day: 15 };
-    expect(rhythmBody(form)).toEqual({ every: 'daily', at: '06:00', enabled: true });
-    expect(rhythmBody({ ...form, every: 'weekly' })).toEqual({ every: 'weekly', at: '06:00', enabled: true, weekday: 3 });
-    expect(rhythmBody({ ...form, every: 'monthly', enabled: false })).toEqual({ every: 'monthly', at: '06:00', enabled: false, day: 15 });
+    expect(rhythmBody(form)).toEqual({ every: 'daily', at: '06:00', enabled: true, send: null });
+    expect(rhythmBody({ ...form, every: 'weekly' })).toEqual({ every: 'weekly', at: '06:00', enabled: true, weekday: 3, send: null });
+    expect(rhythmBody({ ...form, every: 'monthly', enabled: false })).toEqual({ every: 'monthly', at: '06:00', enabled: false, day: 15, send: null });
   });
   it('macht aus Formulartext Zahlen', () => {
     expect(rhythmBody({ ...emptyForm(), every: 'monthly', day: '7' as unknown as number })['day']).toBe(7);
@@ -22,6 +22,14 @@ describe('Zeitplan-Formular', () => {
     expect(describeRhythm({ every: 'weekly', at: '07:30', weekday: 6, day: null })).toBe('wöchentlich, Sonntag um 07:30');
     expect(describeRhythm({ every: 'monthly', at: '05:00', weekday: null, day: 1 })).toBe('monatlich am 1. um 05:00');
     expect(formOf({ every: 'weekly', at: '07:30', weekday: 6, day: null, enabled: false } as any))
-      .toEqual({ every: 'weekly', at: '07:30', weekday: 6, day: 1, enabled: false });
+      .toEqual({ every: 'weekly', at: '07:30', weekday: 6, day: 1, enabled: false, to: '', format: 'pdf', webhook: '', onlyNotable: false });
+  });
+
+  it('nimmt den Versand auf und prüft Adressen', () => {
+    const form = { ...emptyForm(), to: 'a@example.org; b@example.org', webhook: ' https://hooks.example.org/x ', onlyNotable: true };
+    expect(rhythmBody(form)['send']).toEqual({ to: ['a@example.org', 'b@example.org'], format: 'pdf', webhook: 'https://hooks.example.org/x', only_notable: true });
+    expect(formProblem(form)).toBe('');
+    expect(formProblem({ ...form, to: 'kein-at' })).toContain('keine E-Mail-Adresse');
+    expect(formProblem({ ...form, webhook: 'ftp://x' })).toContain('Webhook');
   });
 });

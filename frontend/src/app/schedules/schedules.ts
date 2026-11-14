@@ -30,13 +30,14 @@ const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise
           @for (item of items(); track item.id) {
             <tr>
               @if (!defId()) { <td><a [routerLink]="['/verlauf', item.definition_id]">{{ item.definition_name }}</a></td> }
-              <td>{{ rhythm(item) }}@if (item.instance) { <span class="muted"> · {{ item.instance }}</span> }</td>
+              <td>{{ rhythm(item) }}@if (item.instance) { <span class="muted"> · {{ item.instance }}</span> }@if (item.send) { <div class="muted small wrap">Versand{{ item.send.only_notable ? ' nur bei Auffälligkeit' : '' }}: {{ sendTo(item) }}</div> }</td>
               <td>@if (item.enabled) { {{ time(item.next_due) }}@if (item.attempts) { <span class="muted"> (neuer Versuch {{ item.attempts }} von 3)</span> } } @else { <span class="muted">ausgeschaltet</span> }</td>
               <td>
                 @if (item.last_started_at) {
                   @if (item.last_run_id) { <a [routerLink]="['/lauf', item.last_run_id]">{{ time(item.last_started_at) }}</a> } @else { {{ time(item.last_started_at) }} }
                   <span [class.error]="item.last_status === 'failed'"> {{ status(item.last_status) }}</span>
                   @if (item.last_error) { <div class="muted small wrap">{{ item.last_error }}</div> }
+                  @if (item.last_send) { <div class="muted small wrap">{{ item.last_send }}</div> }
                 } @else { <span class="muted">noch keiner</span> }
               </td>
               <td class="actions">
@@ -68,6 +69,23 @@ const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise
         }
         <label>Uhrzeit <input name="at" type="time" required [(ngModel)]="f.at" /></label>
         <label class="check"><input name="enabled" type="checkbox" [(ngModel)]="f.enabled" /> eingeschaltet</label>
+        <fieldset class="send">
+          <legend>Bericht nach dem Lauf verschicken (optional)</legend>
+          <div class="row">
+            <label class="grow">E-Mail an <input name="send-to" type="text" [(ngModel)]="f.to" placeholder="name@example.org, weitere@example.org" autocomplete="off" /></label>
+            <label>Anhang
+              <select name="send-format" [(ngModel)]="f.format">
+                <option value="pdf">PDF</option><option value="docx">Word</option><option value="xlsx">Excel</option><option value="html">HTML</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label class="grow">Webhook <input name="send-webhook" type="url" [(ngModel)]="f.webhook" placeholder="https://…" autocomplete="off" /></label>
+            <label class="check"><input name="send-notable" type="checkbox" [(ngModel)]="f.onlyNotable" /> nur bei Auffälligkeit</label>
+          </div>
+          <p class="muted small">Verschickt wird der Bericht, also Auswertungen. An den Webhook geht eine kurze Nachricht mit Titel, Stand, verfehlten Zielwerten und auffälligen Veränderungen. „Nur bei Auffälligkeit“: wenn ein Zielwert verfehlt ist oder sich eine Zahl seit dem vorigen Lauf auffällig geändert hat.
+            @if (!mailReady()) { <strong>Für E-Mails ist noch kein Mailserver eingerichtet (WDA_SMTP_HOST und WDA_SMTP_FROM in der Konfiguration).</strong> }</p>
+        </fieldset>
         <button type="submit" class="primary" [disabled]="saving()">{{ editing() ? 'Zeitplan ändern' : 'Zeitplan anlegen' }}</button>
         <button type="button" (click)="form.set(null)">Abbrechen</button>
       </form>
@@ -76,6 +94,8 @@ const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise
       <p><button type="button" (click)="start()">Zeitplan anlegen</button></p>
     }`,
   styles: `
+    .send { flex-basis: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: grid; gap: 8px; }
+    .send .row { align-items: flex-end; } .send input[type=text], .send input[type=url] { width: 100%; } .send p { margin: 0; }
     .form { margin-top: var(--gap); align-items: flex-end; } .small { font-size: 12px; }
     .wrap { white-space: normal; max-width: 46ch; } .actions > * { margin-left: 10px; }
     .check { display: flex; gap: 6px; align-items: center; } input[type=number] { width: 5em; }
@@ -97,6 +117,8 @@ export class Schedules {
   protected readonly saving = signal(false);
   protected readonly busy = signal<ReadonlySet<string>>(new Set());
   protected readonly zone = signal('Europe/Berlin');
+  protected readonly mailReady = signal(true);
+  protected readonly sendTo = (item: Schedule) => [...(item.send?.to ?? []), ...(item.send?.webhook ? ['Webhook'] : [])].join(', ');
   protected readonly weekdays = WEEKDAYS;
   protected readonly time = formatTime;
   protected readonly rhythm = describeRhythm;
@@ -105,7 +127,7 @@ export class Schedules {
 
   constructor() {
     const auth = inject(Auth);
-    this.api.get<AppSettings>('/settings').then((s) => this.zone.set(s.timezone ?? 'Europe/Berlin'), () => undefined);
+    this.api.get<AppSettings>('/settings').then((s) => { this.zone.set(s.timezone ?? 'Europe/Berlin'); this.mailReady.set(s.mail?.ready ?? false); }, () => undefined);
     effect(() => { this.defId(); auth.renewed(); untracked(() => { this.form.set(null); void this.load(); }); });
   }
 

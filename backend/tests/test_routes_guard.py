@@ -42,6 +42,7 @@ PROTECTED = {
     "/api/definitions/{def_id}/trends", "/api/highlights",
     "/api/schedules", "/api/schedules/{schedule_id}", "/api/schedules/{schedule_id}/run",
     "/api/settings/llm", "/api/settings/llm/test", "/api/assistant/chat", "/api/assistant/document",
+    "/api/assistant/comment",
 }
 OUTSIDE_API = {"/{rest:path}"}  # nur die Oberfläche
 

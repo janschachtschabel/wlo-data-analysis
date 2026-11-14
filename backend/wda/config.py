@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     # durch Komma getrennt); leer: keine
     precompute: str = "builtin-themen"
     runs_keep: int = Field(default=500, ge=1, le=100000)
+    # Versand von Berichten nach Zeitplan; ohne smtp_host gibt es keine E-Mails
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = ""
+    smtp_password: SecretStr | None = None
+    smtp_from: str = ""
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    # Adresse der App von außen (https://…), für den Link in Nachrichten
+    public_url: str = ""
     oersi_url: str = "https://oersi.org/resources/api/search/oer_data/_search"
     timezone: str = "Europe/Berlin"  # in ihr gelten die Uhrzeiten der Zeitpläne
     scheduler: bool = True  # ``off``: Zeitpläne bleiben liegen (Tests, zweite Instanz)
@@ -72,7 +81,7 @@ class Settings(BaseSettings):
             raise ValueError("darf nicht leer sein")
         return value
 
-    @field_validator("llm_base_url")
+    @field_validator("llm_base_url", "public_url")
     @classmethod
     def _strip_slash(cls, value: str) -> str:
         return value.rstrip("/")

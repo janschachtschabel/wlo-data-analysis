@@ -25,6 +25,7 @@ from .instances import Instance, InstanceRegistry
 from .jobs import Jobs
 from .llm import config as llm_config
 from .llm.client import LlmClient
+from .notify import Notifier
 from .snapshot.store import Snapshot
 from .snapshot.sync import sync
 from .store.db import Database
@@ -49,6 +50,7 @@ class Services:
         self._instances = instances
         self.precompute = [p.strip() for p in settings.precompute.split(",") if p.strip()][:20]
         self._precompute_tried: dict[str, float] = {}
+        self._notifier: Notifier | None = None
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
         self._llm_transport = llm_transport
@@ -195,6 +197,12 @@ class Services:
     @property
     def history(self) -> History:
         return History(self.db, ZoneInfo(self._settings.timezone))
+
+    @property
+    def notifier(self) -> Notifier:
+        if self._notifier is None:
+            self._notifier = Notifier(self._settings, lambda: self.history)
+        return self._notifier
 
     @property
     def schedules(self) -> ScheduleStore:

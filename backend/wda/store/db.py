@@ -13,7 +13,7 @@ from typing import TypeVar
 
 from ..config import ConfigError
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 T = TypeVar("T")
 
 _SCHEMA = """
@@ -61,7 +61,10 @@ CREATE TABLE IF NOT EXISTS schedules (
     enabled INTEGER NOT NULL DEFAULT 1, next_due TEXT NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
     last_run_id TEXT, last_status TEXT, last_error TEXT, last_started_at TEXT,
-    created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    send TEXT,       -- Versand nach dem Lauf: JSON {to, webhook, format, only_notable}
+    last_send TEXT   -- was beim letzten Versand geschah, als Satz
+    );
 -- in der Oberfläche angelegte Instanzen; data ist das Instanz-Objekt samt Zugangsdaten
 CREATE TABLE IF NOT EXISTS instances (
     id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -128,6 +131,10 @@ class Database:
                 con.execute("ALTER TABLE runs ADD COLUMN instance TEXT")
             if "fingerprint" not in have:
                 con.execute("ALTER TABLE runs ADD COLUMN fingerprint TEXT")
+            planned = {r["name"] for r in con.execute("PRAGMA table_info(schedules)")}
+            for column in ("send", "last_send"):  # Version 2 → 3
+                if column not in planned:
+                    con.execute(f"ALTER TABLE schedules ADD COLUMN {column} TEXT")
             con.execute("UPDATE meta SET value=? WHERE key='schema_version'",
                         (str(SCHEMA_VERSION),))
             con.execute("COMMIT")

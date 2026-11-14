@@ -6,6 +6,7 @@ der Zeitzone der App gerechnet und als UTC gespeichert.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -85,7 +86,9 @@ def _out(row: sqlite3.Row) -> dict[str, Any]:
         "next_due": row["next_due"], "attempts": row["attempts"],
         "last_run_id": row["last_run_id"], "last_status": row["last_status"],
         "last_error": row["last_error"], "last_started_at": row["last_started_at"],
-        "created_at": row["created_at"], "updated_at": row["updated_at"]}
+        "created_at": row["created_at"], "updated_at": row["updated_at"],
+        "send": json.loads(row["send"]) if row["send"] else None,
+        "last_send": row["last_send"]}
 
 
 def _get(con: sqlite3.Connection, schedule_id: str) -> dict[str, Any]:
@@ -116,7 +119,7 @@ class ScheduleStore:
 
     async def create(self, *, definition_id: str, instance: str | None, every: str, at: str,
                      weekday: int | None, day: int | None, enabled: bool,
-                     now: datetime) -> dict[str, Any]:
+                     now: datetime, send: dict[str, Any] | None = None) -> dict[str, Any]:
         weekday, day = check_rhythm(every, at, weekday, day)
 
         def fn(con: sqlite3.Connection) -> dict[str, Any]:
@@ -133,25 +136,29 @@ class ScheduleStore:
             schedule_id, stamp = new_id(), iso(now)
             con.execute(
                 "INSERT INTO schedules (id, definition_id, instance, every, at, weekday, day,"
-                " enabled, next_due, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " enabled, next_due, created_at, updated_at, send)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (schedule_id, definition_id, instance, every, at, weekday, day, int(enabled),
-                 iso(next_due(every, at, weekday, day, now, self._tz)), stamp, stamp))
+                 iso(next_due(every, at, weekday, day, now, self._tz)), stamp, stamp,
+                 json.dumps(send, ensure_ascii=False) if send else None))
             return _get(con, schedule_id)
 
         return await self._db.write(fn)
 
     async def update(self, schedule_id: str, *, every: str, at: str, weekday: int | None,
-                     day: int | None, enabled: bool, now: datetime) -> dict[str, Any]:
-        """Ändert Rhythmus und Schalter; der nächste Termin wird neu gerechnet."""
+                     day: int | None, enabled: bool, now: datetime,
+                     send: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Ändert Rhythmus, Schalter und Versand; der nächste Termin wird neu gerechnet."""
         weekday, day = check_rhythm(every, at, weekday, day)
 
         def fn(con: sqlite3.Connection) -> dict[str, Any]:
             _get(con, schedule_id)
             con.execute(
                 "UPDATE schedules SET every=?, at=?, weekday=?, day=?, enabled=?, next_due=?,"
-                " attempts=0, updated_at=? WHERE id=?",
+                " attempts=0, updated_at=?, send=? WHERE id=?",
                 (every, at, weekday, day, int(enabled),
-                 iso(next_due(every, at, weekday, day, now, self._tz)), iso(now), schedule_id))
+                 iso(next_due(every, at, weekday, day, now, self._tz)), iso(now),
+                 json.dumps(send, ensure_ascii=False) if send else None, schedule_id))
             return _get(con, schedule_id)
 
         return await self._db.write(fn)
@@ -188,7 +195,7 @@ class ScheduleStore:
 
     async def record(self, schedule: dict[str, Any], *, started: datetime, now: datetime,
                      run_id: str | None, status: str, error: str | None,
-                     retry: bool, advance: bool = True) -> None:
+                     retry: bool, advance: bool = True, sent: str | None = None) -> None:
         """Hält das Ergebnis eines Laufs fest; der Termin ist schon weitergerückt (``claim``).
         ``retry``: bald noch einmal versuchen (höchstens so oft, wie ``RETRY_MINUTES`` Einträge
         hat). ``advance=False``: Lauf von Hand, der Termin bleibt; gelingt er, entfällt ein
@@ -211,8 +218,8 @@ class ScheduleStore:
                 attempts, due = 0, regular
             con.execute(
                 "UPDATE schedules SET next_due=?, attempts=?, last_run_id=?, last_status=?,"
-                " last_error=?, last_started_at=? WHERE id=?",
+                " last_error=?, last_started_at=?, last_send=? WHERE id=?",
                 (due, attempts, run_id, status, error[:500] if error else None, iso(started),
-                 schedule["id"]))
+                 sent[:500] if sent else None, schedule["id"]))
 
         await self._db.write(fn)
