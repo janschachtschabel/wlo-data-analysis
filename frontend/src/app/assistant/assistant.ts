@@ -98,17 +98,17 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
             }
             @if (turn.html) { <div class="bubble prose" [innerHTML]="turn.html"></div> }
             @if (turn.choices; as choices) {
-              <fieldset class="choices" [disabled]="busy() || ti !== turns().length - 1">
+              <fieldset class="choices" [disabled]="busy() || ti !== turns().length - 1" [attr.aria-disabled]="ti !== turns().length - 1">
                 <legend>{{ choices.question }}</legend>
                 @for (option of choices.options; track option) {
-                  <button type="button" (click)="ask(option)">{{ option }}</button>
+                  <button type="button" (click)="choose(option)" [class.picked]="turns()[ti + 1]?.text === option">{{ option }}</button>
                 }
               </fieldset>
             }
             @else if (turn.text) { <div class="bubble">{{ turn.text }}</div> }
             @if (turn.pending) { <p class="muted thinking" role="status">{{ turn.steps.length ? 'Arbeitet weiter …' : 'Denkt nach …' }}</p> }
             @if (turn.error) { <p class="error" role="alert">{{ turn.error }}</p> }
-            @if (ti === turns().length - 1 && !turn.pending && !turn.error) {
+            @if (ti === turns().length - 1 && !turn.pending && !turn.error && !turn.choices) {
               <div class="examples follow" aria-label="Vorschläge zum Weiterfragen">
                 @for (next of followUps; track next) { <button type="button" (click)="ask(next)" [disabled]="busy()">{{ next }}</button> }
               </div>
@@ -163,7 +163,8 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
     :host ::ng-deep .proposal.dash app-report-view section.card > h2 { display: block; font-size: 15px; margin: 0 0 8px; }
     :host ::ng-deep .proposal.doc app-report-view section.card > h2 { display: block; font-size: 15px; margin: 8px 0; }
     .choices { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; max-width: 80ch; }
-    .choices legend { font-weight: 600; padding: 0 4px; } .choices button { text-align: left; }
+    .choices legend { font-weight: 600; padding: 0 4px; } .choices button { text-align: left; overflow-wrap: anywhere; max-width: 100%; }
+    .choices { min-inline-size: 0; } .choices button.picked { border-color: var(--accent); font-weight: 600; }
     .examples { display: flex; flex-wrap: wrap; gap: 8px; } .examples button { text-align: left; }
     .intro p { margin-top: 0; max-width: 80ch; }
     .ask { display: flex; gap: 8px; align-items: end; }
@@ -217,6 +218,12 @@ export class Assistant {
     if (key.shiftKey || key.isComposing) return; // Eingabe mit IME: Enter bestätigt nur das Zeichen
     event.preventDefault();
     this.ask(this.draft);
+  }
+
+  /** Antwort auf eine Rückfrage; der Fokus geht ins Eingabefeld, weil die Knöpfe danach ruhen */
+  protected choose(option: string): void {
+    this.ask(option);
+    document.getElementById('question')?.focus();
   }
 
   protected ask(text: string): void {

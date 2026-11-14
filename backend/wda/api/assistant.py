@@ -37,6 +37,8 @@ class Message(BaseModel):
     # was der Assistent in dieser Antwort vorgeschlagen hat (Name und Definition), damit er
     # sich in der nächsten Runde darauf beziehen kann
     memo: Annotated[StrictStr, Field(max_length=MAX_MEMO)] | None = None
+    # die Rückfrage dieser Antwort mit ihren Auswahlmöglichkeiten
+    asked: Annotated[StrictStr, Field(max_length=800)] | None = None
 
 
 class Attached(BaseModel):
@@ -147,6 +149,8 @@ async def chat(body: ChatIn, request: Request) -> Any:
         text = message.content
         if message.role == "assistant" and message.memo:
             text += "\n\n[Dem Nutzer gezeigte Vorschläge: " + message.memo + "]"
+        if message.role == "assistant" and message.asked:
+            text += "\n\n[Rückfrage an den Nutzer: " + " ".join(message.asked.split()) + "]"
         history.append({"role": message.role, "content": text})
     if body.document is not None:
         name = " ".join(_NAME.sub(" ", body.document.name).split())[:80] or "Datei"

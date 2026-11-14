@@ -117,6 +117,12 @@ def _text(value: Any, limit: int = 200) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
+def _plain(value: Any, limit: int = 200) -> str:
+    """Wie _text, ohne Steuer- und Richtungszeichen."""
+    return _text("".join(c for c in str(value or "")
+                         if c.isspace() or unicodedata.category(c) not in ("Cc", "Cf")), limit)
+
+
 def _norm(text: str) -> str:
     return text.casefold().strip()
 
@@ -393,11 +399,14 @@ class Toolbox:
                            "Dashboard erst, wenn er selbst auf „Dashboard anlegen“ klickt."}
 
     async def _ask_choice(self, args: dict[str, Any]) -> Any:
-        question = _text(args.get("question"), 300)
+        asked = args.get("question")
+        question = _plain(asked, 300) if isinstance(asked, str) else ""
         raw = args.get("options")
-        options = list(dict.fromkeys(
-            _text(o, 80) for o in (raw if isinstance(raw, list) else [])
-            if isinstance(o, str) and o.strip()))[:4]
+        seen: dict[str, str] = {}
+        for option in raw if isinstance(raw, list) else []:
+            if isinstance(option, str) and _plain(option, 80):
+                seen.setdefault(_plain(option, 80).casefold(), _plain(option, 80))
+        options = list(seen.values())[:4]
         if not question or len(options) < 2:
             raise QueryError("ask_choice braucht eine Frage und zwei bis vier Antworten.")
         if self._asked:

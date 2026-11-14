@@ -27,3 +27,23 @@
 3. Selbstprüfung und `ask_choice` (`llm/assistant.py`, `llm/tools.py`, `tests/test_llm.py`), Leitfaden.
 4. Knöpfe im Chat (`assistant/assistant.ts`, `chat.ts`), Durchstich.
 5. README, Review, Befunde, Liveprobe.
+
+## Stand nach Review
+
+Ein unabhängiges Review fand keine kritischen, vier wichtige und neun kleinere Befunde. Behoben:
+
+- Die Themenanalyse rechnet wieder mit dem Namen ohne Zusatz („Mathematik“ statt „Mathematik
+  (Schule)“); das Umbenennen ändert keine Themen mehr. Dasselbe gilt für die Wertesuche.
+- Die Selbstprüfung übernimmt nur noch einen berichtigten Text: alles, was mit OK beginnt, ein
+  Kommentar zum Text, ein viel kürzerer Text oder einer mit neuen Zahlen lässt die Antwort stehen.
+  Sie ist auf 45 Sekunden begrenzt.
+- Die Fakten für die Prüfung werden je Vorschlag zeilenweise gekürzt und als gekürzt markiert, die
+  Summenzeile zählt nicht als Zeile, Namen aus dem Repositorium sind einzeilig und als Daten
+  gekennzeichnet.
+- Die Rückfrage mit ihren Antworten bleibt im Gesprächsverlauf.
+- Der Leitfaden nennt die Namen so, wie die Wertesuche sie liefert.
+- Rückfrage ohne Text des Modells zeigt „Bitte wähle eine der Antworten.“; die allgemeinen
+  Folgefragen entfallen dann; die gewählte Antwort ist markiert, der Fokus geht ins Eingabefeld,
+  lange Antworten brechen um. Frage und Antworten werden strenger geprüft.
+- Unterscheidung gleichnamiger Werte: längster Anfang gewinnt, nie zweimal derselbe Name, kein
+  Zusammenstoß mit vorhandenen Namen, lineare Laufzeit.

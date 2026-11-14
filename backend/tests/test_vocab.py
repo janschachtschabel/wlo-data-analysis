@@ -292,9 +292,46 @@ def test_same_named_values_of_two_vocabularies_get_told_apart(tmp_path):
             "Mathematik (Schule)", "Mathematik (Hochschule, Mathematik, Naturwissenschaften)",
             "Mathematik (Hochschule, n105)"}
         # „Sport“ gibt es zweimal im selben Vokabular: dort hilft kein Zusatz der Herkunft
-        assert await store.label("ccm:taxonid", DISC + "900") in ("Sport (Schule)", "Sport")
+        assert await store.label("ccm:taxonid", DISC + "900") == "Sport"
+        # ohne Zusatz für Themen und Suche
+        assert await store.plain("ccm:taxonid", DISC + "380") == "Mathematik"
+        assert await store.plain("ccm:taxonid", hsf + "n4") == "Mathematik, Naturwissenschaften"
 
     run(scenario())
+
+
+def _told(names, values):
+    from types import SimpleNamespace
+
+    from wda.edusharing.vocab import VocabValue
+    store = VocabStore.__new__(VocabStore)
+    store._client = SimpleNamespace(instance=SimpleNamespace(vocab_names=names))
+    return [v.caption for v in store._told_apart(tuple(VocabValue(*v) for v in values))]
+
+
+def test_telling_apart_at_the_edges():
+    # der längste Anfang gewinnt, gleich in welcher Reihenfolge die Namen stehen
+    for names in ({"http://v/": "Alle", "http://v/a/": "A"},
+                  {"http://v/a/": "A", "http://v/": "Alle"}):
+        assert _told(names, [("http://v/a/1", "M"), ("http://v/b/1", "M")]) == ["M (A)", "M (Alle)"]
+    names = {"http://a/": "A", "http://b/": "B"}
+    # gleiche Enden der Kennung: dann die ganze Kennung, nie zweimal derselbe Name
+    out = _told(names, [("http://a/x/1", "M"), ("http://a/y/1", "M"), ("http://b/1", "M")])
+    assert len(set(out)) == 3 and out[2] == "M (B)"
+    # ein Wert, der schon so heißt wie der neue Name, bleibt eindeutig
+    out = _told(names, [("http://a/1", "M"), ("http://b/1", "M"), ("http://a/2", "M (A)")])
+    assert len(set(out)) == 3 and out[2] == "M (A)"
+    # ein Wert ohne benanntes Vokabular bleibt, wie er heißt
+    assert _told(names, [("http://a/1", "M"), ("http://c/1", "M")]) == ["M (A)", "M"]
+
+
+def test_telling_apart_stays_fast_with_many_same_named_values():
+    import time
+    names = {"http://a/": "A", "http://b/": "B"}
+    values = [(f"http://{'ab'[n % 2]}/{n}", "M") for n in range(5000)]
+    started = time.monotonic()
+    assert len(set(_told(names, values))) == 5000
+    assert time.monotonic() - started < 2
 
 
 def test_instances_name_their_vocabularies():

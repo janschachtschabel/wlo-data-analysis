@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,11 @@ class VocabValue:
     id: str
     caption: str
     parent: str | None = None
+    plain: str | None = None   # Name ohne den Zusatz des Vokabulars, falls einer dazukam
+
+    @property
+    def bare(self) -> str:
+        return self.plain if self.plain is not None else self.caption
 
 
 @dataclass(frozen=True)
@@ -166,6 +172,12 @@ class VocabStore:
             return known.caption
         return value if value.strip() else EMPTY_LABEL
 
+    async def plain(self, property: str, value: str) -> str:
+        """Der Name ohne Zusatz des Vokabulars: „Mathematik“ statt „Mathematik (Schule)“."""
+        await self.fields()
+        known = self._by_id.get(property, {}).get(value)
+        return known.bare if known else await self.label(property, value)
+
     async def check_facet(self, property: str) -> None:
         """Erlaubt Facetten nur auf Feldern mit Werteliste oder aus der Freigabeliste der
         Instanz. Eine Facette über Titel oder URL wäre eine Liste einzelner Datensätze."""
@@ -252,35 +264,46 @@ class VocabStore:
         if not names:
             return values
 
+        prefixes = sorted(names, key=len, reverse=True)   # der längste Anfang gewinnt
+
         def origin(value: VocabValue) -> str | None:
-            return next((name for prefix, name in names.items()
+            return next((names[prefix] for prefix in prefixes
                          if value.id.startswith(prefix)), None)
 
-        same: dict[str, list[VocabValue]] = {}
+        same: dict[str, list[tuple[VocabValue, str | None]]] = {}
         for value in values:
-            same.setdefault(_norm(value.caption), []).append(value)
+            same.setdefault(_norm(value.caption), []).append((value, origin(value)))
         by_id = {v.id: v for v in values}
         out: dict[str, str] = {}
         for group in same.values():
-            if len({origin(v) for v in group}) < 2:
+            origins = Counter(name for _, name in group)
+            if len(origins) < 2:
                 continue  # nur ein Vokabular: der Zusatz würde nichts unterscheiden
-            taken: set[str] = set()
-            for value in group:
-                name = origin(value)
+            wanted: dict[str, str] = {}
+            for value, name in group:
                 if name is None:
                     continue
-                caption = f"{value.caption} ({name})"
-                if sum(1 for v in group if origin(v) == name) > 1:
-                    parent = by_id.get(value.parent) if value.parent else None
-                    tail = value.id.rstrip("/").rsplit("/", 1)[-1]
-                    more = parent.caption if parent and _norm(parent.caption) != _norm(
-                        value.caption) else tail
-                    caption = f"{value.caption} ({name}, {more})"
-                    if caption in taken:
-                        caption = f"{value.caption} ({name}, {tail})"
-                taken.add(caption)
-                out[value.id] = caption
-        return tuple(VocabValue(v.id, out.get(v.id, v.caption), v.parent) for v in values)
+                if origins[name] == 1:
+                    wanted[value.id] = f"{value.caption} ({name})"
+                    continue
+                parent = by_id.get(value.parent) if value.parent else None
+                more = parent.caption if parent and _norm(parent.caption) != _norm(
+                    value.caption) else value.id.rstrip("/").rsplit("/", 1)[-1]
+                wanted[value.id] = f"{value.caption} ({name}, {more})"
+            # was danach noch gleich heißt oder einem vorhandenen Namen gleicht, bekommt
+            # das Ende seiner Kennung, zuletzt die ganze Kennung
+            for attempt in (1, 2):
+                seen = Counter(_norm(caption) for caption in wanted.values())
+                for value, name in group:
+                    caption = wanted.get(value.id)
+                    if caption is None or (seen[_norm(caption)] == 1
+                                           and _norm(caption) not in same):
+                        continue
+                    tail = value.id.rstrip("/").rsplit("/", 1)[-1] if attempt == 1 else value.id
+                    wanted[value.id] = f"{value.caption} ({name}, {tail})"
+            out.update(wanted)
+        return tuple(VocabValue(v.id, out[v.id], v.parent, v.caption) if v.id in out else v
+                     for v in values)
 
     def _read_copy(self) -> tuple[list[dict[str, Any]], float] | None:
         inst = self._client.instance

@@ -108,8 +108,8 @@ async def vocabulary(
     values = list(field.values)
     needle = _norm(q)
     if needle:
-        values = [v for v in values if needle in _norm(v.caption) or needle in v.id.casefold()]
-        values.sort(key=lambda v: (not _norm(v.caption).startswith(needle), len(v.caption)))
+        values = [v for v in values if needle in _norm(v.bare) or needle in v.id.casefold()]
+        values.sort(key=lambda v: (not _norm(v.bare).startswith(needle), len(v.bare)))
     return {
         "property": field.property,
         "caption": field.caption,

@@ -254,3 +254,36 @@ def test_a_channels_set_of_keywords_is_recounted_and_removed(tmp_path):
         query["topics"]["stopwords"] = False
         raw = {t["label"].casefold() for t in cell(ask(client, **query).json(), "Mathematik")[1]}
         assert "kanalthema" in raw
+
+
+def test_a_vocabulary_suffix_on_the_row_name_changes_no_topics(tmp_path, monkeypatch):
+    """„Mathematik (Schule)“ heißt als Schlagwort weiter „Mathematik“ und ist kein Thema."""
+    import copy
+
+    from tests import esdata
+
+    def topics_of(sub):
+        settings = Settings(admin_password=PASSWORD, cookie_secure=False, data_dir=tmp_path / sub,
+                            instances=json.dumps([]))
+        own = docs()
+        for doc in own:  # jedes Material nennt beide Fächer auch als Schlagwort
+            doc[KEY] = [*doc.get(KEY, []), "Mathematik", "Deutsch", "Schule"]
+        with TestClient(create_app(settings, transport=DataRepo(own).transport())) as client:
+            assert client.post("/api/auth/login", json={"password": PASSWORD}).status_code == 204
+            out = ask(client, rows={"property": TAX, "include": [
+                SUBJECTS["Mathematik"], SUBJECTS["Deutsch"]]},
+                topics={"property": KEY, "rank": "frequent", "stopwords": False, "top": 8})
+            assert out.status_code == 200, out.text
+            return [(row["label"], [t["label"] for t in row["topics"][0]])
+                    for row in out.json()["rows"]]
+
+    plain = topics_of("a")
+    mds = copy.deepcopy(esdata.MDS)
+    widget = next(w for w in mds["widgets"] if w["id"] == TAX)
+    hsf = "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/"
+    widget["values"] = [*widget["values"], {"id": hsf + "n37", "caption": "Mathematik"}]
+    monkeypatch.setattr(esdata, "MDS", mds)
+    named = topics_of("b")
+    assert [label for label, _ in named] == ["Mathematik (Schule)", "Deutsch"]
+    assert [topics for _, topics in named] == [topics for _, topics in plain]
+    assert all("Mathematik" not in topics for _, topics in named)

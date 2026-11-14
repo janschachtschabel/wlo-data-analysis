@@ -81,9 +81,10 @@ export class Chat {
     const question = text.trim().slice(0, MAX_TEXT);
     const instance = this.instances.current();
     if (!question || this.busy() || !instance) return;
-    const history = this.turns().filter((t) => !t.error && (t.role === 'user' || t.text)).slice(-MAX_TURNS).map((t) => ({
+    const history = this.turns().filter((t) => !t.error && (t.role === 'user' || t.text || t.choices)).slice(-MAX_TURNS).map((t) => ({
       role: t.role, content: t.text.slice(0, MAX_TEXT),
       ...(t.role === 'assistant' && t.proposals.length ? { memo: memo(t.proposals) } : {}),
+      ...(t.role === 'assistant' && t.choices ? { asked: `${t.choices.question} Antworten: ${t.choices.options.join(' / ')}`.slice(0, 800) } : {}),
     }));
     // die Vorlage bleibt angehängt, bis die Anfrage wirklich angekommen ist
     const template = this.template();

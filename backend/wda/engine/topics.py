@@ -209,7 +209,7 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                 continue
             for value in listed.values:
                 blocked.add(norm(value.value))
-                blocked.add(norm(await vocab.label(name, value.value)))
+                blocked.add(norm(await vocab.plain(name, value.value)))
         blocked.discard("")
     typical = topics.rank == "typical"
     baseline: dict[str, tuple[str, int]] = {}
@@ -244,13 +244,17 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
         raise broken
     column_names = [_names(c.label) if spec.columns else set() for c in columns]
     # andere Fächer und Stufen als Schlagwort sind ebenfalls keine Themen
-    blocked |= {norm(row.label) for row in rows}
+    # ohne den Zusatz des Vokabulars: „Mathematik (Schule)“ heißt als Schlagwort „Mathematik“
+    bare = {row.key: await vocab.plain(row_prop, row.key) if row.kind == "value" else row.label
+            for row in rows}
+    blocked |= {norm(name) for name in bare.values()}
     if spec.columns:
         blocked |= {norm(c.label) for c in columns}
     merged_any = False
     blocks_any = False
     known = {v.id for v in field.values} if field is not None and not free else set()
     labels = {v.id: v.caption for v in field.values} if field is not None and not free else {}
+    plains = {v.id: v.bare for v in field.values} if field is not None and not free else {}
     banned: set[str] = set()   # Schlüssel aus nachgezählten Sätzen einzelner Kanäle
 
     def assemble() -> tuple[list[dict[str, Any]], list[tuple[int, str, str]]]:
@@ -260,7 +264,7 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
         out_rows: list[dict[str, Any]] = []
         seeds: list[tuple[int, str, str]] = []
         for r, row in enumerate(rows):
-            row_names = _names(row.label)
+            row_names = _names(bare[row.key])
             values: list[int | None] = []
             cells: list[list[dict[str, Any]]] = []
             for c, _column in enumerate(columns):
@@ -275,7 +279,7 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                     merged = _merge(found)
                     merged_any = merged_any or len(merged) < len(found)
                     names = row_names | column_names[c]
-                    whole = (norm(row.label), *((norm(_column.label),) if spec.columns else ()))
+                    whole = (norm(bare[row.key]), *((norm(_column.label),) if spec.columns else ()))
                     boilerplate = _blocks([(key, count) for key, (_, count, _) in merged.items()],
                                           answer.total) if topics.stopwords else set()
                     raws: dict[str, tuple[str, int]] = {}
@@ -293,8 +297,8 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                 else:
                     # nur Werte, die das Vokabular kennt, und nicht den Namen der Zeile selbst
                     items = [(value, value, count, count) for value, count in found
-                             if value in known and norm(labels[value]) not in row_names
-                             and norm(labels[value]) != norm(row.label)]
+                             if value in known and norm(plains[value]) not in row_names
+                             and norm(plains[value]) != norm(bare[row.key])]
                 ranked = []
                 for key, label, count, best in items:
                     if best < MIN_COUNT:
