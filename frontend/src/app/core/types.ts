@@ -44,7 +44,8 @@ export interface Instance {
   repository?: string; metadataset?: string; query?: string; facet_fields?: string[];
   source?: 'preset' | 'config' | 'stored'; overridden?: boolean;
 }
-export interface FieldInfo { property: string; caption: string; type: string; value_count: number }
+/** `facet`: lässt sich aufschlüsseln, auch ohne Werteliste (Quelle, Bezugsquelle) */
+export interface FieldInfo { property: string; caption: string; type: string; value_count: number; facet?: boolean }
 export interface VocabValue { id: string; caption: string; parent?: string | null }
 export interface VocabPage { property: string; caption: string; total: number; values: VocabValue[] }
 export interface FillInfo { show: FillShow; by_rows: boolean }

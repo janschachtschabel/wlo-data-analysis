@@ -22,7 +22,8 @@ import { ResultTable } from '../shared/result-table';
             }
             @case ('failure') {
               <h2>{{ block.title }}</h2>
-              <p class="error" role="alert">{{ block.detail }}</p>
+              @if (block.detail.startsWith('Entfällt im gewählten Kontext')) { <p class="muted" role="status">{{ block.detail }}</p> }
+              @else { <p class="error" role="alert">{{ block.detail }}</p> }
             }
             @case ('table') {
               <h2>{{ block.title }}</h2>

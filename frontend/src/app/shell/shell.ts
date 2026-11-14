@@ -15,9 +15,9 @@ import { Instances } from '../core/instances';
     <header [attr.inert]="auth.expired() ? '' : null">
       <strong>WLO-Daten</strong>
       <nav aria-label="Hauptnavigation">
-        <a routerLink="/" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">Explorer</a>
-        <a routerLink="/qualitaet" routerLinkActive="on">Qualität</a>
         <a routerLink="/assistent" routerLinkActive="on">Assistent</a>
+        <a routerLink="/explorer" routerLinkActive="on">Explorer</a>
+        <a routerLink="/qualitaet" routerLinkActive="on">Qualität</a>
         <a routerLink="/bibliothek" routerLinkActive="on">Bibliothek</a>
         <a routerLink="/laeufe" routerLinkActive="on">Läufe</a>
         <a routerLink="/instanzen" routerLinkActive="on">Instanzen</a>
@@ -90,7 +90,7 @@ export class Shell {
   private readonly router = inject(Router);
   private readonly leave = inject(Leave);
   private readonly chat = inject(Chat);
-  protected readonly chatOpen = signal(false);
+  protected readonly chatOpen = this.chat.open;
   protected readonly onAssistant = signal(false);
   /** der Kopf bricht bei schmalem Fenster um; das Chatfenster beginnt darunter */
   protected readonly headHeight = signal(49);

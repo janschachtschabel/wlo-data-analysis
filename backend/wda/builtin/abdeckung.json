@@ -17,7 +17,7 @@
    "id": "builtin-abdeckung",
    "kind": "dashboard",
    "name": "Abdeckung",
-   "description": "Heatmaps der Abdeckung. Je dunkler, desto mehr Materialien; schraffiert bedeutet kein einziges Material. Ein Material mit mehreren Fächern oder Stufen zählt in jeder zutreffenden Zelle. Gemessen an WLO Produktion.",
+   "description": "Heatmaps der Abdeckung. Je dunkler, desto mehr Materialien; rötlich hinterlegt bedeutet kein einziges Material. Ein Material mit mehreren Fächern oder Stufen zählt in jeder zutreffenden Zelle. Gemessen an WLO Produktion.",
    "group_id": "builtin-berichte",
    "spec": {
     "instance": "wlo-prod",

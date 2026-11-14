@@ -185,7 +185,7 @@ export class Library {
       // Gespeicherte Filter gehören zur Kennzahl, stehen aber nicht in ihrer Abfrage: Der Explorer
       // würde ohne sie zählen. Solche Kennzahlen zeigt die Ansicht, die sie vollständig auswertet.
       if (full.spec.filter_ids?.length) { await this.router.navigate(['/ansicht', item.id]); return; }
-      await this.router.navigate(['/'], { queryParams: { q: encodeState({ spec: full.spec.query, view: full.spec.view?.type ?? 'table' }) } });
+      await this.router.navigate(['/explorer'], { queryParams: { q: encodeState({ spec: full.spec.query, view: full.spec.view?.type ?? 'table' }) } });
     } catch (error) { this.fail(error, 'Kennzahl nicht ladbar.'); }
   }
 

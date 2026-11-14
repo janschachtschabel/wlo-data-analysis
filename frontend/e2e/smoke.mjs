@@ -27,7 +27,7 @@ await page.click('button[type=submit]');
 await page.waitForURL(/\/bibliothek$/);
 
 // Explorer: Filter aus Feld und Wert, Aufschlüsselung, Grafik, Zustand in der Adresse
-await page.goto(base + '/');
+await page.goto(base + '/explorer');
 await page.waitForSelector('.big');
 const total = await page.textContent('.big');
 // Startansicht: unter der Gesamtzahl stehen die Füllgrade der wichtigsten Felder
@@ -79,7 +79,7 @@ await page.goto(base + '/?q=kaputt!!');
 await page.waitForSelector('.notice:has-text("startet leer")');
 
 // Füllgrade: je Feld mit und ohne Wert, gestapelt, je Fach, Zustand in der Adresse
-await page.goto(base + '/');
+await page.goto(base + '/explorer');
 await page.waitForSelector('.big');
 await page.click('.views button:has-text("Füllgrade")');
 await page.waitForSelector('app-result-table th:has-text("Füllgrad")');
@@ -97,7 +97,7 @@ await page.waitForSelector('app-result-table th:has-text("Anzahl")');
 await page.selectOption('select[name=show]', 'missing');
 await page.waitForFunction(() => /ohne Wert/.test(document.querySelector('app-result-table')?.textContent ?? ''));
 const fillLink = page.url();
-await page.goto(base + '/');
+await page.goto(base + '/explorer');
 await page.waitForSelector('.big');
 await page.goto(fillLink);
 await page.waitForSelector('select[name=show]');
@@ -185,7 +185,7 @@ await page.waitForURL(/\/bearbeiten\//);
 await page.waitForSelector('app-spec-form');
 for (let n = 0; n < 2; n++) {
   await page.locator('select[name=add-metric]').selectOption({ index: 1 });
-  await page.click('text=Kachel hinzufügen');
+  await page.click('button:has-text("Kachel hinzufügen")');
 }
 await page.waitForFunction(() => document.querySelectorAll('app-spec-form .item').length === 2);
 await page.locator('select[name=w-k2]').selectOption({ label: 'ganze Breite' });
@@ -200,6 +200,16 @@ assert.deepEqual(built.tiles.map((t) => [t.id, t.layout.x, t.layout.y, t.layout.
 await page.click('button:has-text("Vorschau")');
 await page.waitForSelector('app-report-view h2:has-text("Zweite Kachel")');
 await page.fill('input[name=name]', 'Probe-Dashboard');
+await page.click('form.form > .row button[type=submit]');
+await page.waitForSelector('text=Gespeichert.');
+// Hilfe im Baukasten; der Assistent schlägt Kacheln vor, ein Klick übernimmt sie hierher
+await page.waitForSelector('app-spec-form .help summary:has-text("So entsteht ein Dashboard")');
+await page.fill('input[name=description]', 'zeigt Fächer gegen Bildungsstufen');
+await page.click('button:has-text("Vom Assistenten vorschlagen lassen")');
+await page.click('#chat-dock .proposal button:has-text("übernehmen")', { timeout: 30000 });
+await page.waitForFunction(() => document.querySelectorAll('app-spec-form .item').length > 2);
+await page.click('#chat-dock button:has-text("Neu beginnen")');
+await page.click('#chat-dock button:has-text("Schließen")');
 await page.click('form.form > .row button[type=submit]');
 await page.waitForSelector('text=Gespeichert.');
 await page.click('a:has-text("Ansehen")');

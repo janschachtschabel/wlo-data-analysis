@@ -83,10 +83,12 @@ async def about(instance_id: str, request: Request) -> dict[str, Any]:
 
 @router.get("/fields")
 async def fields(instance_id: str, request: Request) -> list[dict[str, Any]]:
-    _, vocab = _services(request, instance_id)
+    client, vocab = _services(request, instance_id)
+    # facet: lässt sich zählen und aufschlüsseln, auch ohne Werteliste (Quelle, Bezugsquelle)
+    free = set(client.instance.facet_fields)
     return [
         {"property": f.property, "caption": f.caption, "type": f.type,
-         "value_count": len(f.values)}
+         "value_count": len(f.values), "facet": bool(f.values) or f.property in free}
         for f in (await vocab.fields()).values()
     ]
 

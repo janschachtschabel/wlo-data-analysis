@@ -84,3 +84,47 @@ def test_the_report_names_the_scope(api):
     run = api.post(f"/api/definitions/{m['id']}/run",
                    json={"save": False, "report": True, "scope": scope}).json()
     assert run["report"]["scope"] == scope
+
+
+def test_rows_on_the_scope_field_drop_missing_and_other(api):
+    d = make(api, "dashboard", "D", {"tiles": [
+        tile("je", {"instance": "wlo-prod", "rows": {
+            "property": SRC, "top": 2, "missing": True, "other": True}})]})
+    scope = [{"property": SRC, "values": [{"value": SOURCES[0], "literal": True}]}]
+    run = api.post(f"/api/definitions/{d['id']}/run", json={"save": False, "scope": scope}).json()
+    result = run["results"][0]
+    assert result["error"] is None, result["error"]
+    assert [r["key"] for r in result["result"]["rows"] if r["kind"] == "value"] == [SOURCES[0]]
+    assert not [r for r in result["result"]["rows"] if r["kind"] in ("missing", "other")]
+
+
+def test_the_builtin_dashboards_work_in_the_context_of_a_source(api):
+    """Kacheln, die nach dem Feld des Kontexts aufschlüsseln, zeigen den gewählten Wert."""
+    pub = "ccm:oeh_publisher_combined"
+    first = api.post("/api/query", json={"instance": "wlo-prod", "rows": {
+        "property": pub, "top": 1}}).json()["rows"][0]
+    for bundle in ("datenqualitaet", "abdeckung", "datenprobleme", "quellen"):
+        assert api.post(f"/api/builtin/{bundle}/install").status_code == 200
+        base = api.post(f"/api/definitions/builtin-{bundle}/run", json={"save": False}).json()
+        broken = {r["key"] for r in base["results"] if r["error"]}
+        for prop, value in ((SRC, SOURCES[0]), (pub, first["key"])):
+            scope = [{"property": prop, "values": [{"value": value, "literal": True}]}]
+            run = api.post(f"/api/definitions/builtin-{bundle}/run",
+                           json={"save": False, "scope": scope}).json()
+            errors = {r["key"]: r["error"]["detail"] for r in run["results"]
+                      if r["error"] and r["key"] not in broken}
+            # allein die Größenklassen des Kontextfeldes entfallen, mit klarem Satz
+            assert all("Entfällt im gewählten Kontext" in text for text in errors.values()), (
+                bundle, prop, errors)
+
+
+def test_rows_on_the_scope_field_count_the_chosen_value(api):
+    d = make(api, "dashboard", "D", {"tiles": [
+        tile("je", {"instance": "wlo-prod", "rows": {"property": SRC, "top": 2}}),
+        tile("alle", {"instance": "wlo-prod", "rows": {"property": TAX}})]})
+    scope = [{"property": SRC, "values": [{"value": SOURCES[1], "literal": True}]}]
+    run = api.post(f"/api/definitions/{d['id']}/run", json={"save": False, "scope": scope}).json()
+    by = {r["key"]: r["result"] for r in run["results"]}
+    rows = [r for r in by["je"]["rows"] if r["kind"] == "value"]
+    assert [r["key"] for r in rows] == [SOURCES[1]]
+    assert rows[0]["values"][0] == by["alle"]["columns"][0]["total"]

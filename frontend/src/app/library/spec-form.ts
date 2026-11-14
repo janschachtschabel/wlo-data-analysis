@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Api } from '../core/api';
 import { Definition, Instance } from '../core/types';
 import { SectionSpec, TileSpec, WIDTHS, flowLayout, freeId, move } from './spec-edit';
 
@@ -99,6 +100,35 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
     </ol>
 
     @if (!broken()) {
+    <details class="help" [open]="!items().length">
+      <summary>So entsteht {{ kind() === 'dashboard' ? 'ein Dashboard' : 'ein Template' }}</summary>
+      <ol>
+        <li><strong>Fertige Auswertung übernehmen:</strong> unten eine vorhandene Auswertung wählen (zum Beispiel „Abdeckung“) und daraus eine {{ kind() === 'dashboard' ? 'Kachel' : 'Tabelle oder Grafik' }} hinzufügen.</li>
+        <li><strong>Eigene Kennzahl:</strong> im Explorer filtern und aufschlüsseln, „Als Kennzahl speichern“, dann hier einsetzen.</li>
+        <li><strong>Den Assistenten bauen lassen:</strong> oben beschreiben, was die Seite zeigen soll, dann „Vom Assistenten vorschlagen lassen“. Den Vorschlag übernimmst du im Chatfenster mit einem Klick hierher.</li>
+      </ol>
+      <p class="muted small">Ordnen durch Ziehen oder mit den Pfeilen. Nichts ist gespeichert, bevor du unten „Speichern“ drückst; „Vorschau“ zeigt das Ergebnis vorher.</p>
+    </details>
+    <div class="row add">
+      <button type="button" class="primary" (click)="assistant.emit()">Vom Assistenten vorschlagen lassen</button>
+      @if (sources().length) {
+        <label>Aus einer vorhandenen Auswertung
+          <select name="add-source" [ngModel]="source()" (ngModelChange)="pickSource($event)">
+            <option value="">– Auswertung wählen –</option>
+            @for (d of sources(); track d.id) { <option [value]="d.id">{{ d.name }}</option> }
+          </select>
+        </label>
+        @if (source()) {
+          <label class="grow">{{ kind() === 'dashboard' ? 'Kachel' : 'Tabelle oder Grafik' }}
+            <select name="add-tile" [ngModel]="tile()" (ngModelChange)="tile.set($event)" [disabled]="!sourceTiles().length">
+              <option value="">{{ sourceTiles().length ? '– wählen –' : 'wird geladen …' }}</option>
+              @for (t of sourceTiles(); track t.id) { <option [value]="t.id">{{ t.title }}</option> }
+            </select>
+          </label>
+          <button type="button" (click)="addFromSource()" [disabled]="!tile()">Hinzufügen</button>
+        }
+      }
+    </div>
     <div class="row add">
       @if (metrics().length) {
         <label>{{ kind() === 'dashboard' ? 'Kachel' : 'Tabelle oder Grafik' }} aus Kennzahl
@@ -135,6 +165,8 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
     .tag { align-self: center; font-size: 12px; font-weight: 600; background: var(--surface); border-radius: 10px; padding: 1px 8px; }
     .tools { display: flex; gap: 4px; } .tools button { padding: 3px 8px; }
     .empty { padding: 8px 0; } .add { align-items: flex-end; }
+    .help { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; background: var(--surface-2); }
+    .help summary { cursor: pointer; font-weight: 600; } .help ol { margin: 8px 0; padding-left: 20px; display: grid; gap: 4px; } .help p { margin: 0; }
   `,
 })
 export class SpecForm {
@@ -144,6 +176,14 @@ export class SpecForm {
   readonly filters = input<Definition[]>([]);
   readonly instances = input<Instance[]>([]);
   readonly changed = output<Record<string, any>>();
+  /** der Assistent soll einen Vorschlag machen */
+  readonly assistant = output<void>();
+  /** vorhandene Dashboards, aus denen sich Kacheln übernehmen lassen */
+  readonly sources = input<Definition[]>([]);
+  private readonly api = inject(Api);
+  protected readonly source = signal('');
+  protected readonly tile = signal('');
+  protected readonly sourceTiles = signal<any[]>([]);
 
   protected readonly views = VIEW_LABELS;
   protected readonly widths = WIDTHS;
@@ -238,6 +278,38 @@ export class SpecForm {
       : { id: freeId(ids, 'a'), type, title: metric.name, metric_id: metric.id, ...(type === 'chart' ? { view: { type: 'bar' } } : {}) };
     this.setItems([...this.items(), item]);
     this.adding.set('');
+  }
+
+  protected pickSource(id: string): void {
+    this.source.set(id);
+    this.tile.set('');
+    this.sourceTiles.set([]);
+    if (!id) return;
+    this.api.get<Definition>('/definitions/' + encodeURIComponent(id)).then((def) => {
+      if (this.source() !== id) return;
+      this.sourceTiles.set((def.spec?.tiles ?? []).filter((t: any) => t && (t.query || t.metric_id)));
+    }, () => undefined);
+  }
+
+  protected addFromSource(): void {
+    const found = this.sourceTiles().find((t) => t.id === this.tile());
+    if (found) this.addItems([found]);
+    this.tile.set('');
+  }
+
+  /** Fügt fertige Kacheln hinzu (aus einer anderen Auswertung oder vom Assistenten). */
+  addItems(tiles: { title: string; query?: unknown; metric_id?: string; view?: { type?: string } | null }[]): void {
+    const ids = this.items().map((item) => item.id as string);
+    const added = tiles.map((t) => {
+      const id = freeId(ids, this.kind() === 'dashboard' ? 'k' : 'a');
+      ids.push(id);
+      const data = { ...(t.metric_id ? { metric_id: t.metric_id } : { query: t.query }), ...(t.view ? { view: t.view } : {}) };
+      const wide = ['heatmap', 'table', 'stacked_bar'].includes(t.view?.type ?? 'table');
+      return this.kind() === 'dashboard'
+        ? { id, title: t.title, ...data, layout: { x: 0, y: 0, w: wide ? 12 : 6, h: wide ? 8 : 6 } }
+        : { id, type: !t.view?.type || ['table', 'heatmap', 'number'].includes(t.view.type) ? 'table' : 'chart', title: t.title, ...data };
+    });
+    this.setItems([...this.items(), ...added]);
   }
 
   protected addText(): void {

@@ -10,6 +10,9 @@ export interface Turn {
 }
 export interface About { run_id?: string; definition_id?: string; label: string }
 
+export interface Tile { title: string; query?: unknown; metric_id?: string; view?: { type?: string } | null }
+export interface Target { name: string; add(tiles: Tile[]): void }
+
 export const MAX_TEXT = 4000;
 const MAX_MEMO = 3000, MAX_TURNS = 24;
 
@@ -27,6 +30,10 @@ export class Chat {
   /** null: noch nicht bekannt */
   readonly ready = signal<boolean | null>(null);
   readonly context = signal<About | null>(null);
+  /** das Chatfenster neben der Ansicht ist offen */
+  readonly open = signal(false);
+  /** eine geöffnete Bearbeitung, in die sich Vorschläge übernehmen lassen */
+  readonly target = signal<Target | null>(null);
   private controller: AbortController | null = null;
 
   /** ob ein Sprachmodell eingerichtet ist */
@@ -73,6 +80,14 @@ export class Chat {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Übernimmt einen Vorschlag in die gerade geöffnete Bearbeitung. */
+  adopt(proposal: Proposal): void {
+    const tiles: Tile[] = proposal.kind === 'dashboard'
+      ? (proposal.spec.tiles ?? []).map((t: any) => ({ title: t.title, query: t.query, metric_id: t.metric_id, view: t.view }))
+      : [{ title: proposal.name, query: proposal.spec.query, view: proposal.spec.view }];
+    this.target()?.add(tiles);
   }
 
   /** Speichern löst der Admin aus; der Assistent selbst kann nichts anlegen. */

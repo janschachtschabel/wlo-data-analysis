@@ -20,10 +20,10 @@ from ..edusharing.client import EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import UnresolvedValue, VocabStore
 from ..engine.engine import run_query
-from ..engine.spec import Group, QuerySpec, Rows
+from ..engine.spec import MAX_SERIES, Columns, Group, QuerySpec, Rows
 from ..errors import QueryError, UnknownInstance, describe_validation
 from ..external.oersi import OersiClient, notation
-from ..filters import FilterIn
+from ..filters import FilterIn, SinceValue
 from . import points as points_module
 from .db import Database
 from .definitions import Definition, NotFound, fetch, new_id, now_iso
@@ -61,6 +61,48 @@ class Planned:
     query: QuerySpec | None = None
     error: dict[str, Any] | None = None
     external: dict[str, Any] | None = None  # Abruf außerhalb des Repositoriums
+
+
+_DROPPED = ("Entfällt im gewählten Kontext: Diese Auswertung vergleicht alle Werte von "
+            "'{}' miteinander.")
+
+
+def _narrow(query: QuerySpec, scope: list[FilterIn]) -> tuple[QuerySpec, list[FilterIn]]:
+    """Passt eine Abfrage an, die selbst nach dem Feld des Kontexts aufschlüsselt. Die
+    Facette eines Feldes übergeht den Filter auf demselben Feld; deshalb wird der Filter
+    dort zur Auswahl der Zeilen oder Spalten, oder die Auswertung entfällt mit einem Satz."""
+    rest = []
+    for flt in scope:
+        prop = flt.property
+        values = [v for v in flt.values if not isinstance(v, SinceValue)]
+        rows, columns = query.rows, query.columns
+        if query.sizes is not None and query.sizes.property == prop:
+            raise QueryError(_DROPPED.format(prop))
+        if query.profile is not None and query.profile.property == prop:
+            raise QueryError(_DROPPED.format(prop))
+        if query.vocab_check is not None and any(
+                f.property == prop for f in query.vocab_check.fields):
+            fields = [f for f in query.vocab_check.fields if f.property != prop]
+            if not fields:
+                raise QueryError(_DROPPED.format(prop))
+            query = query.model_copy(update={"vocab_check": query.vocab_check.model_copy(
+                update={"fields": fields})})
+        if values and rows is not None and rows.property == prop and query.profile is not None:
+            # je Zeilenwert eine eigene Abfrage: die Auswahl ersetzt den Filter
+            query = query.model_copy(update={"rows": Rows(
+                property=prop, include=values, sort=rows.sort)})
+            continue
+        if values and columns is not None and columns.property == prop:
+            query = query.model_copy(update={"columns": Columns(
+                property=prop, include=values[:MAX_SERIES])})
+            continue
+        if rows is not None and rows.property == prop and (rows.missing or rows.other):
+            # der Filter bleibt (die Summen stimmen); „ohne Wert“ und „Übrige“ gibt es
+            # unter einem einzelnen Wert nicht
+            query = query.model_copy(update={"rows": rows.model_copy(update={
+                "missing": False, "other": False})})
+        rest.append(flt)
+    return query, rest
 
 
 def _error(kind: str, detail: str, **extra: Any) -> dict[str, Any]:
@@ -263,6 +305,7 @@ class Runner:
                             f"Diese Abfrage filtert selbst das Feld '{item.property}' und "
                             "lässt sich deshalb nicht auf den gewählten Kontext einengen.")
                     used[item.property] = "die Abfrage selbst"
+                query, base = _narrow(query, base)
                 for fid in dict.fromkeys(filter_ids):
                     name, flt = stored_filter(fid)
                     if flt.instance and flt.instance != target:

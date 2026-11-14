@@ -68,8 +68,8 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     table.data tr td.h4 { background: color-mix(in srgb, var(--accent) calc(34% * var(--heat-strength, 1)), transparent); }
     table.data tr td.h5 { background: color-mix(in srgb, var(--accent) calc(45% * var(--heat-strength, 1)), transparent); }
     table.data tr td.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
-    /* Lücke: Schraffur statt nur Farbe */
-    table.data tr td.gap { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 22%, transparent) 0 4px, transparent 4px 8px); }
+    /* Lücke: ruhige Fläche in einem zweiten Farbton, die 0 tritt zurück */
+    table.data tr td.gap { background: color-mix(in srgb, var(--danger) 9%, transparent); color: var(--muted); }
     table.data tr td.r-low { background: color-mix(in srgb, var(--danger) 30%, transparent); box-shadow: inset 3px 0 0 var(--danger); }
     table.data tr td.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
     table.data tr td.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
@@ -78,7 +78,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     .key.h1 { background: color-mix(in srgb, var(--accent) 7%, transparent); }
     .key.h3 { background: color-mix(in srgb, var(--accent) 24%, transparent); }
     .key.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
-    .key.gap { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 22%, transparent) 0 4px, transparent 4px 8px); }
+    .key.gap { background: color-mix(in srgb, var(--danger) 16%, transparent); }
     .key.r-low { background: color-mix(in srgb, var(--danger) 30%, transparent); }
     .key.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
     .key.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }

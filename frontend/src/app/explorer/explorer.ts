@@ -18,6 +18,20 @@ const VIEWS: { id: ViewType; label: string }[] = [
   { id: 'line', label: 'Linie' }, { id: 'pie', label: 'Kreis' },
 ];
 
+interface Preset { label: string; hint: string; rows: { property: string; match?: string; rollup?: 'top' }; columns: string }
+const SCHOOL = 'http://w3id.org/openeduhub/vocabs/discipline/';
+const UNI = 'http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/';
+const SOURCE = 'ccm:replicationsource', PUBLISHER = 'ccm:oeh_publisher_combined', LEVEL = 'ccm:educationalcontext', SUBJECT = 'ccm:taxonid';
+/** Was trägt welche Quelle zum Bestand bei? Dazu Fach und Stufe gegeneinander. */
+const PRESETS: Preset[] = [
+  { label: 'Fach × Bildungsstufe', hint: 'Schulfächer gegen Bildungsstufen', rows: { property: SUBJECT, match: SCHOOL }, columns: LEVEL },
+  { label: 'Fach × Quelle', hint: 'Welche Quelle (Crawler) trägt zu welchem Schulfach bei?', rows: { property: SUBJECT, match: SCHOOL }, columns: SOURCE },
+  { label: 'Hochschulfach × Quelle', hint: 'Fächergruppen der Hochschulfächersystematik gegen die Quellen', rows: { property: SUBJECT, match: UNI, rollup: 'top' }, columns: SOURCE },
+  { label: 'Bildungsstufe × Quelle', hint: 'Welche Quelle trägt zu welcher Bildungsstufe bei?', rows: { property: LEVEL }, columns: SOURCE },
+  { label: 'Fach × Bezugsquelle', hint: 'Schulfächer gegen die größten Bezugsquellen', rows: { property: SUBJECT, match: SCHOOL }, columns: PUBLISHER },
+  { label: 'Hochschulfach × Bildungsstufe', hint: 'Fächergruppen der Hochschule gegen Bildungsstufen', rows: { property: SUBJECT, match: UNI, rollup: 'top' }, columns: LEVEL },
+];
+
 @Component({
   selector: 'app-explorer',
   imports: [FormsModule, FilterBar, ResultTable, Chart, RouterLink],
@@ -40,6 +54,12 @@ const VIEWS: { id: ViewType; label: string }[] = [
           @if ((spec().filters ?? []).length) {
             <button type="button" (click)="saving.set('filter')" title="Die gewählten Filter unter einem Namen ablegen: wiederverwendbar hier, in Dashboards und Templates">Diese Filter speichern</button>
           }
+        </div>
+      }
+      @if (presets().length) {
+        <div class="row presets" role="group" aria-label="Schnellansichten">
+          <span class="muted">Schnellansicht:</span>
+          @for (p of presets(); track p.label) { <button type="button" [title]="p.hint" (click)="usePreset(p)">{{ p.label }}</button> }
         </div>
       }
       <div class="row controls">
@@ -218,6 +238,7 @@ const VIEWS: { id: ViewType; label: string }[] = [
   styles: `
     section + section { margin-top: var(--gap); }
     .controls { margin-top: var(--gap); } .stored { margin-top: 8px; align-items: flex-end; }
+    .presets { margin-top: 8px; gap: 6px; } .presets button { border-radius: 999px; padding: 3px 12px; font-size: 13px; }
     .controls label { display: inline-flex; gap: 6px; align-items: center; }
     .save { margin-top: var(--gap); } .wide { width: min(420px, 100%); }
     .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
@@ -395,6 +416,16 @@ export class Explorer {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     this.waiting.set(false);
     void this.result.run((signal) => this.api.post<QueryResult>('/query', spec, signal));
+  }
+
+  /** fertige Kreuztabellen; die Filter bleiben, so wie sie sind */
+  protected readonly presets = computed(() => {
+    const known = new Set(this.facetFields().map((f) => f.property));
+    return PRESETS.filter((p) => known.has(p.rows.property) && known.has(p.columns));
+  });
+  protected usePreset(preset: Preset): void {
+    this.patch({ rows: { top: 40, ...preset.rows }, columns: { property: preset.columns, top: 10 }, fill: null, series: [], percent: 'none' });
+    this.view.set('heatmap');
   }
 
   protected patch(change: Partial<QuerySpec>): void { this.spec.update((spec) => ({ ...spec, ...change })); }

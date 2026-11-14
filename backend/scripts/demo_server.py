@@ -43,7 +43,7 @@ def demo_model(request: httpx.Request) -> httpx.Response:
         return _call("propose_view", {"title": "Fach × Bildungsstufe", "view": "heatmap",
                                       "spec": spec})
     return _say("Hier ist die Ansicht. **Mathematik** ist gut abgedeckt.\n\n"
-                "- Lücken sind schraffiert.")
+                "- Lücken sind rötlich hinterlegt.")
 
 
 def _say(text: str) -> httpx.Response:

@@ -90,14 +90,14 @@ table { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 tr td.h1 { background: #edf3fb; } tr td.h2 { background: #dbe7f7; }
 tr td.h3 { background: #c5d8f2; } tr td.h4 { background: #abc6ec; }
 tr td.h5 { background: #8fb3e5; } tr td.h6 { background: #729fdd; }
-tr td.gap { background: repeating-linear-gradient(135deg, #f3c9c5 0 4px, #fff 4px 8px); }
+tr td.gap { background: #fbeeed; color: #6b7280; }
 tr td.r-low { background: #f2c4c0; border-left: 3px solid #b3261e; }
 tr td.r-mid { background: #f8e7b0; } tr td.r-high { background: #c9e8d5; }
 .legend { font-size: 8pt; color: #444; margin: .2rem 0; }
 .key { display: inline-block; width: 10px; height: 10px; border: 1px solid #999;
        margin: 0 2px 0 8px; vertical-align: middle; }
 .key.h1 { background: #edf3fb; } .key.h3 { background: #c5d8f2; } .key.h6 { background: #729fdd; }
-.key.gap { background: repeating-linear-gradient(135deg, #f3c9c5 0 4px, #fff 4px 8px); }
+.key.gap { background: #f6dcda; }
 .key.r-low { background: #f2c4c0; } .key.r-mid { background: #f8e7b0; }
 .key.r-high { background: #c9e8d5; }
 """

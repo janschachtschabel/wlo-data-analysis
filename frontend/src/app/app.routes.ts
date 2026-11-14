@@ -1,4 +1,5 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Router, Routes } from '@angular/router';
 import { requireLogin, skipLoginWhenSignedIn } from './core/auth';
 
 export const routes: Routes = [
@@ -8,7 +9,10 @@ export const routes: Routes = [
     canActivate: [requireLogin],
     loadComponent: () => import('./shell/shell').then((m) => m.Shell),
     children: [
-      { path: '', pathMatch: 'full', title: 'Explorer – WLO-Daten', loadComponent: () => import('./explorer/explorer').then((m) => m.Explorer) },
+      // Die App beginnt beim Assistenten; alte Links auf den Explorer (/?q=…) gelten weiter.
+      { path: '', pathMatch: 'full', redirectTo: ({ queryParams }) => (queryParams['q']
+          ? inject(Router).createUrlTree(['/explorer'], { queryParams }) : '/assistent') },
+      { path: 'explorer', title: 'Explorer – WLO-Daten', loadComponent: () => import('./explorer/explorer').then((m) => m.Explorer) },
       { path: 'assistent', title: 'Assistent – WLO-Daten', loadComponent: () => import('./assistant/assistant').then((m) => m.Assistant) },
       { path: 'einstellungen', title: 'Einstellungen – WLO-Daten', loadComponent: () => import('./settings/settings-page').then((m) => m.SettingsPage) },
       { path: 'qualitaet', pathMatch: 'full', redirectTo: 'qualitaet/datenqualitaet' },

@@ -49,7 +49,8 @@ def test_fields(api):
     r = api.get("/api/instances/wlo-prod/fields")
     assert r.status_code == 200
     assert r.json()[0] == {"property": "ccm:taxonid", "caption": "Fach",
-                           "type": "multivalueTree", "value_count": 7}
+                           "type": "multivalueTree", "value_count": 7,
+                           "facet": True}
     assert [f["property"] for f in r.json()] == [
         "ccm:taxonid", "ccm:educationalcontext", "ccm:commonlicense_key", "cclom:title"]
 

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError, Latest } from '../core/api';
@@ -7,6 +7,7 @@ import { Definition, Report } from '../core/types';
 import { Instances } from '../core/instances';
 import { Leave } from '../core/leave';
 import { ReportView } from '../runs/report-view';
+import { Chat } from '../assistant/chat';
 import { SpecForm } from './spec-form';
 
 /**
@@ -30,8 +31,8 @@ import { SpecForm } from './spec-form';
         <label>Beschreibung <input name="description" [(ngModel)]="description" maxlength="2000" /></label>
         @if (def.kind === 'dashboard' || def.kind === 'template') {
           @if (parsed(); as spec) {
-            <app-spec-form [kind]="def.kind" [spec]="spec" [metrics]="metrics()" [filters]="filters()"
-                           [instances]="instances.list()" (changed)="fromForm($event)" />
+            <app-spec-form #form [kind]="def.kind" [spec]="spec" [metrics]="metrics()" [filters]="filters()" [sources]="sources()"
+                           [instances]="instances.list()" (changed)="fromForm($event)" (assistant)="askAssistant(def)" />
           } @else {
             <p class="muted">Die Spezifikation unten ist gerade kein gültiges JSON; der Baukasten erscheint wieder, sobald sie es ist.</p>
           }
@@ -95,6 +96,9 @@ export class Editor {
   private readonly others = signal<Definition[]>([]);
   protected readonly metrics = computed(() => this.others().filter((d) => d.kind === 'metric'));
   protected readonly filters = computed(() => this.others().filter((d) => d.kind === 'filter'));
+  protected readonly sources = computed(() => this.others().filter((d) => d.kind === 'dashboard' && d.id !== this.defId()));
+  private readonly form = viewChild<SpecForm>('form');
+  private readonly chat = inject(Chat);
   protected readonly hasForm = computed(() => ['dashboard', 'template'].includes(this.definition()?.kind ?? ''));
   /** Die Spezifikation als Objekt, solange der Text gültiges JSON ist */
   protected readonly parsed = computed<Record<string, any> | null>(() => {
@@ -119,11 +123,28 @@ export class Editor {
       });
     });
     // Abmelden fragt hier nach; wer zugestimmt hat, wird beim Verlassen nicht noch einmal gefragt.
+    // Vorschläge des Assistenten lassen sich in diese Seite übernehmen, solange sie offen ist.
+    effect(() => {
+      const def = this.definition();
+      const usable = def && (def.kind === 'dashboard' || def.kind === 'template');
+      untracked(() => this.chat.target.set(usable ? {
+        name: def.name, add: (tiles) => { this.form()?.addItems(tiles); this.message.set('Übernommen, noch nicht gespeichert.'); } } : null));
+    });
+    inject(DestroyRef).onDestroy(() => this.chat.target.set(null));
     inject(DestroyRef).onDestroy(inject(Leave).register(() => {
       const ok = this.canLeave();
       if (ok) this.agreed = true;
       return ok;
     }));
+  }
+
+  /** Der Assistent schlägt Kacheln vor; übernommen werden sie im Chatfenster mit einem Klick. */
+  protected askAssistant(def: Definition): void {
+    const what = def.kind === 'dashboard' ? 'ein Dashboard' : 'die Auswertungen für einen Bericht';
+    const wish = this.description.trim() || this.name.trim();
+    this.chat.context.set(null);
+    this.chat.open.set(true);
+    void this.chat.ask(`Baue ${what} mit dem Titel „${this.name.trim()}“: ${wish}`);
   }
 
   private snapshot(): string { return JSON.stringify([this.name, this.description, this.text()]); }
