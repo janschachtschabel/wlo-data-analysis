@@ -303,6 +303,9 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                 for key, label, count, best in items:
                     if best < MIN_COUNT:
                         continue
+                    if topics.min_share is not None and (
+                            not answer.total or 100 * count / answer.total < topics.min_share):
+                        continue
                     score = float(count)
                     lift = None
                     if typical and stock and answer.total:
@@ -387,6 +390,8 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                "(ausgewählt nach Anzahl mal Logarithmus des Verhältnisses, gereiht nach "
                "Anzahl). "
                if typical else "Gezeigt sind die häufigsten Werte je Zelle. ")
+              + (f"Nur was mindestens {topics.min_share:g} % der Materialien der Zelle "
+                 "tragen. " if topics.min_share is not None else "")
               + f"Je Zelle höchstens {topics.top}, nur Werte mit mindestens {MIN_COUNT} "
               f"Materialien, ausgewertet unter den {CELL_FACET_LIMIT * 5} häufigsten der "
               "Zelle. Die Zahl oben in der Zelle ist die Anzahl der Materialien.")

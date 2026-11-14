@@ -126,6 +126,21 @@ class VocabCheck(_Model):
         return self
 
 
+class Problems(_Model):
+    """Rangliste der Datenprobleme: je Feld „ohne Angabe“ und „Wert außerhalb der
+    Werteliste“ in einer Tabelle, das Größte zuerst."""
+
+    fields: list[FillField] = Field(min_length=1, max_length=MAX_FILL_FIELDS)
+    top: Annotated[int, Field(ge=1, le=2 * MAX_FILL_FIELDS)] | None = None
+
+    @model_validator(mode="after")
+    def _unique(self) -> Problems:
+        props = [f.property for f in self.fields]
+        if len(props) != len(set(props)):
+            raise ValueError("jedes Feld nur einmal")
+        return self
+
+
 MAX_PROFILE_ROWS = 60
 
 
@@ -153,6 +168,9 @@ class Topics(_Model):
     # typical: was in der Zelle häufiger ist als im Gesamtbestand; frequent: schlicht häufig
     rank: Literal["typical", "frequent"] = "typical"
     stopwords: bool = True  # Füllwörter aus Video-Schlagwörtern weglassen (nur freie Felder)
+    # nur was mindestens diesen Anteil (in Prozent) der Materialien der Zelle trägt: so
+    # zeigen sich pauschal vergebene Schlagwörter einer Quelle
+    min_share: Annotated[float, Field(gt=0, le=100)] | None = None
     exclude: list[Annotated[StrictStr, Field(min_length=1, max_length=80)]] = Field(
         default_factory=list, max_length=300)
     # Werte dieser Felder (etwa Anbieter und Quellen) sind keine Themen
@@ -219,11 +237,17 @@ class QuerySpec(_Model):
     topics: Topics | None = None
     snapshot: SnapshotQuery | None = None
     gaps: Gaps | None = None
+    problems: Problems | None = None
     percent: Literal["none", "column", "row"] = "none"
     refresh: bool = False
 
     @model_validator(mode="after")
     def _consistent(self) -> QuerySpec:
+        if self.problems and (self.rows or self.series or self.columns or self.fill
+                              or self.vocab_check or self.profile or self.sizes or self.topics
+                              or self.snapshot or self.gaps or self.percent != "none"):
+            raise ValueError("problems (Rangliste der Datenprobleme) steht für sich: nur "
+                             "zusammen mit filters")
         if self.series and self.columns:
             raise ValueError("series und columns schließen sich aus")
         if self.fill and (self.series or self.columns or self.percent != "none"):

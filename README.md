@@ -183,6 +183,17 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
   Prozent-Spalten dasselbe Schema nach dem Wert selbst (unter 50 rot, darüber blau, je dunkler desto höher). Auch im HTML- und PDF-Export.
 - Der Menüpunkt „Qualität“ zeigt die mitgelieferten Dashboards „Abdeckung“ (Fach ×
   Bildungsstufe, Materialart, Lizenz, Quelle), „Füllgrade“ und „Datenprobleme“ als Reiter.
+- `problems: {"fields": [...], "top": n}`: die Rangliste der größten Datenprobleme. Je Feld
+  „ohne Angabe“ und „Wert außerhalb der Werteliste“ in einer Tabelle, das Größte zuerst; erste
+  Kachel im Dashboard „Datenprobleme“.
+- Der Reiter „Steckbrief“ zeigt einen Bestand auf einer Seite (größte Probleme, Füllgrade,
+  Fächer, Bildungsstufen, Materialarten, Lizenzen, Sprachen, Zufluss, häufigste Schlagwörter).
+  Mit dem Kontextschalter gilt er für eine Quelle oder Bezugsquelle.
+- `topics.min_share`: nur Schlagwörter, die mindestens diesen Anteil der Materialien einer
+  Zeile tragen. So zeigt die Kachel „Pauschal vergebene Schlagwörter“ je Quelle, was ein
+  Crawler an fast alle seine Materialien hängt.
+- Gezählte Zellen in Tabellen sind Links in den Explorer mit genau der Abfrage hinter der
+  Zelle; dort lässt sich weiter aufschlüsseln.
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 

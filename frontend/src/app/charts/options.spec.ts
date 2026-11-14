@@ -87,6 +87,18 @@ describe('chartPlan: was die Grafik weglässt, steht dabei', () => {
     expect(plan.notes.join(' ')).toContain('Quote');
   });
 
+  it('lässt Anteile in Prozent aus dem Balkendiagramm mit Anzahlen', () => {
+    const input = {
+      columns: [{ id: 'count', label: 'Betroffen' }, { id: 'share', label: 'Anteil %', derived: true }],
+      rows: [row('x', [120, 30]), row('y', [40, 10])] };
+    const plan = chartPlan(input, 'bar', palette);
+    expect(plan.option!['series'].map((s: any) => s.name)).toEqual(['Betroffen']);
+    expect(plan.notes.join(' ')).toContain('Anteil %');
+    // nur Prozentspalten: sie bleiben
+    const only = chartPlan({ columns: [input.columns[1]], rows: [row('x', [30])] }, 'bar', palette);
+    expect(only.option!['series']).toHaveLength(1);
+  });
+
   it('nennt Zeilen, die im Kreis fehlen', () => {
     const input = { columns: [{ id: 'a', label: 'A' }], rows: [row('x', [5]), row('y', [0]), row('z', [null])] };
     const plan = chartPlan(input, 'pie', palette);

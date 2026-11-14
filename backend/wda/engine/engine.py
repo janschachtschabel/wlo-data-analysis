@@ -31,7 +31,7 @@ from ..filters import (
 )
 from ..snapshot.analyses import run_analysis
 from .formula import Formula, compile_formula
-from .spec import MAX_CALLS, MAX_GROUPS, MAX_SERIES, QuerySpec, Series
+from .spec import MAX_CALLS, MAX_GROUPS, MAX_SERIES, Fill, QuerySpec, Series, VocabCheck
 
 Number = int | float
 SCHEMA_VERSION = 1  # Form des Ergebnisses; gespeicherte Läufe tragen sie mit
@@ -160,8 +160,72 @@ def _gaps(result: dict[str, Any], spec: QuerySpec) -> dict[str, Any]:
                                        for c in columns]}}
 
 
+async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
+                            run: _Run) -> dict[str, Any]:
+    """Rangliste der Datenprobleme: die Füllgrade und der Abgleich mit den Wertelisten,
+    zusammengeführt und nach Größe geordnet. Gerechnet wird mit denselben beiden
+    Auswertungen, die es auch einzeln gibt; gleiche Abfragen laufen nur einmal."""
+    ask = spec.problems
+    assert ask is not None
+    plain = spec.model_copy(update={"problems": None})
+    filtered = {f.property for f in spec.filters}
+    listed = []
+    for item in ask.fields:  # der Abgleich nur, wo es eine Werteliste gibt und kein Filter
+        field = await vocab.field(item.property)
+        if field is not None and field.values and item.property not in filtered:
+            listed.append(item)
+    fill = await _execute_fill(
+        plain.model_copy(update={"fill": Fill(fields=ask.fields)}), client, vocab, run)
+    check = await _execute_vocab_check(
+        plain.model_copy(update={"vocab_check": VocabCheck(fields=listed)}),
+        client, vocab, run) if listed else None
+    total = fill["base_total"]
+    found: list[tuple[int, int, dict[str, Any]]] = []
+    unknown = 0
+    for n, row in enumerate(fill["rows"]):
+        missing = row["values"][1]
+        if missing is None:
+            unknown += 1
+        elif missing > 0:
+            found.append((missing, -n, {
+                "key": f"{row['key']}|missing", "label": f"{row['label']}: ohne Angabe",
+                "kind": "value", "values": [missing, _rate(missing, total)]}))
+    for n, row in enumerate(check["rows"] if check else []):
+        bad, uses = row["values"][3], row["values"][2]
+        if bad:
+            found.append((bad, -n, {
+                "key": f"{row['key']}|unknown",
+                "label": f"{row['label']}: Wert außerhalb der Werteliste",
+                "kind": "value", "values": [bad, _rate(bad, uses)]}))
+    found.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    rows = [item[2] for item in found]
+    notes = Notes()
+    seen = set()
+    for note in [*fill["provenance"]["notes"], *(check["provenance"]["notes"] if check else [])]:
+        if note["code"] not in seen and note["code"] not in ("fill_base", "vocab_check"):
+            seen.add(note["code"])
+            notes.add(note["code"], note["text"])
+    text = (f"Grundgesamtheit: {total} Materialien. „Ohne Angabe“ zählt Materialien, der "
+            "Anteil bezieht sich auf alle Materialien. „Wert außerhalb der Werteliste“ zählt "
+            "Zuordnungen (ein Material mit mehreren solchen Werten zählt mehrfach), der "
+            "Anteil bezieht sich auf alle Zuordnungen des Feldes. Felder ohne Befund fehlen.")
+    if unknown:
+        text += f" Bei {unknown} Feldern ließ sich „ohne Angabe“ nicht bestimmen."
+    notes.add("problems", text)
+    if ask.top is not None and len(rows) > ask.top:
+        notes.add("rows_top", f"Angezeigt werden die ersten {ask.top} von {len(rows)} Zeilen.")
+        rows = rows[: ask.top]
+    columns = [{"id": "count", "label": "Betroffen", "derived": False, "total": None},
+               {"id": "share", "label": "Anteil %", "derived": True, "total": None}]
+    result = _result(spec, client, run, notes, columns, rows, fill["provenance"]["filters"],
+                     None)
+    return {**result, "total_row": False, "base_total": total}
+
+
 async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore, run: _Run
                    ) -> dict[str, Any]:
+    if spec.problems is not None:
+        return await _execute_problems(spec, client, vocab, run)
     if spec.fill is not None:
         return await _execute_fill(spec, client, vocab, run)
     if spec.vocab_check is not None:

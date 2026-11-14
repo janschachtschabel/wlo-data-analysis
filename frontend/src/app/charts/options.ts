@@ -44,6 +44,12 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
       columns = counted;
     }
   }
+  const percent = (c: { derived?: boolean; label: string }) => !!c.derived && c.label.trim().endsWith('%');
+  if (view === 'bar' && columns.some(percent) && columns.some((c) => !c.derived)) {
+    // Anzahl und Anteil in Prozent teilen sich keine Achse.
+    notes.push('Anteile in Prozent stehen in der Tabelle: ' + columns.filter(percent).map((c) => c.label).join(', ') + '.');
+    columns = columns.filter((c) => !percent(c));
+  }
   if (columns.length > MAX_SERIES) {
     notes.push(`Die Grafik zeigt die ersten ${MAX_SERIES} von ${columns.length} Spalten.`);
     columns = columns.slice(0, MAX_SERIES);

@@ -4,7 +4,7 @@
  "builtin": {
   "id": "datenprobleme",
   "title": "Datenprobleme",
-  "description": "Wo stimmen die Metadaten nicht? Fehlende Angaben farbig markiert, Lücken je Quelle, Werte außerhalb der Vokabulare, gemischte Schreibweisen, unklare Lizenzangaben."
+  "description": "Wo stimmen die Metadaten nicht? Zuerst die Rangliste der größten Probleme, dann fehlende Angaben farbig markiert, Lücken je Quelle, Werte außerhalb der Vokabulare, gemischte Schreibweisen, unklare Lizenzangaben und pauschal vergebene Schlagwörter."
  },
  "groups": [
   {
@@ -22,6 +22,61 @@
    "spec": {
     "instance": "wlo-prod",
     "tiles": [
+     {
+      "id": "rangliste",
+      "title": "Die größten Datenprobleme: was betrifft die meisten Materialien?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "problems": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         },
+         {
+          "property": "ccm:replicationsource",
+          "label": "Quelle"
+         },
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ],
+        "top": 12
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 9
+      }
+     },
      {
       "id": "kernangaben",
       "title": "Fehlende Kernangaben: wie vollständig sind die wichtigsten Felder?",
@@ -73,7 +128,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 0,
+       "y": 9,
        "w": 12,
        "h": 7
       }
@@ -119,7 +174,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 7,
+       "y": 16,
        "w": 12,
        "h": 14
       }
@@ -165,7 +220,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 21,
+       "y": 30,
        "w": 12,
        "h": 14
       }
@@ -207,7 +262,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 35,
+       "y": 44,
        "w": 12,
        "h": 8
       }
@@ -296,7 +351,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 43,
+       "y": 52,
        "w": 12,
        "h": 10
       }
@@ -318,7 +373,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 53,
+       "y": 62,
        "w": 6,
        "h": 8
       }
@@ -340,7 +395,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 53,
+       "y": 62,
        "w": 6,
        "h": 8
       }
@@ -362,7 +417,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 61,
+       "y": 70,
        "w": 6,
        "h": 8
       }
@@ -383,7 +438,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 61,
+       "y": 70,
        "w": 6,
        "h": 8
       }
@@ -486,7 +541,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 69,
+       "y": 78,
        "w": 12,
        "h": 10
       }
@@ -507,7 +562,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 79,
+       "y": 88,
        "w": 6,
        "h": 8
       }
@@ -528,9 +583,37 @@
       },
       "layout": {
        "x": 6,
-       "y": 79,
+       "y": 88,
        "w": 6,
        "h": 8
+      }
+     },
+     {
+      "id": "pauschale-schlagwoerter",
+      "title": "Pauschal vergebene Schlagwörter: was trägt mindestens die Hälfte der Materialien einer Quelle? (25 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 25
+       },
+       "topics": {
+        "property": "cclom:general_keyword",
+        "top": 8,
+        "rank": "frequent",
+        "stopwords": false,
+        "min_share": 50
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 96,
+       "w": 12,
+       "h": 12
       }
      }
     ]

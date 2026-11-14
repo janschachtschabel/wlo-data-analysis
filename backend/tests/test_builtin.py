@@ -80,8 +80,8 @@ def api(settings):
 def test_list_install_run_and_export(api):
     listed = api.get("/api/builtin").json()
     assert [b["id"] for b in listed] == ["abdeckung", "datenprobleme", "datenqualitaet",
-                                         "oer-statistik", "quellen", "themen",
-                                         "tiefenpruefung"]
+                                         "oer-statistik", "quellen", "steckbrief",
+                                         "themen", "tiefenpruefung"]
     listed = listed[3:]
     assert listed[0]["definitions"] == [{"id": "builtin-oer-statistik", "kind": "template",
                                          "name": "OER-Statistik", "installed": False,
@@ -229,6 +229,8 @@ def test_coverage_and_problem_dashboards_fit_what_was_measured(bundle_id):
             used |= {f.property for f in q.fill.fields}
         if q.vocab_check:
             used |= {f.property for f in q.vocab_check.fields}
+        if q.problems:
+            used |= {f.property for f in q.problems.fields}
         if q.rows:
             used.add(q.rows.property)
             if q.rows.other:
@@ -300,6 +302,11 @@ def test_problem_dashboard_runs_and_finds_the_dirty_values(api):
     # der Testbestand kennt nicht jedes Qualitätsfeld von WLO: Die Übersicht darf leer
     # bleiben, alles andere muss laufen
     assert all(key == "vokabular" for key, _ in failed), failed
+    ranking = results["rangliste"]
+    counts = [r["values"][0] for r in ranking["rows"]]
+    assert counts and counts == sorted(counts, reverse=True)
+    assert any(r["key"] == "ccm:educationalcontext|unknown" for r in ranking["rows"])
+    assert "pauschale-schlagwoerter" in results
     dirty = results["stufe-unbekannt"]
     assert {r["key"]: r["values"][0] for r in dirty["rows"]} == {
         "political": sum(1 for d in docs if "political" in d["ccm:educationalcontext"])}
@@ -312,3 +319,25 @@ def test_problem_dashboard_runs_and_finds_the_dirty_values(api):
     report = api.get(f"/api/runs/{run['id']}/report").json()
     blocks = {b["key"]: b for b in report["blocks"]}
     assert blocks["kernangaben"]["view"] == {"type": "heatmap", "options": {"scale": "rate"}}
+
+
+def test_profile_dashboard_runs_for_everything_and_for_one_source(api):
+    """Der Steckbrief: jede Kachel läuft, und mit einer Quelle als Kontext zählt jede nur
+    deren Materialien."""
+    assert api.post("/api/builtin/steckbrief/install").status_code == 200
+    docs = api.repo.docs
+    source = next(v for d in docs for v in d["ccm:replicationsource"] if v.strip())
+    own = [d for d in docs if source in d["ccm:replicationsource"]]
+    for scope, stock in ([], docs), ([{"property": "ccm:replicationsource",
+                                       "values": [source]}], own):
+        run = api.post("/api/definitions/builtin-steckbrief/run",
+                       json={"save": False, "scope": scope}).json()
+        failed = [(r["key"], r["error"]) for r in run["results"] if r["error"]]
+        assert not failed, failed
+        results = {r["key"]: r["result"] for r in run["results"]}
+        assert results["kernangaben"]["base_total"] == len(stock)
+        assert results["probleme"]["base_total"] == len(stock)
+        assert results["zufluss"]["columns"][0]["total"] == len(stock)
+        levels = {r["key"]: r["values"][0] for r in results["stufen"]["rows"]}
+        for key, count in levels.items():
+            assert count == sum(1 for d in stock if key in d["ccm:educationalcontext"])

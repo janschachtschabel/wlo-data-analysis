@@ -1,0 +1,374 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "steckbrief",
+  "title": "Steckbrief",
+  "description": "Ein Bestand auf einer Seite: die größten Datenprobleme, Füllgrade, Fächer, Bildungsstufen, Materialarten, Lizenzen, Sprachen, Zufluss und häufigste Schlagwörter. Gedacht für eine einzelne Quelle oder Bezugsquelle (oben auswählen), läuft auch für den ganzen Bestand."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-steckbrief",
+   "kind": "dashboard",
+   "name": "Steckbrief",
+   "description": "Steckbrief eines Bestands, allein aus Zählungen. Oben eine Quelle oder Bezugsquelle wählen, dann zeigt jede Kachel nur deren Materialien. Gemessen an WLO Produktion.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "probleme",
+      "title": "Die größten Datenprobleme",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "problems": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         },
+         {
+          "property": "ccm:replicationsource",
+          "label": "Quelle"
+         },
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ],
+        "top": 10
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 6,
+       "h": 9
+      }
+     },
+     {
+      "id": "kernangaben",
+      "title": "Wie vollständig sind die wichtigsten Felder?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         },
+         {
+          "property": "ccm:replicationsource",
+          "label": "Quelle"
+         },
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "rate"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 0,
+       "w": 6,
+       "h": 9
+      }
+     },
+     {
+      "id": "faecher",
+      "title": "Schulfächer (15 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "top": 15,
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/"
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 9,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "stufen",
+      "title": "Bildungsstufen",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:educationalcontext",
+        "top": 10
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 6,
+       "y": 9,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "materialarten",
+      "title": "Materialarten (12 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 12
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 17,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "lizenzen",
+      "title": "Lizenzen, mit „ohne Wert“",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:commonlicense_key",
+        "top": 12,
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 6,
+       "y": 17,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "sprachen",
+      "title": "Sprachen",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "cclom:general_language",
+        "top": 8
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 25,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "bezugsquellen",
+      "title": "Bezugsquellen (15 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 15
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 6,
+       "y": 25,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "zufluss",
+      "title": "Wann kam der Bestand herein? Materialien seit …",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Bestand"
+        },
+        {
+         "id": "s1",
+         "label": "seit 3 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "3y"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "s2",
+         "label": "seit 1 Jahr",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "1y"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "s3",
+         "label": "seit 3 Monaten",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "3m"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "s4",
+         "label": "seit 1 Monat",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "1m"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 33,
+       "w": 12,
+       "h": 5
+      }
+     },
+     {
+      "id": "schlagwoerter",
+      "title": "Häufigste Schlagwörter, mit Anteil an den Materialien (hohe Anteile sprechen für pauschal vergebene Schlagwörter)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "cclom:general_keyword",
+        "top": 25
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 38,
+       "w": 12,
+       "h": 10
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

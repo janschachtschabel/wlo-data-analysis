@@ -287,3 +287,21 @@ def test_a_vocabulary_suffix_on_the_row_name_changes_no_topics(tmp_path, monkeyp
     assert [label for label, _ in named] == ["Mathematik (Schule)", "Deutsch"]
     assert [topics for _, topics in named] == [topics for _, topics in plain]
     assert all("Mathematik" not in topics for _, topics in named)
+
+
+def test_min_share_shows_what_nearly_every_material_of_a_row_carries(api, repo):
+    """Pauschal vergebene Schlagwörter: was die Hälfte der Materialien einer Zeile trägt."""
+    query = {"rows": {"property": TAX, "include": ["Mathematik", "Deutsch"]}}
+    plain = ask(api, **query, topics={"property": KEY, "rank": "frequent", "stopwords": False})
+    out = ask(api, **query, topics={"property": KEY, "rank": "frequent", "stopwords": False,
+                                    "min_share": 50})
+    assert out.status_code == 200, out.text
+    for row, full in zip(out.json()["rows"], plain.json()["rows"], strict=True):
+        kept = row["topics"][0]
+        assert all(t["share"] >= 50 for t in kept)
+        assert [t["label"] for t in kept] == [
+            t["label"] for t in full["topics"][0] if t["share"] >= 50]
+    assert any(row["topics"][0] for row in out.json()["rows"])
+    assert "mindestens 50 %" in next(
+        n["text"] for n in out.json()["provenance"]["notes"] if n["code"] == "topics")
+    assert ask(api, **query, topics={"property": KEY, "min_share": 0}).status_code == 422

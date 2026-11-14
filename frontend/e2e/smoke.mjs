@@ -367,7 +367,7 @@ await page.waitForSelector('select[name="context-value"] option:has-text("oersi_
 const scoped = page.waitForResponse((r) => r.url().includes('/run') && (r.request().postData() ?? '').includes('"scope":[{'));
 await page.selectOption('select[name="context-value"]', { index: 1 });
 assert.equal((await scoped).status(), 200, 'Lauf mit Kontext');
-await page.waitForSelector('app-report-view td');
+await page.locator('app-report-view td:visible').first().waitFor();
 assert.ok(await page.locator('button:has-text("Lauf speichern")').isDisabled(), 'ein Ausschnitt wird nicht gespeichert');
 await page.click('button:has-text("Zurück zum Gesamtbestand")');
 await page.click('.tabs >> text=Quellen');
@@ -468,6 +468,19 @@ await page.goto(base + '/qualitaet/abdeckung');
 await page.waitForSelector('app-run-page h1:has-text("Abdeckung")');
 await page.click('a:has-text("Fragen")');
 await page.waitForSelector('.context:has-text("Abdeckung")');
+
+// Steckbrief und Rangliste der Datenprobleme; von einer Zelle in den Explorer
+await page.goto(base + '/qualitaet/steckbrief');
+await page.waitForSelector('text=Die größten Datenprobleme');
+await page.waitForSelector('text=Wie vollständig sind die wichtigsten Felder?');
+await page.goto(base + '/qualitaet/datenprobleme');
+await page.waitForSelector('text=Die größten Datenprobleme: was betrifft die meisten Materialien?');
+const cellLink = page.locator('app-result-table a.drill:visible').first();
+await cellLink.waitFor();
+const cellText = (await cellLink.textContent()).trim();
+await cellLink.click();
+await page.waitForURL(/\/explorer\?q=/);
+await page.waitForFunction((n) => (document.querySelector('.big')?.textContent ?? '').replace(/\s/g, '').includes(n.replace(/\s/g, '')), cellText);
 
 // Abmelden sperrt die API wieder
 await page.click('text=Abmelden');

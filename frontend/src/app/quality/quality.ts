@@ -15,6 +15,7 @@ export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?:
   { id: 'abdeckung', label: 'Abdeckung', hint: 'Wo ist das Angebot dicht, wo gibt es Lücken?' },
   { id: 'themen', label: 'Wissenslandkarte', hint: 'Welche Themen stecken in Fach und Bildungsstufe?' },
   { id: 'datenprobleme', label: 'Datenprobleme', hint: 'Wo stimmen die Metadaten nicht?' },
+  { id: 'steckbrief', label: 'Steckbrief', hint: 'Eine Quelle auf einer Seite: größte Probleme, Füllgrade, Fächer, Lizenzen, Zufluss' },
   { id: 'quellen', label: 'Quellen', hint: 'Größe, Bindung, dünne Metadaten und Merkmale je Quelle' },
   { id: 'tiefenpruefung', label: 'Tiefenprüfung', hint: 'Freitextfelder, Dubletten, Alter: aus dem lokalen Abzug', snapshot: 'wlo-prod' },
 ];

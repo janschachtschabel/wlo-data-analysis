@@ -52,7 +52,7 @@ def describe_filters(filters: list[dict[str, Any]]) -> str:
 
 
 # Abfragearten, deren Zellen keine schlichte Schnittmenge von Filtern sind
-_NO_DRILL = ("fill", "vocab_check", "sizes", "gaps", "snapshot", "profile")
+_NO_DRILL = ("fill", "vocab_check", "sizes", "gaps", "snapshot", "profile", "problems")
 
 
 def _drill(result: dict[str, Any]) -> dict[str, Any] | None:

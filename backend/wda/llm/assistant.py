@@ -94,6 +94,9 @@ oft Felder ausgefüllt sind; mit rows je Zeile (z. B. je Quelle). Nicht zusammen
 columns/series.
 - vocab_check: {{"fields": [{{"property": Feld}}, …]}} zählt je Feld Werte außerhalb der \
 Werteliste. Ohne rows.
+- problems: {{"fields": [{{"property": Feld}}, …], "top": n}} ist die Rangliste der \
+Datenprobleme: je Feld „ohne Angabe“ und „Wert außerhalb der Werteliste“ in einer Tabelle, \
+das Größte zuerst. Nur zusammen mit filters; passt auf „Was sind die größten Probleme?“.
 - profile: {{"property": Merkmal, "top": n, "show": "share"|"count"}} zusammen mit rows (mit \
 top bis 60): Ausprägungen eines Merkmals je Zeile, z. B. Kosten oder Werbung je Bezugsquelle. \
 Geht auch bei Feldern, die als Filter nicht zählbar sind. Darstellung heatmap.

@@ -619,6 +619,8 @@ def _about(spec: Any) -> str:
         parts.append(f"Merkmal {str(spec['profile'].get('property'))[:60]} je Zeile")
     if isinstance(spec.get("gaps"), dict):
         parts.append("Lückenliste")
+    if isinstance(spec.get("problems"), dict):
+        parts.append("Rangliste der Datenprobleme")
     if isinstance(spec.get("snapshot"), dict):
         parts.append(f"aus dem lokalen Abzug ({str(spec['snapshot'].get('analysis'))[:40]})")
     if isinstance(spec.get("sizes"), dict):
