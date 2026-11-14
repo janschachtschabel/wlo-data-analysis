@@ -127,3 +127,16 @@ def test_fill_tiles_get_no_trend(api, repo):  # noqa: F811
     run(api, fill["id"], refresh=True)
     out = api.get(f"/api/definitions/{fill['id']}/trends").json()
     assert out["blocks"] == {} and len(out["runs"]) == 2
+
+
+def test_a_series_shared_by_many_tiles_is_no_trend(api, repo):  # noqa: F811
+    """Tragen viele Kacheln dieselbe Gesamtzahl, ist es die Grundgesamtheit."""
+    from .test_definition_routes import tile
+    props = ["ccm:taxonid", "ccm:educationalcontext", "ccm:replicationsource"]
+    board = make(api, "dashboard", "Drei gleiche", {"tiles": [
+        tile(f"t{n}", query={"instance": "wlo-prod", "rows": {"property": prop, "top": 3}})
+        for n, prop in enumerate(props)]})
+    run(api, board["id"])
+    repo.docs.extend([dict(d) for d in repo.docs[:10]])
+    run(api, board["id"], refresh=True)
+    assert api.get(f"/api/definitions/{board['id']}/trends").json()["blocks"] == {}

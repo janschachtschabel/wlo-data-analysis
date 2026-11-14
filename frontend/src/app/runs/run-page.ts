@@ -156,7 +156,8 @@ export class RunPage {
   protected readonly shownTrends = computed(() => trendsUpTo(this.trends(), this.runId()));
   private readonly trendId = computed(() => this.defId() ?? this.report.value()?.definition_id ?? null);
   /** die Instanz, gegen die die Auswertung ohnehin zählt: kein Vergleich mit sich selbst */
-  protected readonly ownInstance = computed(() => { const spec = this.definition()?.spec as { instance?: string; query?: { instance?: string } } | undefined; return spec?.instance ?? spec?.query?.instance ?? ''; });
+  private readonly shownDefinition = signal<Definition | null>(null);
+  protected readonly ownInstance = computed(() => { const spec = (this.definition() ?? this.shownDefinition())?.spec as { instance?: string; query?: { instance?: string } } | undefined; return spec?.instance ?? spec?.query?.instance ?? ''; });
   protected readonly instances = inject(Instances);
   protected readonly otherInstance = signal('');
   protected readonly counting = signal(false);
@@ -195,6 +196,8 @@ export class RunPage {
       untracked(() => this.trends.set(null));
       // eine späte Antwort gehört vielleicht schon zu einer anderen Auswertung
       if (id) this.api.get<Trends>(`/definitions/${encodeURIComponent(id)}/trends`).then((t) => { if (this.trendId() === id) this.trends.set(t); }, () => undefined);
+      untracked(() => this.shownDefinition.set(null));
+      if (id && !this.defId()) this.api.get<Definition>('/definitions/' + encodeURIComponent(id)).then((d) => { if (this.trendId() === id) this.shownDefinition.set(d); }, () => undefined);
     });
     effect(() => {
       const id = this.defId();

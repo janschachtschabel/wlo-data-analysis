@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections import Counter
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -206,6 +207,9 @@ class History:
                                                   else round(value, 2))
             kept = {key: values for key, values in blocks.items()
                     if sum(v is not None for v in values) >= 2}
+            # dieselbe Reihe in vielen Kacheln ist die Grundgesamtheit, nicht deren Inhalt
+            shared = Counter(tuple(values) for values in kept.values())
+            kept = {key: values for key, values in kept.items() if shared[tuple(values)] < 3}
             return {"runs": [{"run_id": h["id"], "started_at": h["started_at"]} for h in heads],
                     "blocks": kept,
                     "labels": {key: named[key] for key in kept if key in named}}
