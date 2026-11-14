@@ -60,7 +60,7 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
                        "unsupported_result")
     columns = [Column(c["id"], c["label"], bool(c.get("derived"))) for c in result["columns"]]
     rows = [Row(r["key"], r["label"], r["kind"], list(r["values"]),
-                percent=r.get("percent")) for r in result["rows"]]
+                percent=r.get("percent"), topics=r.get("topics")) for r in result["rows"]]
     # Gesamtzeile: die Zählung über alle Materialien, keine Summe der Zeilen
     if result.get("total_row", True):
         rows.append(

@@ -13,6 +13,7 @@ interface Builtin { id: string; definitions: { id: string; installed: boolean; c
 export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?: string }[] = [
   { id: 'datenqualitaet', label: 'Füllgrade', hint: 'Wie oft sind die Felder ausgefüllt?' },
   { id: 'abdeckung', label: 'Abdeckung', hint: 'Wo ist das Angebot dicht, wo gibt es Lücken?' },
+  { id: 'themen', label: 'Wissenslandkarte', hint: 'Welche Themen stecken in Fach und Bildungsstufe?' },
   { id: 'datenprobleme', label: 'Datenprobleme', hint: 'Wo stimmen die Metadaten nicht?' },
   { id: 'quellen', label: 'Quellen', hint: 'Größe, Bindung, dünne Metadaten und Merkmale je Quelle' },
   { id: 'tiefenpruefung', label: 'Tiefenprüfung', hint: 'Freitextfelder, Dubletten, Alter: aus dem lokalen Abzug', snapshot: 'wlo-prod' },

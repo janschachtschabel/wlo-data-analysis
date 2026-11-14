@@ -16,7 +16,34 @@ import uvicorn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tests.esdata import DataRepo  # noqa: E402
+from tests.esdata import LEVELS, SUBJECTS, DataRepo, make_docs  # noqa: E402
+
+THEMES = {"Mathematik": ["Bruchrechnung", "Geometrie", "Gleichungen", "Prozentrechnung"],
+          "Physik": ["Mechanik", "Optik", "Elektrizität", "Energie"],
+          "Deutsch": ["Grammatik", "Märchen", "Rechtschreibung", "Lyrik"],
+          "Geschichte": ["Weimarer Republik", "Mittelalter", "Antike", "Kalter Krieg"],
+          "Informatik": ["Programmieren", "Algorithmen", "Datenbanken", "Netzwerke"]}
+BY_LEVEL = {"Elementarbereich": "Spielen", "Primarstufe": "Sachunterricht",
+            "Sekundarstufe I": "Projektarbeit", "Hochschule": "Vorlesung"}
+
+
+def demo_docs() -> list:
+    """Der Testbestand mit Schlagwörtern, damit die Wissenslandkarte etwas zeigt."""
+    docs = make_docs()
+    names = {uri: name for name, uri in SUBJECTS.items()}
+    levels = {uri: name for name, uri in LEVELS.items()}
+    for n, doc in enumerate(docs):
+        words = ["Nachhilfe", "einfach erklärt"]
+        for uri in doc["ccm:taxonid"]:
+            subject = names.get(uri)
+            if subject:
+                found = THEMES[subject]
+                words += [subject, found[n % 4], found[(n // 4) % 4].lower()]
+        for uri in doc["ccm:educationalcontext"]:
+            if uri in levels and n % 2:
+                words.append(BY_LEVEL.get(levels[uri], "Übung"))
+        doc["cclom:general_keyword"] = list(dict.fromkeys(words))
+    return docs
 from wda.config import Settings  # noqa: E402
 from wda.main import create_app  # noqa: E402
 
@@ -61,7 +88,7 @@ def main() -> None:
     settings = Settings(admin_password=PASSWORD, cookie_secure=False,
                         data_dir=Path(tempfile.mkdtemp(prefix="wda-demo-")),
                         llm_api_key="demo", llm_settings_ui=True)
-    app = create_app(settings, transport=DataRepo().transport(),
+    app = create_app(settings, transport=DataRepo(demo_docs()).transport(),
                      llm_transport=httpx.MockTransport(demo_model))
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 

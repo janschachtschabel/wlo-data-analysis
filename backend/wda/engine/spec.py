@@ -140,6 +140,25 @@ class Profile(_Model):
     missing: bool = True  # Spalte „ohne Angabe“ (nur bei einwertigen Feldern bestimmbar)
 
 
+MAX_TOPIC_CELLS = 480
+
+
+class Topics(_Model):
+    """Themen je Zelle: die häufigsten oder typischen Werte eines Feldes (Schlagwörter,
+    Lehrplanthemen) je Zeile und Spalte, etwa je Fach und Bildungsstufe. Je Zelle eine
+    Abfrage mit der Facette des Feldes."""
+
+    property: Name
+    top: int = Field(default=10, ge=1, le=20)
+    # typical: was in der Zelle häufiger ist als im Gesamtbestand; frequent: schlicht häufig
+    rank: Literal["typical", "frequent"] = "typical"
+    stopwords: bool = True  # Füllwörter aus Video-Schlagwörtern weglassen (nur freie Felder)
+    exclude: list[Annotated[StrictStr, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list, max_length=300)
+    # Werte dieser Felder (etwa Anbieter und Quellen) sind keine Themen
+    exclude_fields: list[Name] = Field(default_factory=list, max_length=4)
+
+
 class Sizes(_Model):
     """Größenklassen: wie viele Werte eines Feldes (etwa Bezugsquellen) tragen 1, 2 bis 4,
     5 bis 19 … Materialien, und wie viele Materialien liegen in jeder Klasse."""
@@ -197,6 +216,7 @@ class QuerySpec(_Model):
     vocab_check: VocabCheck | None = None
     profile: Profile | None = None
     sizes: Sizes | None = None
+    topics: Topics | None = None
     snapshot: SnapshotQuery | None = None
     gaps: Gaps | None = None
     percent: Literal["none", "column", "row"] = "none"
@@ -229,6 +249,23 @@ class QuerySpec(_Model):
         if self.sizes and (other or self.rows or self.profile):
             raise ValueError("sizes geht nicht zusammen mit rows, series, columns, fill, "
                              "vocab_check, profile oder percent")
+        if self.topics:
+            rows = self.rows
+            if (self.series or self.fill or self.vocab_check or self.profile or self.sizes
+                    or self.gaps or self.snapshot or self.percent != "none"):
+                raise ValueError("topics (Themen je Zelle) geht nur zusammen mit filters, "
+                                 "rows und columns")
+            if rows is None or (rows.top is None and not rows.include):
+                raise ValueError("topics braucht rows mit top oder include (je Zelle eine "
+                                 "Abfrage)")
+            if rows.groups or rows.other or rows.missing or rows.rollup or rows.vocab:
+                raise ValueError("topics geht nicht zusammen mit Gruppen, „Übrige“, „ohne "
+                                 "Wert“, rollup oder vocab der Zeilen")
+            wide = min(self.columns.top, len(self.columns.include or []) or MAX_SERIES
+                       ) if self.columns else 1
+            if max(rows.top or 0, len(rows.include or [])) * wide > MAX_TOPIC_CELLS:
+                raise ValueError(f"topics: höchstens {MAX_TOPIC_CELLS} Zellen (Zeilen mal "
+                                 "Spalten); mit top eingrenzen")
         if self.profile:
             rows = self.rows
             if other:

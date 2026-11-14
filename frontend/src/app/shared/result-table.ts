@@ -9,7 +9,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="scroll" tabindex="0" role="region" [attr.aria-label]="'Tabelle: ' + (rowTitle() || 'Ergebnis')">
-      <table class="data" [class.two]="!!headerGroups()">
+      <table class="data" [class.two]="!!headerGroups()" [class.topical]="topical()">
         <thead>
           @if (headerGroups(); as groups) {
             <tr class="blocks">
@@ -31,8 +31,17 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
             <tr [class.group]="row.kind === 'group'" [class.total]="row.kind === 'total'">
               <td [class.indent]="indented() && row.kind === 'value'">{{ row.label }}@if (row.new) {<span class="muted"> (neu)</span>}</td>
               @for (value of row.values; track $index) {
-                <td [class]="shades()?.[rowIndex]?.[$index] ?? ''">
-                  {{ number(value) }}
+                <td [class]="shades()?.[rowIndex]?.[$index] ?? ''" [class.cell-topics]="!!row.topics">
+                  @if (row.topics) { <span class="n" title="Anzahl der Materialien">{{ number(value) }}</span> } @else { {{ number(value) }} }
+                  @if (row.topics?.[$index]; as found) {
+                    @if (found.length) {
+                      <ol class="topics">
+                        @for (topic of found; track topic.label) {
+                          <li [title]="topicTitle(topic)">{{ topic.label }} <span class="c">{{ number(topic.count) }}</span></li>
+                        }
+                      </ol>
+                    } @else if (value) { <span class="none">keine typischen Themen</span> }
+                  }
                   @if (row.previous && delta(value, row.previous[$index]); as change) {
                     <span class="delta" [title]="'vorher ' + number(row.previous[$index])">{{ change }}</span>
                   }
@@ -60,6 +69,13 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
   styles: `
     .scroll { overflow: auto; max-height: 70vh; }
     .pct { margin-left: 6px; font-size: 12px; }
+    /* Wissenslandkarte: oben die Anzahl, darunter die Themen der Zelle */
+    table.data tr td.cell-topics { text-align: left; vertical-align: top; min-width: 150px; white-space: normal; }
+    .cell-topics .n { display: block; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .topics { list-style: none; margin: 4px 0 0; padding: 0; font-size: 12.5px; line-height: 1.35; }
+    .topics li { overflow-wrap: anywhere; } .topics .c { opacity: .65; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+    table.topical thead th:not(:first-child) { text-align: left; }
+    .none { display: block; font-size: 12px; opacity: .65; }
     .delta { margin-left: 6px; font-size: 12px; color: var(--muted); }
     /* Einfärbung: ein Farbton von hell nach dunkel; die Zahl bleibt in Textfarbe lesbar */
     table.data tr td.h1 { background: color-mix(in srgb, var(--accent) calc(7% * var(--heat-strength, 1)), transparent); }
@@ -96,7 +112,13 @@ export class ResultTable {
     const scale = this.heat();
     return scale ? heatClasses(this.columns(), this.rows(), scale, this.heatOptions()) : null;
   });
+  protected readonly topical = computed(() => this.rows().some((r) => !!r.topics));
   protected readonly indented = computed(() => this.rows().some((r) => r.kind === 'group'));
+  protected topicTitle(topic: { count: number; share?: number | null; lift?: number }): string {
+    const share = topic.share === null || topic.share === undefined ? '' : `, ${formatNumber(topic.share)} % der Zelle`;
+    const lift = topic.lift ? `, ${formatNumber(topic.lift)}-mal so häufig wie im Bestand` : '';
+    return `${formatNumber(topic.count)} Materialien${share}${lift}`;
+  }
   protected readonly number = formatNumber;
   protected readonly percent = formatPercent;
   protected readonly delta = formatDelta;

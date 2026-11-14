@@ -88,6 +88,9 @@ def report_data(report: Report, with_html: bool = False) -> dict[str, Any]:
     def block(item: Any) -> dict[str, Any]:
         data = dataclasses.asdict(item)
         data["type"] = type(item).__name__.lower()
+        for row in data.get("rows") or []:  # Themen nur dort, wo es welche gibt
+            if row.get("topics") is None:
+                row.pop("topics", None)
         if with_html and isinstance(item, Text):
             data["html"] = markdown_to_html(item.markdown)
         return data
@@ -164,6 +167,9 @@ def to_csv(report: Report, delimiter: str = ";") -> bytes:
                 if with_previous:
                     line.append(number(row.previous[pos] if row.previous else None))
             writer.writerow(line)
+        for row_label, column, topic in _topic_lines(item):
+            writer.writerow(["Thema", _safe(row_label), _safe(column), _safe(topic["label"]),
+                             number(topic.get("count")), number(topic.get("share"))])
         for note in item.notes:
             writer.writerow(["Hinweis", _safe(note["text"])])
         for src in source_lines(item):
@@ -210,6 +216,7 @@ def to_markdown(report: Report) -> bytes:
             cells = [_cell(row, pos) for pos in range(len(item.columns))]
             lines.append(f"| {label} | " + " | ".join(cells) + " |")
         lines.append("")
+        lines += _topic_markdown(item)
         lines += [f"- Hinweis: {_md(n['text'])}" for n in item.notes]
         lines += [f"- Quelle: {_md(s)}" for s in source_lines(item)]
         lines.append("")
@@ -232,6 +239,8 @@ td.label, th.label { text-align: left; } tr.group td, tr.total td { font-weight:
 tr.group td.label { background: #f6f7f9; } tr.total td { border-top: 2px solid #555; }
 td.l1 { padding-left: 1.4em; } .derived { font-style: italic; }
 .notes { color: #444; font-size: 8.5pt; margin: .3rem 0 0; padding-left: 1.2em; }
+ul.topics { list-style: none; margin: .2rem 0 0; padding: 0; text-align: left; font-size: 8pt; }
+ul.topics span { color: #555; }
 .failure { border: 1px solid #b8445a; background: #fbeef0; padding: .5rem; }
 table.many { table-layout: fixed; font-size: 7.5pt; } table.many th.label { width: 24%; }
 table.many th { overflow-wrap: break-word; hyphens: auto; }
@@ -260,6 +269,39 @@ def _parts(table: Table) -> list[tuple[int, int, list[tuple[str, int]] | None]]:
     return parts
 
 
+def _topics_of(row: Row, pos: int) -> list[dict[str, Any]]:
+    if not row.topics or pos >= len(row.topics):
+        return []
+    return [t for t in row.topics[pos] if isinstance(t, dict) and t.get("label")]
+
+
+def _topic_lines(table: Table) -> list[tuple[str, str, dict[str, Any]]]:
+    """Themen je Zelle als lange Liste: (Zeile, Spalte, Thema)."""
+    return [(row.label, column.label, topic) for row in table.rows
+            for pos, column in enumerate(table.columns) for topic in _topics_of(row, pos)]
+
+
+def _topic_markdown(table: Table) -> list[str]:
+    lines = []
+    for row in table.rows:
+        for pos, column in enumerate(table.columns):
+            found = _topics_of(row, pos)
+            if found:
+                where = row.label if len(table.columns) == 1 else f"{row.label} · {column.label}"
+                lines.append(f"- **{_md(where)}:** " + ", ".join(
+                    f"{_md(str(t['label']))} ({format_number(t.get('count'))})" for t in found))
+    return ([""] + lines + [""]) if lines else []
+
+
+def _topic_html(row: Row, pos: int) -> str:
+    found = _topics_of(row, pos)
+    if not found:
+        return ""
+    return '<ul class="topics">' + "".join(
+        f"<li>{escape(str(t['label']))} <span>{escape(format_number(t.get('count')))}</span></li>"
+        for t in found) + "</ul>"
+
+
 def _table_html(table: Table) -> str:
     out = []
     heated = table.view.get("type") == "heatmap"
@@ -276,9 +318,10 @@ def _table_html(table: Table) -> str:
             for c in table.columns[start:end]) + "</tr></thead><tbody>")
         for row, shade in zip(table.rows, shades, strict=True):
             cells = "".join(
-                f'<td class="{shade[pos]}">{escape(_cell(row, pos))}</td>'
+                f'<td class="{shade[pos]}">{escape(_cell(row, pos))}{_topic_html(row, pos)}</td>'
                 if shade and pos < len(shade) and shade[pos]
-                else f"<td>{escape(_cell(row, pos))}</td>" for pos in range(start, end))
+                else f"<td>{escape(_cell(row, pos))}{_topic_html(row, pos)}</td>"
+                for pos in range(start, end))
             out.append(f'<tr class="{escape(row.kind)}"><td class="label l{row.level}">'
                        f"{escape(row.label)}</td>{cells}</tr>")
         out.append("</tbody></table>")

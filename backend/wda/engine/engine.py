@@ -71,17 +71,20 @@ class _Run:
         self._tasks: dict[tuple, asyncio.Task[Aggregate]] = {}
         self.results: list[Aggregate] = []
 
-    def call(self, criteria: tuple[Criterion, ...], facet: str | None = None
-             ) -> asyncio.Task[Aggregate]:
-        key = (tuple(sorted((c.property, tuple(sorted(c.values))) for c in criteria)), facet)
+    def call(self, criteria: tuple[Criterion, ...], facet: str | None = None,
+             facet_limit: int | None = None) -> asyncio.Task[Aggregate]:
+        key = (tuple(sorted((c.property, tuple(sorted(c.values))) for c in criteria)), facet,
+               facet_limit)
         if key not in self._tasks:
-            self._tasks[key] = asyncio.ensure_future(self._do(criteria, facet))
+            self._tasks[key] = asyncio.ensure_future(self._do(criteria, facet, facet_limit))
         return self._tasks[key]
 
-    async def _do(self, criteria: tuple[Criterion, ...], facet: str | None) -> Aggregate:
+    async def _do(self, criteria: tuple[Criterion, ...], facet: str | None,
+                  facet_limit: int | None = None) -> Aggregate:
+        more = {"facet_limit": facet_limit} if facet_limit else {}
         result = await self._client.aggregate(
             criteria, [facet] if facet else [], content_type=self._content_type,
-            refresh=self._refresh)
+            refresh=self._refresh, **more)
         self.results.append(result)
         return result
 
@@ -167,6 +170,9 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         return await _execute_profile(spec, client, vocab, run)
     if spec.sizes is not None:
         return await _execute_sizes(spec, client, vocab, run)
+    if spec.topics is not None:
+        from .topics import execute_topics  # hier, weil das Modul die Helfer von hier nutzt
+        return await execute_topics(spec, client, vocab, run)
     notes = Notes()
     prefix_fields = set(client.instance.prefix_fields)
     base_list, base_described = await resolve_filters(vocab, spec.filters)

@@ -311,8 +311,14 @@ await page.click('nav >> text=Qualität');
 await page.waitForURL(/\/qualitaet\/datenqualitaet$/);
 await page.waitForSelector("app-report-view canvas", { timeout: 60000 });
 await page.click(".tabs >> text=Abdeckung");
+await page.waitForSelector('app-run-page h1:has-text("Abdeckung")', { timeout: 60000 });
 await page.waitForSelector('app-report-view td.h6', { timeout: 60000 });
 assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, 'Heatmap ist eingefärbt');
+// Wissenslandkarte: Themen je Zelle, ohne den Namen des Fachs und ohne Füllwörter
+await page.click('.tabs >> text=Wissenslandkarte');
+await page.waitForSelector('app-report-view ol.topics li', { timeout: 60000 });
+const themes = (await page.locator('app-report-view ol.topics li').allInnerTexts()).join(' ').toLowerCase();
+assert.ok(themes.includes('bruchrechnung') && !themes.includes('nachhilfe'), 'Themen sind bereinigt');
 await page.click('.tabs >> text=Datenprobleme');
 await page.waitForSelector('app-report-view td.gap, app-report-view td.h3, app-report-view td.h4, app-report-view td.h5, app-report-view td.h6', { timeout: 60000 });
 await page.waitForSelector('app-report-view td:has-text("political")');

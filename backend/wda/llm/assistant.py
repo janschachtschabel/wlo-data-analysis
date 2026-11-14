@@ -76,6 +76,11 @@ angelegt) und virtual:time_after_modified (geändert), mit dem Wert {{"since": "
 "12m" oder "5y". Zufluss und Pflege je Quelle: rows auf ccm:replicationsource oder \
 ccm:oeh_publisher_combined, dazu series mit so einem Filter. Ein Zeitraum ist die Differenz \
 zweier „seit“-Spalten (formula); Hilfsspalten mit "hidden": true verbergen.
+- topics: {{"property": Themenfeld, "top": 10, "rank": "typical"|"frequent"}} zusammen mit \
+rows (mit top oder include) und optional columns: Themen je Zelle, eine „Wissenslandkarte“. \
+Themenfeld ist cclom:general_keyword (Schlagwörter, werden bereinigt; "typical" zeigt, was \
+für die Zelle typisch ist) oder ccm:curriculum (Lehrplanthemen, "frequent"). Höchstens 480 \
+Zellen. Darstellung heatmap. Im Ergebnis stehen die Themen je Zeile unter "themen".
 - sizes: {{"property": Feld}} ohne rows: Größenklassen, z. B. wie viele Bezugsquellen nur \
 ein Material haben.
 - gaps: {{"limit": n, "min_expected": 20, "below": 50}} zusammen mit rows und columns: \

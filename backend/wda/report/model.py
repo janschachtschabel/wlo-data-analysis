@@ -26,6 +26,8 @@ class Row:
     # Vergleich mit einem früheren Lauf: dessen Werte; ``new``: die Zeile gab es dort nicht
     previous: list[Number | None] | None = None
     new: bool = False
+    # Themen je Zelle (Wissenslandkarte): je Spalte eine Liste {label, count, share}
+    topics: list[list[dict[str, Any]]] | None = None
 
 
 @dataclass

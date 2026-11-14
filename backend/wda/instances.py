@@ -23,6 +23,7 @@ DEFAULT_FACET_FIELDS: tuple[str, ...] = (
     "ccm:replicationsource",
     "ccm:oeh_publisher_combined",
     "cclom:general_language",
+    "cclom:general_keyword",  # Schlagwörter: nur als Zählung je Wert
 )
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _FIELD_NAME = re.compile(r"^[A-Za-z0-9_:.\-]{1,200}$")

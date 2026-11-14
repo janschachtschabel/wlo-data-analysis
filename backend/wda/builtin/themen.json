@@ -1,0 +1,327 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "themen",
+  "title": "Wissenslandkarte",
+  "description": "Welche Themen stecken im Bestand? Typische Schlagwörter und Lehrplanthemen je Fach, Bildungsstufe, Materialart und Bezugsquelle, allein aus Zählungen."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-themen",
+   "kind": "dashboard",
+   "name": "Wissenslandkarte",
+   "description": "Themen je Zelle, allein aus Zählungen der Schlagwörter und Lehrplanthemen. Oben in jeder Zelle steht die Zahl der Materialien, darunter die Themen mit der Zahl der Materialien, die sie tragen. Schlagwörter sind bereinigt (Schreibweisen zusammengeführt; Fachnamen, Füllwörter, Anbieter- und Kanalnamen entfernt) und nach dem sortiert, was für die Zelle typisch ist. Schlagwörter stammen von den Quellen und sind unterschiedlich gut gepflegt. Gemessen an WLO Produktion.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "schlagwoerter-fach-stufe",
+      "title": "Wissenslandkarte Schule: typische Schlagwörter je Fach und Bildungsstufe (25 größte Fächer)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "top": 25
+       },
+       "columns": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
+        "top": 6
+       },
+       "topics": {
+        "property": "cclom:general_keyword",
+        "top": 10,
+        "rank": "typical",
+        "exclude": [
+         "Mediakraft",
+         "British Pathé",
+         "MrWissen2Go",
+         "MrWissen2go",
+         "mrwissen2go",
+         "hank green",
+         "scishow",
+         "scishow space",
+         "sci show",
+         "Mathe by Daniel Jung",
+         "MathebyDanielJung",
+         "Daniel Jung",
+         "ObachtMathe",
+         "mathematrick",
+         "schoolseasy",
+         "lehrerschmidt",
+         "Jan Yellow",
+         "Ecole Science",
+         "Sehen und Verstehen",
+         "TheSimpleClub",
+         "simpleclub",
+         "musstewissen",
+         "Terra X",
+         "funk",
+         "Kategorie:Klexikon-Artikel",
+         "Arts",
+         "TV & Film",
+         "Society & Culture",
+         "Stiftung",
+         "stummes Video",
+         "Experimentiervideo",
+         "First World War",
+         "History"
+        ],
+        "exclude_fields": [
+         "ccm:oeh_publisher_combined",
+         "ccm:replicationsource"
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 30
+      }
+     },
+     {
+      "id": "lehrplan-fach-stufe",
+      "title": "Lehrplanthemen je Fach und Bildungsstufe (gepflegte Themen, bei rund 8 % des Bestands)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "top": 25
+       },
+       "columns": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
+        "top": 6
+       },
+       "topics": {
+        "property": "ccm:curriculum",
+        "top": 10,
+        "rank": "frequent"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 30,
+       "w": 12,
+       "h": 30
+      }
+     },
+     {
+      "id": "schlagwoerter-hochschule",
+      "title": "Hochschule: typische Schlagwörter je Fach der Hochschulfächersystematik (20 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
+        "top": 20
+       },
+       "topics": {
+        "property": "cclom:general_keyword",
+        "top": 15,
+        "rank": "typical",
+        "exclude": [
+         "Mediakraft",
+         "British Pathé",
+         "MrWissen2Go",
+         "MrWissen2go",
+         "mrwissen2go",
+         "hank green",
+         "scishow",
+         "scishow space",
+         "sci show",
+         "Mathe by Daniel Jung",
+         "MathebyDanielJung",
+         "Daniel Jung",
+         "ObachtMathe",
+         "mathematrick",
+         "schoolseasy",
+         "lehrerschmidt",
+         "Jan Yellow",
+         "Ecole Science",
+         "Sehen und Verstehen",
+         "TheSimpleClub",
+         "simpleclub",
+         "musstewissen",
+         "Terra X",
+         "funk",
+         "Kategorie:Klexikon-Artikel",
+         "Arts",
+         "TV & Film",
+         "Society & Culture",
+         "Stiftung",
+         "stummes Video",
+         "Experimentiervideo",
+         "First World War",
+         "History"
+        ],
+        "exclude_fields": [
+         "ccm:oeh_publisher_combined",
+         "ccm:replicationsource"
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 60,
+       "w": 12,
+       "h": 18
+      }
+     },
+     {
+      "id": "schlagwoerter-materialart",
+      "title": "Typische Schlagwörter je Materialart",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 15
+       },
+       "topics": {
+        "property": "cclom:general_keyword",
+        "top": 12,
+        "rank": "typical",
+        "exclude": [
+         "Mediakraft",
+         "British Pathé",
+         "MrWissen2Go",
+         "MrWissen2go",
+         "mrwissen2go",
+         "hank green",
+         "scishow",
+         "scishow space",
+         "sci show",
+         "Mathe by Daniel Jung",
+         "MathebyDanielJung",
+         "Daniel Jung",
+         "ObachtMathe",
+         "mathematrick",
+         "schoolseasy",
+         "lehrerschmidt",
+         "Jan Yellow",
+         "Ecole Science",
+         "Sehen und Verstehen",
+         "TheSimpleClub",
+         "simpleclub",
+         "musstewissen",
+         "Terra X",
+         "funk",
+         "Kategorie:Klexikon-Artikel",
+         "Arts",
+         "TV & Film",
+         "Society & Culture",
+         "Stiftung",
+         "stummes Video",
+         "Experimentiervideo",
+         "First World War",
+         "History"
+        ],
+        "exclude_fields": [
+         "ccm:oeh_publisher_combined",
+         "ccm:replicationsource"
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 78,
+       "w": 12,
+       "h": 18
+      }
+     },
+     {
+      "id": "schlagwoerter-bezugsquelle",
+      "title": "Wofür steht welche Bezugsquelle? Typische Schlagwörter der 25 größten",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "topics": {
+        "property": "cclom:general_keyword",
+        "top": 12,
+        "rank": "typical",
+        "exclude": [
+         "Mediakraft",
+         "British Pathé",
+         "MrWissen2Go",
+         "MrWissen2go",
+         "mrwissen2go",
+         "hank green",
+         "scishow",
+         "scishow space",
+         "sci show",
+         "Mathe by Daniel Jung",
+         "MathebyDanielJung",
+         "Daniel Jung",
+         "ObachtMathe",
+         "mathematrick",
+         "schoolseasy",
+         "lehrerschmidt",
+         "Jan Yellow",
+         "Ecole Science",
+         "Sehen und Verstehen",
+         "TheSimpleClub",
+         "simpleclub",
+         "musstewissen",
+         "Terra X",
+         "funk",
+         "Kategorie:Klexikon-Artikel",
+         "Arts",
+         "TV & Film",
+         "Society & Culture",
+         "Stiftung",
+         "stummes Video",
+         "Experimentiervideo",
+         "First World War",
+         "History"
+        ],
+        "exclude_fields": [
+         "ccm:replicationsource"
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 96,
+       "w": 12,
+       "h": 18
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

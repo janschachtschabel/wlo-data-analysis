@@ -27,6 +27,8 @@ export interface ResultRow {
   values: (number | null)[]; percent?: (number | null)[] | null; level?: number;
   /** Vergleich mit einem früheren Lauf: dessen Werte; `new`: die Zeile gab es dort nicht */
   previous?: (number | null)[] | null; new?: boolean;
+  /** Themen je Zelle (Wissenslandkarte): je Spalte eine Liste */
+  topics?: { label: string; count: number; share?: number | null; lift?: number }[][] | null;
 }
 export interface QueryResult {
   schema_version: number; instance: string; columns: ResultColumn[]; rows: ResultRow[];

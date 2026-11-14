@@ -80,7 +80,8 @@ def api(settings):
 def test_list_install_run_and_export(api):
     listed = api.get("/api/builtin").json()
     assert [b["id"] for b in listed] == ["abdeckung", "datenprobleme", "datenqualitaet",
-                                         "oer-statistik", "quellen", "tiefenpruefung"]
+                                         "oer-statistik", "quellen", "themen",
+                                         "tiefenpruefung"]
     listed = listed[3:]
     assert listed[0]["definitions"] == [{"id": "builtin-oer-statistik", "kind": "template",
                                          "name": "OER-Statistik", "installed": False,

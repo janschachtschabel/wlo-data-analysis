@@ -67,7 +67,7 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
               <section class="card proposal" [class.dash]="proposal.kind === 'dashboard'">
                 <div class="row">
                   <strong class="grow">{{ proposal.kind === 'dashboard' ? 'Dashboard: ' : '' }}{{ proposal.name }}</strong>
-                  @if (proposal.kind === 'metric') { <a class="btn" [routerLink]="['/explorer']" [queryParams]="{ q: explorerLink(proposal) }">Im Explorer öffnen</a> }
+                  @if (proposal.kind === 'metric' && !proposal.spec.query?.topics) { <a class="btn" [routerLink]="['/explorer']" [queryParams]="{ q: explorerLink(proposal) }">Im Explorer öffnen</a> }
                   @if (chat.target(); as target) {
                     <button type="button" class="primary" (click)="chat.adopt(proposal)" [title]="'Als Kacheln in die geöffnete Bearbeitung übernehmen'">In „{{ target.name }}“ übernehmen</button>
                   }

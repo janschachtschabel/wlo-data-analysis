@@ -37,7 +37,8 @@ SOURCES = ["oersi_spider", "youtube_spider", "bpb_spider"]
 KNOWN = {"ccm:taxonid", "ccm:educationalcontext", "ccm:commonlicense_key", "license",
          "ccm:replicationsource", "ngsearchword", "ccm:editorial_checklist",
          "ccm:oeh_lrt_aggregated", "cclom:general_language", "ccm:oeh_publisher_combined",
-         "ccm:educationalintendedenduserrole", "ccm:curriculum", "ccm:oeh_widgets"}
+         "ccm:educationalintendedenduserrole", "ccm:curriculum", "ccm:oeh_widgets",
+         "cclom:general_keyword"}
 # Wie live gemessen: als Facette zählbar, als Kriterium abgelehnt
 FACET_ONLY = {"ccm:oeh_languageLevel",
               "ccm:price", "ccm:oeh_buffet_criteria", "virtual:kita_search",

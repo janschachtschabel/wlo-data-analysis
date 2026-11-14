@@ -84,6 +84,16 @@ def _size(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 
 
+def _themes(rows: list[dict[str, Any]]) -> list[list[Any]] | None:
+    """Themen je Zelle in Kurzform: je Zeile und Spalte die ersten fünf mit Anzahl."""
+    if not any(r.get("topics") for r in rows):
+        return None
+    return [[r["label"], *[", ".join(f"{str(t.get('label'))[:60]} ({t.get('count')})"
+                                     for t in cell[:5])
+                           for cell in (r.get("topics") or [])[:MAX_COLUMNS]]]
+            for r in rows]
+
+
 def compact(result: dict[str, Any]) -> dict[str, Any]:
     """Ein Ergebnis der Engine in der Kürze, die ein Modell braucht."""
     columns = result["columns"][:MAX_COLUMNS]
@@ -92,6 +102,8 @@ def compact(result: dict[str, Any]) -> dict[str, Any]:
         "spalten": ["Zeile", *[c["label"] for c in columns]],
         "zeilen": [[r["label"], *r["values"][:MAX_COLUMNS]] for r in shown],
     }
+    if (themes := _themes(shown)) is not None:
+        out["themen"] = themes
     if any(r.get("percent") for r in shown):
         out["anteile"] = [[r["label"], *(r.get("percent") or [])[:MAX_COLUMNS]] for r in shown]
     if result.get("total_row", True):
@@ -116,6 +128,7 @@ def _compact_table(block: dict[str, Any]) -> dict[str, Any]:
     return {"titel": block.get("title"), "spalten": ["Zeile", *[c["label"] for c in columns]],
             "zeilen": [[r["label"], *r["values"][:MAX_COLUMNS]] for r in rows[:MAX_ROWS]],
             **({"gesamt": ["Gesamt", *total["values"][:MAX_COLUMNS]]} if total else {}),
+            **({"themen": themes} if (themes := _themes(rows[:MAX_ROWS])) else {}),
             **({"weitere_spalten": len(block["columns"]) - MAX_COLUMNS}
                if len(block.get("columns", [])) > MAX_COLUMNS else {}),
             **({"weitere_zeilen": len(rows) - MAX_ROWS} if len(rows) > MAX_ROWS else {}),
