@@ -89,7 +89,7 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
 
 
 # Darstellungen für Füllgrade: je Feld (ohne Zeilenfeld) bzw. je Zeile
-_FILL_VIEWS = {False: {"table", "bar", "stacked_bar"}, True: {"table", "heatmap", "bar"}}
+_FILL_VIEWS = {False: {"table", "heatmap", "bar", "stacked_bar"}, True: {"table", "heatmap", "bar"}}
 
 
 def _checked(table: Table) -> Table:

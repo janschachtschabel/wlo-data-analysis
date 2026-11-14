@@ -79,14 +79,15 @@ def api(settings):
 
 def test_list_install_run_and_export(api):
     listed = api.get("/api/builtin").json()
-    assert [b["id"] for b in listed] == ["datenqualitaet", "oer-statistik"]
-    listed = listed[1:]
+    assert [b["id"] for b in listed] == ["abdeckung", "datenprobleme", "datenqualitaet",
+                                         "oer-statistik"]
+    listed = listed[3:]
     assert listed[0]["definitions"] == [{"id": "builtin-oer-statistik", "kind": "template",
                                          "name": "OER-Statistik", "installed": False,
                                          "changed": False}]
     r = api.post("/api/builtin/oer-statistik/install")
     assert r.status_code == 200 and r.json()["definitions"][0]["action"] == "created"
-    assert api.get("/api/builtin").json()[1]["definitions"][0]["installed"] is True
+    assert api.get("/api/builtin").json()[3]["definitions"][0]["installed"] is True
     # eigene Änderungen überleben ein erneutes Installieren
     api.put("/api/definitions/builtin-oer-statistik", json={"version": 1, "name": "Meine"})
     again = api.post("/api/builtin/oer-statistik/install").json()
@@ -199,3 +200,104 @@ def test_quality_dashboard_installs_and_runs(api):
     report = api.get(f"/api/runs/{run['id']}/report").json()
     assert len(report["blocks"]) == len(run["results"])
     assert api.get(f"/api/runs/{run['id']}/export?format=csv").status_code == 200
+
+
+# ---- Dashboards „Abdeckung“ und „Datenprobleme“ ----------------------------------------
+
+MEASURED_MORE = MEASURED | {"license", "ccm:oeh_quality_protection_of_minors",
+                            "ccm:oeh_quality_currentness", "ccm:oeh_quality_neutralness",
+                            "ccm:oeh_quality_medial", "ccm:oeh_quality_language",
+                            "ccm:oeh_quality_didactics"}
+# als Kriterium zählbar (Spalten, „Übrige“, Filter); die übrigen nur als Facette
+AS_FILTER = MEASURED - FACET_ONLY | {"license"}
+SINGLE = {"ccm:price", "ccm:conditionsOfAccess", "ccm:containsAdvertisement", "ccm:fskRating",
+          "ccm:oeh_quality_login", "ccm:editorial_checklist", "ccm:commonlicense_key"}
+
+
+@pytest.mark.parametrize("bundle_id", ["abdeckung", "datenprobleme"])
+def test_coverage_and_problem_dashboards_fit_what_was_measured(bundle_id):
+    entry = bundles()[bundle_id]["definitions"][0]
+    assert entry["id"] == f"builtin-{bundle_id}"
+    parsed = parse_spec("dashboard", entry["spec"])
+    cells = set()
+    for tile in parsed.tiles:
+        q = tile.query
+        assert q is not None and q.instance == "wlo-prod" and not q.filters, tile.id
+        used = set()
+        if q.fill:
+            used |= {f.property for f in q.fill.fields}
+        if q.vocab_check:
+            used |= {f.property for f in q.vocab_check.fields}
+        if q.rows:
+            used.add(q.rows.property)
+            if q.rows.other:
+                assert q.rows.property in AS_FILTER, tile.id
+            if q.rows.missing:  # braucht ein Kriterium oder ein einwertiges Feld
+                assert q.rows.property in AS_FILTER | SINGLE, tile.id
+        if q.columns:
+            used.add(q.columns.property)
+            assert q.columns.property in AS_FILTER, tile.id
+        for series in q.series:
+            for flt in series.filters:
+                used.add(flt.property)
+                assert flt.property in AS_FILTER, tile.id
+        assert used and used <= MEASURED_MORE, (tile.id, used - MEASURED_MORE)
+        assert tile.layout.x + tile.layout.w <= 12
+        area = {(x, y) for x in range(tile.layout.x, tile.layout.x + tile.layout.w)
+                for y in range(tile.layout.y, tile.layout.y + tile.layout.h)}
+        assert not area & cells, tile.id
+        cells |= area
+
+
+def test_coverage_dashboard_runs_and_separates_school_and_university_subjects(api):
+    from .esdata import DISC as SCHOOL
+    from .esdata import HSF
+
+    assert api.post("/api/builtin/abdeckung/install").status_code == 200
+    run = api.post("/api/definitions/builtin-abdeckung/run").json()
+    assert run["status"] == "ok", [(r["key"], r["error"]) for r in run["results"] if r["error"]]
+    results = {r["key"]: r["result"] for r in run["results"]}
+    docs = api.repo.docs
+    school = results["schule-stufe"]
+    assert school["rows"] and all(r["key"].startswith(SCHOOL) for r in school["rows"])
+    assert all(c["id"].startswith("http") for c in school["columns"])  # ohne Schmutzwerte
+    row, col = school["rows"][0], school["columns"][0]
+    assert row["values"][0] == sum(
+        1 for d in docs if row["key"] in d["ccm:taxonid"]
+        and col["id"] in d["ccm:educationalcontext"])
+    uni = results["hochschule-stufe"]
+    assert uni["rows"] and all(r["key"].startswith(HSF) for r in uni["rows"])
+    lic = results["schule-lizenz"]
+    ids = [c["id"] for c in lic["columns"]]
+    first = lic["rows"][0]
+    having = [d for d in docs if first["key"] in d["ccm:taxonid"]]
+    assert first["values"][ids.index("gesamt")] == len(having)
+    assert first["values"][ids.index("ohne")] == sum(
+        1 for d in having if not d["ccm:commonlicense_key"])
+    report = api.get(f"/api/runs/{run['id']}/report").json()
+    assert {b["view"]["type"] for b in report["blocks"]} == {"heatmap"}
+    html = api.get(f"/api/runs/{run['id']}/export?format=html").text
+    assert 'class="h6"' in html and "0 (Lücke)" in html
+
+
+def test_problem_dashboard_runs_and_finds_the_dirty_values(api):
+    assert api.post("/api/builtin/datenprobleme/install").status_code == 200
+    run = api.post("/api/definitions/builtin-datenprobleme/run").json()
+    failed = [(r["key"], r["error"]) for r in run["results"] if r["error"]]
+    results = {r["key"]: r["result"] for r in run["results"]}
+    docs = api.repo.docs
+    # der Testbestand kennt nicht jedes Qualitätsfeld von WLO: Die Übersicht darf leer
+    # bleiben, alles andere muss laufen
+    assert all(key == "vokabular" for key, _ in failed), failed
+    dirty = results["stufe-unbekannt"]
+    assert {r["key"]: r["values"][0] for r in dirty["rows"]} == {
+        "political": sum(1 for d in docs if "political" in d["ccm:educationalcontext"])}
+    assert results["fach-unbekannt"]["rows"] == []
+    core = results["kernangaben"]
+    total = len(docs)
+    for row in core["rows"]:
+        filled = sum(1 for d in docs if any(v.strip() for v in d[row["key"]]))
+        assert row["values"] == [filled, total - filled, round(100 * filled / total, 1)]
+    report = api.get(f"/api/runs/{run['id']}/report").json()
+    blocks = {b["key"]: b for b in report["blocks"]}
+    assert blocks["kernangaben"]["view"] == {"type": "heatmap", "options": {"scale": "rate"}}

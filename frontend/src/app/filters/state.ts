@@ -102,7 +102,7 @@ export function decodeState(text: string | null): { state: ExplorerState | null;
         clean.fill = { ...clean.fill, fields: clean.fill.fields.filter((f) => f.property !== clean.rows!.property) };
         if (!clean.fill.fields.length) return broken;
       }
-      if (!FILL_VIEWS.includes(view) || (clean.rows && view === 'stacked_bar') || (!clean.rows && view === 'heatmap')) view = 'table';
+      if (!FILL_VIEWS.includes(view) || (clean.rows && view === 'stacked_bar') ) view = 'table';
     } else if (!clean.rows) { clean.fill = null; clean.rows = null; clean.columns = null; clean.percent = 'none'; view = 'table'; }
     else if (clean.columns?.property === clean.rows.property) clean.columns = null;
     if (view === 'number') view = 'table';

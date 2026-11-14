@@ -12,7 +12,7 @@ from wda.engine.formula import QueryError
 from wda.engine.spec import QuerySpec
 from wda.instances import Instance
 
-from .esdata import DISC, EC, LICENSES, DataRepo
+from .esdata import DISC, EC, LICENSES, UNI_SUBJECTS, DataRepo
 
 M, P, D = DISC + "380", DISC + "460", DISC + "120"
 S1, HS, EL = EC + "sekundarstufe_1", EC + "hochschule", EC + "elementarbereich"
@@ -204,16 +204,16 @@ def test_include_sort_top_other(repo, tmp_path):
     assert [x["label"] for x in r["rows"]] == ["Physik", "Mathematik"]
     r = query(repo, tmp_path, rows={"property": TAX, "sort": "label"})
     labels = [x["label"] for x in r["rows"]]
-    assert labels == sorted(labels, key=str.casefold) and len(labels) == 5
+    assert labels == sorted(labels, key=str.casefold) and len(labels) == 8
     # mehrwertig: „Übrige" ist eine eigene Zählung, keine Summe der restlichen Zeilen
     r = query(repo, tmp_path, rows={"property": TAX, "top": 2, "other": True})
     assert [x["kind"] for x in r["rows"]] == ["value", "value", "other"]
-    rest = [u for u in (M, P, D, DISC + "240", DISC + "320")
+    rest = [u for u in (M, P, D, DISC + "240", DISC + "320", *UNI_SUBJECTS.values())
             if u not in {x["key"] for x in r["rows"]}]
     assert r["rows"][-1]["values"] == [repo.brute(repo.has(TAX, *rest))]
     assert r["rows"][-1]["values"][0] < sum(repo.brute(repo.has(TAX, u)) for u in rest)
     assert any("Übrige" in n["text"] for n in r["provenance"]["notes"])
-    assert any("ersten 2 von 5" in n["text"] for n in r["provenance"]["notes"])
+    assert any("ersten 2 von 8" in n["text"] for n in r["provenance"]["notes"])
     assert r["provenance"]["queries"] == 2
     # einwertig: „Übrige" ist die Summe des Rests
     r = query(repo, tmp_path, rows={"property": LIC, "top": 3, "other": True, "missing": True})

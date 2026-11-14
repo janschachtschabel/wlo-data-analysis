@@ -276,6 +276,17 @@ await page.waitForSelector('app-report-view canvas');
 assert.ok((await page.locator('app-report-view h2, app-report-view h3').count()) >= 12, 'Kacheln des Dashboards');
 await page.screenshot({ path: process.env.SHOT ?? '/dev/null', fullPage: true }).catch(() => undefined);
 
+// Menüpunkt „Qualität“: legt die mitgelieferten Auswertungen an und zeigt sie als Reiter
+await page.click('nav >> text=Qualität');
+await page.waitForURL(/\/qualitaet\/abdeckung$/);
+await page.waitForSelector('app-report-view td.h6', { timeout: 60000 });
+assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, 'Heatmap ist eingefärbt');
+await page.click('.tabs >> text=Datenprobleme');
+await page.waitForSelector('app-report-view td.r-mid, app-report-view td.r-low, app-report-view td.r-high', { timeout: 60000 });
+await page.waitForSelector('app-report-view td:has-text("political")');
+await page.goto(base + '/bibliothek');
+await page.waitForSelector('section a:has-text("Abdeckung")');
+
 // Abmelden sperrt die API wieder
 await page.click('text=Abmelden');
 await page.waitForURL(/\/login/);

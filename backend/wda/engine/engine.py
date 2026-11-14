@@ -405,13 +405,21 @@ async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab:
             raise QueryError(
                 f"'{item.property}' steht auch in den Filtern; die Facette ignoriert den "
                 "Filter auf dem eigenen Feld. Bitte eines von beiden weglassen.")
-        known[item.property] = await known_values(vocab, item.property)
         field = await vocab.field(item.property)
+        if field is not None and field.values:
+            known[item.property] = {v.id for v in field.values}
         labels[item.property] = item.label or (field.caption if field and field.caption
                                                else item.property)
     main_task = run.call(base)
 
+    if not known:
+        raise QueryError(
+            "Keines der Felder hat auf dieser Instanz eine Werteliste; ein Abgleich mit dem "
+            "Vokabular geht nur bei Feldern mit Werteliste.")
+
     async def one(prop: str):
+        if prop not in known:  # ohne Werteliste wird nichts gefragt
+            return None
         try:
             return (await run.call(base, prop)).facets[prop]
         except EduSharingError as exc:
@@ -431,11 +439,11 @@ async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab:
          "total": None},
         {"id": "share", "label": "Anteil %", "derived": True, "total": None}]
     out_rows = []
-    refused, cut = [], []
+    refused, cut, closed = [], [], []
     for item, facet in zip(check.fields, facets, strict=True):
         label = labels[item.property]
         if facet is None:
-            refused.append(label)
+            (refused if item.property in known else closed).append(label)
             values: list[Number | None] = [None] * 5
         else:
             if facet.truncated:
@@ -450,6 +458,10 @@ async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab:
               "Verglichen werden die vorkommenden Werte mit der Werteliste des Feldes im "
               "Metadatenset. „Zuordnungen“ zählt je Wert die Materialien; ein Material mit "
               "mehreren Werten zählt mehrfach.")
+    if closed:
+        notes.add("vocab_closed",
+                  f"Nicht bestimmbar: {', '.join(closed)} (auf dieser Instanz ohne "
+                  "Werteliste; es wird nichts abgefragt).")
     if refused:
         notes.add("vocab_refused",
                   f"Nicht bestimmbar: {', '.join(refused)} (das Repositorium zählt dieses "
@@ -512,6 +524,8 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
                 "Füllgrade je Zeile gehen nicht zusammen mit Gruppen, „Übrige“ oder der "
                 "Zeile „ohne Wert“.")
         await vocab.check_facet(rows_spec.property)
+        if rows_spec.vocab:
+            await known_values(vocab, rows_spec.property)
         if row_prop in base_props:
             # Die Facette ignoriert den Filter auf dem eigenen Feld.
             notes.add("rows_filtered",
@@ -725,6 +739,8 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
         if restrict is not None:
             keys = [k for k in keys if k in restrict]
         rows = [_Row(k, await vocab.label(rows_spec.property, k), "value") for k in keys]
+        if rows_spec.match or rows_spec.vocab:
+            rows = await _select_rows(rows, rows_spec, vocab, notes)
         count_column = _Column("count", "Anzahl")
         for row in rows:
             count_column.cells[row.key] = counts.get(row.key, None if facet.truncated else 0)

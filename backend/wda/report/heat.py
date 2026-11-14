@@ -16,6 +16,8 @@ def scale_of(table: Table) -> str:
     wanted = (table.view.get("options") or {}).get("scale")
     if wanted in ("rate", "count"):
         return wanted
+    if [c.id for c in table.columns] == ["filled", "missing", "rate"]:  # Füllgrade je Feld
+        return "rate"
     rest = [c for c in table.columns if c.id != "count"]
     if rest and all(c.derived and c.label.rstrip().endswith("%") for c in rest):
         return "rate"
@@ -24,22 +26,24 @@ def scale_of(table: Table) -> str:
 
 def classes(table: Table) -> list[list[str]]:
     """Klasse je Zelle: ``h1``…``h6`` nach der Wurzel des Anteils am größten Wert, ``gap``
-    für 0, leer für unbekannt. Summen- und „ohne Wert“-Zeilen bleiben ungefärbt; bei der
-    Ampel auch die Spalte „Anzahl“."""
+    für 0, leer für unbekannt. Summen- und „ohne Wert“-Zeilen bleiben ungefärbt."""
     scale = scale_of(table)
-    numbers = [v for row in table.rows if row.kind not in _PLAIN for v in row.values
-               if isinstance(v, int | float) and not isinstance(v, bool)]
+    # „Anzahl“ neben anderen Spalten bleibt ungefärbt; die Ampel färbt nur Prozent-Spalten
+    skip = [(len(table.columns) > 1 and c.id == "count")
+            or (scale == "rate" and not c.label.rstrip().endswith("%")) for c in table.columns]
+    numbers = [v for row in table.rows if row.kind not in _PLAIN
+               for v, out in zip(row.values, skip, strict=False)
+               if not out and isinstance(v, int | float) and not isinstance(v, bool)]
     top = max(numbers, default=0)
     out = []
     for row in table.rows:
         line = []
-        for column, value in zip(table.columns, row.values, strict=False):
-            if (row.kind in _PLAIN or not isinstance(value, int | float)
+        for out_of_scale, value in zip(skip, row.values, strict=False):
+            if (row.kind in _PLAIN or out_of_scale or not isinstance(value, int | float)
                     or isinstance(value, bool)):
                 line.append("")
             elif scale == "rate":
-                line.append("" if column.id == "count" else
-                            "r-low" if value < 50 else "r-mid" if value < 80 else "r-high")
+                line.append("r-low" if value < 50 else "r-mid" if value < 80 else "r-high")
             elif value <= 0 or top <= 0:
                 line.append("gap")
             else:

@@ -355,7 +355,7 @@ def test_report_keeps_charts_of_fill_tables_honest(repo, tmp_path):
     bar = table_from_result("k", "T", per_field, {"type": "bar", "options": {}})
     assert _data(bar)[2] == ["Füllgrad %"]
     # Zahl, Kreis und Linie werden zur Tabelle, mit Hinweis
-    for kind in ("number", "pie", "line", "heatmap"):
+    for kind in ("number", "pie", "line"):
         table = table_from_result("k", "T", per_field, {"type": kind, "options": {}})
         assert table.view["type"] == "table" and chart_for(table) is None
         assert "view_changed" in [n["code"] for n in table.notes]

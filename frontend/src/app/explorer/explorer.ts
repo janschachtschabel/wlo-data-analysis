@@ -239,8 +239,7 @@ export class Explorer {
   protected readonly shownViews = computed(() => {
     if (!this.spec().fill) return VIEWS;
     // gestapelt (mit Wert / ohne Wert) gibt es nur ohne Zeilenfeld, die Heatmap nur mit
-    return VIEWS.filter((v) => FILL_VIEWS.includes(v.id) && (v.id !== 'stacked_bar' || !this.spec().rows)
-      && (v.id !== 'heatmap' || !!this.spec().rows));
+    return VIEWS.filter((v) => FILL_VIEWS.includes(v.id) && (v.id !== 'stacked_bar' || !this.spec().rows));
   });
   protected readonly heatScale = heatScale;
   protected readonly hasFill = (property: string) => !!this.spec().fill?.fields.some((f) => f.property === property);

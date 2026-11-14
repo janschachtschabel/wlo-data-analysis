@@ -61,7 +61,10 @@ def test_stored_result_does_not_repeat_the_query(api, settings):  # noqa: F811
 
 def test_builtin_reports_changes_and_can_be_reset(api):  # noqa: F811
     api.post("/api/builtin/oer-statistik/install")
-    entry = lambda: api.get("/api/builtin").json()[1]["definitions"][0]  # noqa: E731
+    def entry():
+        return next(b for b in api.get("/api/builtin").json()
+                    if b["id"] == "oer-statistik")["definitions"][0]
+
     assert (entry()["installed"], entry()["changed"]) == (True, False)
 
     current = api.get("/api/definitions/builtin-oer-statistik").json()

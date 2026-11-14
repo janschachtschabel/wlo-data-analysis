@@ -54,3 +54,13 @@ def test_html_export_shades_only_heatmaps():
     assert "0 (Lücke)" in shaded
     plain = html({"type": "table", "options": {}})
     assert '<td class="h6">' not in plain and "0 (Lücke)" not in plain
+
+
+def test_count_column_beside_others_is_never_shaded_and_fill_tables_shade_the_rate():
+    t = table([("count", "Anzahl", False), ("f", "Fach: ohne Wert", True)],
+              [("value", [9000, 30]), ("value", [50, 0])])
+    assert heat.classes(t) == [["", "h6"], ["", "gap"]]
+    per_field = table([("filled", "mit Wert", False), ("missing", "ohne Wert", True),
+                       ("rate", "Füllgrad %", True)], [("value", [10, 90, 10.0])])
+    assert heat.scale_of(per_field) == "rate"
+    assert heat.classes(per_field) == [["", "", "r-low"]]

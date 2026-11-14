@@ -150,6 +150,22 @@ Füllgrade von Feldern ohne Werteliste (Titel, Beschreibung) kommen erst mit dem
 der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibliothek,
 „Mitgeliefert“).
 
+### Abdeckung und Datenprobleme
+
+- `rows.match` und `columns.match`: nur Werte, die mit diesem Text beginnen. `ccm:taxonid`
+  trägt bei WLO zwei Vokabulare in einem Feld, Schulfächer (`…/vocabs/discipline/`) und
+  Hochschulfächer nach Destatis (`…/vocabs/hochschulfaechersystematik/`); so lassen sie sich
+  trennen.
+- `rows.vocab: "outside"`: nur Werte, die die Werteliste des Feldes nicht kennt (Schmutzwerte,
+  andere Schreibweisen). `vocab_check: {"fields": [...]}` zählt das je Feld. Beides nur für
+  Felder mit Werteliste, damit nie Werte einzelner Datensätze erscheinen.
+- Darstellung `heatmap`: die Tabelle mit eingefärbten Zellen, 0 als schraffierte Lücke; für
+  Prozent-Spalten eine Ampel (unter 50 rot, unter 80 gelb). Auch im HTML- und PDF-Export.
+- Der Menüpunkt „Qualität“ zeigt die mitgelieferten Dashboards „Abdeckung“ (Fach ×
+  Bildungsstufe, Materialart, Lizenz, Quelle), „Füllgrade“ und „Datenprobleme“ als Reiter.
+- Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
+  heißen wie die echten Felder, zählen aber nichts.
+
 ## Verwaltung und Läufe
 
 Vier Arten von Definitionen liegen in einer SQLite-Datei im Datenverzeichnis

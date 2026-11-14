@@ -7,20 +7,20 @@ from pydantic import ValidationError
 from wda.engine.formula import QueryError
 from wda.engine.spec import QuerySpec
 
-from .esdata import DISC, EC, LEVELS, DataRepo
+from .esdata import DISC, EC, HSF, LEVELS, UNI_SUBJECTS, DataRepo
 from .test_engine import LIC, LVL, SRC, TAX, cells, query
 
-HSF = "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/"
+UNI = set(UNI_SUBJECTS.values())
+OFF = HSF + "n999"  # ein Hochschulfach, das die Werteliste nicht kennt
 PRICE, BUFFET = "ccm:price", "ccm:oeh_buffet_criteria"
 
 
 @pytest.fixture
 def repo():
-    repo = DataRepo()
-    # zwei Vokabulare in einem Feld, wie bei WLO: Schulfächer und Hochschulfächer
+    repo = DataRepo()  # zwei Vokabulare in einem Feld, wie bei WLO
     for n, doc in enumerate(repo.docs):
-        if n % 3 == 0:
-            doc[TAX] = [*doc[TAX], HSF + ("n01" if n % 2 else "n02")]
+        if n % 7 == 0:
+            doc[TAX] = [*doc[TAX], OFF]
     return repo
 
 
@@ -32,10 +32,10 @@ def test_rows_match_keeps_one_vocabulary(repo, tmp_path):
     school = cells(query(repo, tmp_path, rows={"property": TAX, "match": DISC}))
     uni = query(repo, tmp_path, rows={"property": TAX, "match": HSF})
     assert school and all(k.startswith(DISC) for k in school)
-    assert set(cells(uni)) == {HSF + "n01", HSF + "n02"}
+    assert set(cells(uni)) == UNI | {OFF}
     for key, value in {**school, **cells(uni)}.items():
         assert value == repo.brute(repo.has(TAX, key))
-    assert "2 von" in notes_of(uni)["rows_selected"]
+    assert "4 von 9" in notes_of(uni)["rows_selected"]
     # top wirkt nach der Auswahl
     top = query(repo, tmp_path, rows={"property": TAX, "match": HSF, "top": 1})
     assert len(top["rows"]) == 1 and top["rows"][0]["key"].startswith(HSF)
@@ -58,17 +58,15 @@ def test_rows_outside_and_inside_the_vocabulary(repo, tmp_path):
     assert outside == {"political": repo.brute(repo.has(LVL, "political"))}
     inside = cells(query(repo, tmp_path, rows={"property": LVL, "vocab": "inside"}))
     assert set(inside) == set(LEVELS.values())
-    # die Hochschulfächer stehen nicht in der Werteliste des Testbestands
     both = cells(query(repo, tmp_path, rows={"property": TAX, "vocab": "outside", "match": HSF}))
-    assert set(both) == {HSF + "n01", HSF + "n02"}
+    assert set(both) == {OFF}
 
 
 def test_vocab_comparison_only_for_fields_with_a_value_list(repo, tmp_path):
     """Bei freiem Text wäre „nicht im Vokabular“ eine Liste von Werten einzelner Datensätze."""
     for bad in ({"rows": {"property": SRC, "vocab": "outside"}},
                 {"rows": {"property": LIC, "vocab": "inside"}},
-                {"vocab_check": {"fields": [{"property": SRC}]}},
-                {"vocab_check": {"fields": [{"property": LVL}, {"property": "cclom:title"}]}}):
+                {"vocab_check": {"fields": [{"property": SRC}, {"property": "cclom:title"}]}}):
         before = len(repo.searches)
         with pytest.raises(QueryError, match="Werteliste"):
             query(repo, tmp_path, **bad)
@@ -103,8 +101,8 @@ def test_vocab_check_counts_values_and_uses(repo, tmp_path):
     uses = sum(len(d[LVL]) for d in repo.docs)
     bad = repo.brute(repo.has(LVL, "political"))
     assert rows[LVL]["values"] == [len(LEVELS) + 1, 1, uses, bad, round(100 * bad / uses, 1)]
-    uni = sum(1 for d in repo.docs for v in d[TAX] if v.startswith(HSF))
-    assert rows[TAX]["values"][1] == 2 and rows[TAX]["values"][3] == uni
+    off = sum(1 for d in repo.docs if OFF in d[TAX])
+    assert rows[TAX]["values"][1] == 1 and rows[TAX]["values"][3] == off
     assert rows[PRICE]["values"][1:2] == [0] and rows[PRICE]["values"][3] == 0
     assert "vocab_check" in notes_of(result)
     assert result["provenance"]["queries"] == 4  # je Feld einer und die Grundgesamtheit
@@ -132,3 +130,20 @@ def test_missing_row_for_single_valued_field_the_repository_does_not_filter(repo
     multi = query(repo, tmp_path, rows={"property": BUFFET, "missing": True})
     assert cells(multi)["__missing__"] is None
     assert "missing_unknown" in notes_of(multi) and "rows_overlap" in notes_of(multi)
+
+
+def test_vocab_check_leaves_fields_without_value_list_empty_and_never_asks(repo, tmp_path):
+    """Ein mitgeliefertes Dashboard läuft auch auf einer Instanz, die ein Feld nicht kennt."""
+    result = query(repo, tmp_path, vocab_check={"fields": [
+        {"property": LVL}, {"property": "cclom:title"}, {"property": "gibt:esnicht"}]})
+    rows = {r["key"]: r["values"] for r in result["rows"]}
+    assert rows[LVL][0] and rows["cclom:title"] == [None] * 5 == rows["gibt:esnicht"]
+    assert "Titel" in notes_of(result)["vocab_closed"]
+    sent = str(repo.searches)
+    assert "cclom:title" not in sent and "gibt:esnicht" not in sent
+
+
+def test_fill_per_row_respects_match(repo, tmp_path):
+    result = query(repo, tmp_path, rows={"property": LVL, "match": EC},
+                   fill={"fields": [{"property": TAX}]})
+    assert {r["key"] for r in result["rows"]} == set(LEVELS.values())

@@ -14,6 +14,7 @@ import { Instances } from '../core/instances';
       <strong>WLO-Daten</strong>
       <nav aria-label="Hauptnavigation">
         <a routerLink="/" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">Explorer</a>
+        <a routerLink="/qualitaet" routerLinkActive="on">Qualität</a>
         <a routerLink="/bibliothek" routerLinkActive="on">Bibliothek</a>
         <a routerLink="/laeufe" routerLinkActive="on">Läufe</a>
         <a routerLink="/instanzen" routerLinkActive="on">Instanzen</a>

@@ -9,6 +9,8 @@ export const routes: Routes = [
     loadComponent: () => import('./shell/shell').then((m) => m.Shell),
     children: [
       { path: '', pathMatch: 'full', title: 'Explorer – WLO-Daten', loadComponent: () => import('./explorer/explorer').then((m) => m.Explorer) },
+      { path: 'qualitaet', pathMatch: 'full', redirectTo: 'qualitaet/abdeckung' },
+      { path: 'qualitaet/:tab', title: 'Qualität – WLO-Daten', loadComponent: () => import('./quality/quality').then((m) => m.Quality) },
       { path: 'bibliothek', title: 'Bibliothek – WLO-Daten', loadComponent: () => import('./library/library').then((m) => m.Library) },
       { path: 'bearbeiten/:defId', title: 'Bearbeiten – WLO-Daten', loadComponent: () => import('./library/editor').then((m) => m.Editor),
         canDeactivate: [(editor: { canLeave(): boolean }) => editor.canLeave()] },

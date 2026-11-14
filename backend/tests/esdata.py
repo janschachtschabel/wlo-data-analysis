@@ -60,9 +60,15 @@ PUBLISHERS = ["bpb", "Youtube", "OERSI", "Serlo"]
 PRICES = ["no", "yes", "yes_for_additional"]
 BUFFET = ["speech_valid", "content_valid", "medial_relevant"]
 
+HSF = "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/"
+# Hochschulfächer (Destatis) stehen bei WLO im selben Feld wie die Schulfächer
+UNI_SUBJECTS = {"Geisteswissenschaften": HSF + "n1", "Ingenieurwissenschaften": HSF + "n8",
+                "Mathematik, Naturwissenschaften": HSF + "n4"}
+
 MDS = {"id": "oeh", "widgets": [
     {"id": "ccm:taxonid", "caption": "Fach", "type": "multivalueTree",
-     "values": [{"id": uri, "caption": label} for label, uri in SUBJECTS.items()]},
+     "values": [{"id": uri, "caption": label}
+                for label, uri in {**SUBJECTS, **UNI_SUBJECTS}.items()]},
     {"id": "ccm:educationalcontext", "caption": "Bildungsstufe",
      "type": "multivalueFixedBadges",
      "values": [{"id": uri, "caption": label} for label, uri in LEVELS.items()]},
@@ -106,6 +112,8 @@ def make_docs(n: int = 400, seed: int = 7) -> list[Doc]:
         doc["ccm:oeh_buffet_criteria"] = extra.sample(BUFFET, extra.choice([0, 0, 2, 3]))
         doc["ccm:editorial_checklist"] = [extra.choice(["2", "9"])] if extra.random() < 0.1 else []
     for doc in docs:
+        if extra.random() < 0.2:
+            doc["ccm:taxonid"] = [*doc["ccm:taxonid"], extra.choice(list(UNI_SUBJECTS.values()))]
         doc["ccm:oeh_publisher_combined"] = (
             [extra.choice(PUBLISHERS)] if extra.random() < 0.95 else [])
         for prop, (_, kind, values, share) in MORE.items():

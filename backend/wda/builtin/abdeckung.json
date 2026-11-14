@@ -1,0 +1,411 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "abdeckung",
+  "title": "Abdeckung",
+  "description": "Wo ist das Angebot dicht, wo dünn? Fächer gegen Bildungsstufen, Materialarten, Lizenzen und Quellen als Heatmap; Schulfächer und Hochschulfächer getrennt."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-abdeckung",
+   "kind": "dashboard",
+   "name": "Abdeckung",
+   "description": "Heatmaps der Abdeckung. Je dunkler, desto mehr Materialien; schraffiert bedeutet kein einziges Material. Ein Material mit mehreren Fächern oder Stufen zählt in jeder zutreffenden Zelle. Gemessen an WLO Produktion.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "schule-stufe",
+      "title": "Schulfächer × Bildungsstufe: wo gibt es Angebot, wo Lücken?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "sort": "label"
+       },
+       "columns": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
+        "top": 14
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "hochschule-stufe",
+      "title": "Hochschulfächer (Destatis) × Bildungsstufe, 40 größte",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
+        "top": 40
+       },
+       "columns": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
+        "top": 14
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 14,
+       "w": 12,
+       "h": 12
+      }
+     },
+     {
+      "id": "schule-materialart",
+      "title": "Schulfächer × Materialart (10 häufigste Arten)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "sort": "label"
+       },
+       "columns": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 10
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 26,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "hochschule-materialart",
+      "title": "Hochschulfächer × Materialart, 40 größte",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
+        "top": 40
+       },
+       "columns": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 10
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 40,
+       "w": 12,
+       "h": 12
+      }
+     },
+     {
+      "id": "stufe-materialart",
+      "title": "Bildungsstufe × Materialart",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/"
+       },
+       "columns": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 12
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 52,
+       "w": 12,
+       "h": 8
+      }
+     },
+     {
+      "id": "schule-lizenz",
+      "title": "Schulfächer × Lizenz: wie offen ist das Angebot je Fach?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "sort": "label"
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Gesamt"
+        },
+        {
+         "id": "offen",
+         "label": "offen (PD, CC0, CC BY, CC BY-SA)",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "OPEN",
+            "CC_BY_OPEN"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "nc_nd",
+         "label": "CC mit NC/ND",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "CC_BY_RESTRICTED"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "copyright",
+         "label": "urheberrechtlich geschützt",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "COPYRIGHT_OTHERS"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "custom",
+         "label": "eigene Lizenz (CUSTOM)",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "CUSTOM",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "mit",
+         "label": "mit Lizenzangabe",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "ohne",
+         "label": "ohne Lizenzangabe",
+         "formula": "gesamt - mit"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 60,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "stufe-lizenz",
+      "title": "Bildungsstufe × Lizenz",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/"
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Gesamt"
+        },
+        {
+         "id": "offen",
+         "label": "offen (PD, CC0, CC BY, CC BY-SA)",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "OPEN",
+            "CC_BY_OPEN"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "nc_nd",
+         "label": "CC mit NC/ND",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "CC_BY_RESTRICTED"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "copyright",
+         "label": "urheberrechtlich geschützt",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "COPYRIGHT_OTHERS"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "custom",
+         "label": "eigene Lizenz (CUSTOM)",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "CUSTOM",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "mit",
+         "label": "mit Lizenzangabe",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "ohne",
+         "label": "ohne Lizenzangabe",
+         "formula": "gesamt - mit"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 74,
+       "w": 12,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelle-stufe",
+      "title": "Quelle × Bildungsstufe (25 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 25
+       },
+       "columns": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
+        "top": 14
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 82,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "quelle-fach",
+      "title": "Quelle × Schulfach (25 größte Quellen, 14 größte Fächer)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 25
+       },
+       "columns": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "top": 14
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 92,
+       "w": 12,
+       "h": 10
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

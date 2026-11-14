@@ -28,4 +28,12 @@ describe('Eingefärbte Tabelle', () => {
     expect(heatScale([col('x')], 'rate')).toBe('rate');
     expect(heatScale([col('count')])).toBe('count');
   });
+
+  it('färbt „Anzahl“ neben anderen Spalten nie und bei Füllgraden je Feld nur den Füllgrad', () => {
+    expect(heatClasses([col('count', 'Anzahl'), col('f', 'Fach: ohne Wert', true)], [row('value', [9000, 30]), row('value', [50, 0])],
+      'count')).toEqual([['', 'h6'], ['', 'gap']]);
+    const perField = [col('filled', 'mit Wert'), col('missing', 'ohne Wert', true), col('rate', 'Füllgrad %', true)];
+    expect(heatScale(perField)).toBe('rate');
+    expect(heatClasses(perField, [row('value', [10, 90, 10])], 'rate')).toEqual([['', '', 'r-low']]);
+  });
 });
