@@ -41,6 +41,15 @@ BLOCK_MIN = 20
 BLOCK_SHARE = 0.1         # und jeder davon an mindestens einem Zehntel der Zelle,
 BLOCK_LARGE = 100         # oder an mindestens so vielen Materialien und 2 % der Zelle
 BLOCK_LARGE_SHARE = 0.02
+# Satz eines Kanals, nachgezählt: Tragen fast alle Materialien eines Schlagworts dieselben
+# weiteren Schlagwörter, und kommen die fast nur dort vor, ist es der Satz eines Kanals.
+SET_SEEDS = 3              # so viele vordere Themen je Zelle werden nachgezählt
+SET_ROUNDS = 3             # nachrückende Sätze brauchen weitere Runden
+SET_CHECKS = 240           # Zählungen dafür je Abfrage, die größten Zellen zuerst
+SET_MIN = 50               # kleinere Mengen sind Reihen und Sammlungen, keine Kanäle
+SET_SIZE = 4               # so viele Begleiter braucht ein Satz
+SET_TOGETHER = 0.9         # Begleiter an so vielen Materialien des Schlagworts
+SET_ELSEWHERE = 0.8        # und so viel ihres eigenen Vorkommens liegt dort
 
 
 def _blocks(items: list[tuple[str, int]], total: int) -> set[str]:
@@ -238,66 +247,118 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
     blocked |= {norm(row.label) for row in rows}
     if spec.columns:
         blocked |= {norm(c.label) for c in columns}
-    out_rows = []
     merged_any = False
     blocks_any = False
     known = {v.id for v in field.values} if field is not None and not free else set()
     labels = {v.id: v.caption for v in field.values} if field is not None and not free else {}
-    for r, row in enumerate(rows):
-        row_names = _names(row.label)
-        values: list[int | None] = []
-        cells: list[list[dict[str, Any]]] = []
-        for c, _column in enumerate(columns):
-            answer = answers[r * len(columns) + c]
-            if answer is None:
-                values.append(None)
-                cells.append([])
-                continue
-            values.append(answer.total)
-            found = [(v.value, v.count) for v in answer.facets[prop].values if v.value.strip()]
-            if free:
-                merged = _merge(found)
-                merged_any = merged_any or len(merged) < len(found)
-                names = row_names | column_names[c]
-                whole = (norm(row.label), *((norm(_column.label),) if spec.columns else ()))
-                boilerplate = _blocks([(key, count) for key, (_, count, _) in merged.items()],
-                                      answer.total) if topics.stopwords else set()
-                items = [(key, label, count, best) for key, (label, count, best)
-                         in merged.items()
-                         if key not in blocked and not _is_name(key, names, whole)
-                         and not (topics.stopwords and _too_short(key, label))]
-                if any(item[0] in boilerplate for item in items):
-                    blocks_any = True
-                    items = [item for item in items if item[0] not in boilerplate]
-            else:
-                # nur Werte, die das Vokabular kennt, und nicht den Namen der Zeile selbst
-                items = [(value, value, count, count) for value, count in found
-                         if value in known and norm(labels[value]) not in row_names
-                         and norm(labels[value]) != norm(row.label)]
-            ranked = []
-            for key, label, count, best in items:
-                if best < MIN_COUNT:
+    banned: set[str] = set()   # Schlüssel aus nachgezählten Sätzen einzelner Kanäle
+
+    def assemble() -> tuple[list[dict[str, Any]], list[tuple[int, str, str]]]:
+        """Die Zeilen mit ihren Themen, dazu die vorderen Themen je Zelle zum Nachzählen:
+        (Größe der Zelle, Schlüssel, häufigste Schreibweise)."""
+        nonlocal merged_any, blocks_any
+        out_rows: list[dict[str, Any]] = []
+        seeds: list[tuple[int, str, str]] = []
+        for r, row in enumerate(rows):
+            row_names = _names(row.label)
+            values: list[int | None] = []
+            cells: list[list[dict[str, Any]]] = []
+            for c, _column in enumerate(columns):
+                answer = answers[r * len(columns) + c]
+                if answer is None:
+                    values.append(None)
+                    cells.append([])
                     continue
-                score = float(count)
-                lift = None
-                if typical and stock and answer.total:
-                    everywhere = baseline.get(key, (label, floor))[1]
-                    lift = (count / answer.total) / (max(everywhere, count) / stock)
-                    if lift < MIN_LIFT:
+                values.append(answer.total)
+                found = [(v.value, v.count) for v in answer.facets[prop].values if v.value.strip()]
+                if free:
+                    merged = _merge(found)
+                    merged_any = merged_any or len(merged) < len(found)
+                    names = row_names | column_names[c]
+                    whole = (norm(row.label), *((norm(_column.label),) if spec.columns else ()))
+                    boilerplate = _blocks([(key, count) for key, (_, count, _) in merged.items()],
+                                          answer.total) if topics.stopwords else set()
+                    raws: dict[str, tuple[str, int]] = {}
+                    for value, count in found:
+                        if count > raws.get(norm(value), ("", 0))[1]:
+                            raws[norm(value)] = (value, count)
+                    items = [(key, label, count, best) for key, (label, count, best)
+                             in merged.items()
+                             if key not in blocked and key not in banned
+                             and not _is_name(key, names, whole)
+                             and not (topics.stopwords and _too_short(key, label))]
+                    if any(item[0] in boilerplate for item in items):
+                        blocks_any = True
+                        items = [item for item in items if item[0] not in boilerplate]
+                else:
+                    # nur Werte, die das Vokabular kennt, und nicht den Namen der Zeile selbst
+                    items = [(value, value, count, count) for value, count in found
+                             if value in known and norm(labels[value]) not in row_names
+                             and norm(labels[value]) != norm(row.label)]
+                ranked = []
+                for key, label, count, best in items:
+                    if best < MIN_COUNT:
                         continue
-                    score = count * math.log(lift)
-                ranked.append((score, count, key, label, lift))
-            ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
-            # ausgewählt nach dem, was typisch ist; gezeigt nach der Zahl der Materialien
-            chosen = sorted(ranked[: topics.top], key=lambda item: (-item[1], item[2]))
-            cells.append([
-                {"label": label if free else labels[key], "count": count,
-                 "share": min(100.0, round(100 * count / answer.total, 1))
-                 if answer.total else None,
-                 **({"lift": round(lift, 1)} if lift is not None else {})}
-                for _, count, key, label, lift in chosen])
-        out_rows.append({"key": row.key, "label": row.label, "kind": "value",
-                         "values": values, "topics": cells})
+                    score = float(count)
+                    lift = None
+                    if typical and stock and answer.total:
+                        everywhere = baseline.get(key, (label, floor))[1]
+                        lift = (count / answer.total) / (max(everywhere, count) / stock)
+                        if lift < MIN_LIFT:
+                            continue
+                        score = count * math.log(lift)
+                    ranked.append((score, count, key, label, lift))
+                ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
+                # ausgewählt nach dem, was typisch ist; gezeigt nach der Zahl der Materialien
+                chosen = sorted(ranked[: topics.top], key=lambda item: (-item[1], item[2]))
+                if free:
+                    seeds += [(answer.total, key, raws[key][0])
+                              for _, _, key, _, _ in ranked[:SET_SEEDS]]
+                cells.append([
+                    {"label": label if free else labels[key], "count": count,
+                     "share": min(100.0, round(100 * count / answer.total, 1))
+                     if answer.total else None,
+                     **({"lift": round(lift, 1)} if lift is not None else {})}
+                    for _, count, key, label, lift in chosen])
+            out_rows.append({"key": row.key, "label": row.label, "kind": "value",
+                             "values": values, "topics": cells})
+        return out_rows, seeds
+
+    async def companions(key: str, raw: str) -> set[str]:
+        """Die Schlüssel eines Kanal-Satzes um dieses Schlagwort, leer, wenn es keiner ist."""
+        try:
+            answer = await run.call(base + (Criterion(prop, (raw,)),), prop, CELL_FACET_LIMIT)
+        except EduSharingError:
+            return set()
+        if answer.total < SET_MIN:
+            return set()
+        with_it = _merge([(v.value, v.count) for v in answer.facets[prop].values])
+        members = set()
+        for other, (_, count, _) in with_it.items():
+            everywhere = baseline.get(other, ("", count))[1]
+            if other != key and count >= answer.total * SET_TOGETHER \
+                    and count >= everywhere * SET_ELSEWHERE:
+                members.add(other)
+        return members | {key} if len(members) >= SET_SIZE else set()
+
+    out_rows, seeds = assemble()
+    checked: set[str] = set()
+    sets = 0
+    for _ in range(SET_ROUNDS if free and topics.stopwords else 0):
+        todo: dict[str, str] = {}
+        for _, key, raw in sorted(seeds, key=lambda seed: -seed[0]):
+            if key not in checked and len(checked) + len(todo) < SET_CHECKS:
+                todo.setdefault(key, raw)
+        if not todo:
+            break
+        checked |= set(todo)
+        found_sets = await asyncio.gather(*[companions(key, raw) for key, raw in todo.items()])
+        fresh = set().union(*found_sets) - banned
+        if not fresh:
+            break
+        sets += sum(1 for members in found_sets if members - banned)
+        banned |= fresh
+        out_rows, seeds = assemble()
 
     for column in columns:
         column.total = (await run.call(base + column.criteria)).total
@@ -312,6 +373,10 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                   + (f", ebenso Sätze aus {BLOCK_SIZE} oder mehr Schlagwörtern mit fast "
                      "gleicher Zahl (ein Kanal hängt sie an alle seine Materialien)"
                      if blocks_any else "")
+                  + (f", ebenso {len(banned)} Schlagwörter aus Sätzen einzelner Kanäle "
+                     f"(nachgezählt: mindestens {SET_SIZE} weitere Schlagwörter hängen an "
+                     f"{round(SET_TOGETHER * 100)} % derselben Materialien und kommen fast nur "
+                     "dort vor)" if banned else "")
                   + ". Trägt ein Material zwei Schreibweisen, zählt es doppelt.")
     notes.add("topics",
               ("Gezeigt ist, was in der Zelle deutlich häufiger vorkommt als im Bestand "

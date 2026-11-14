@@ -228,3 +228,29 @@ def test_a_context_on_the_row_field_picks_the_row(api):
     out = run_scoped(api, query, [{"property": KEY, "values": [
         {"value": "Geometrie", "literal": True}]}])
     assert out["error"]["kind"] == "not_applicable", out
+
+
+def test_a_channels_set_of_keywords_is_recounted_and_removed(tmp_path):
+    """Ein Kanal hängt denselben Satz an seine Materialien; die Zahlen in der Zelle sind
+    nicht gleich genug für die Blockregel, das Nachzählen findet ihn trotzdem."""
+    out = docs()
+    channel = [n for n, doc in enumerate(out) if MATH in doc[TAX]][::2]
+    for position, n in enumerate(channel):
+        out[n][KEY] += ["Kanalthema"] + [f"Satzwort {i}" for i in range(1, 6) if position >= i]
+    settings = Settings(admin_password=PASSWORD, cookie_secure=False, data_dir=tmp_path,
+                        instances=json.dumps([]))
+    with TestClient(create_app(settings, transport=DataRepo(out).transport())) as client:
+        assert client.post("/api/auth/login", json={"password": PASSWORD}).status_code == 204
+        query = {"rows": {"property": TAX, "include": ["Mathematik"]},
+                 "topics": {"property": KEY, "exclude": ["bpb"]}}
+        result = ask(client, **query).json()
+        labels = {t["label"].casefold() for t in cell(result, "Mathematik")[1]}
+        assert "bruchrechnung" in labels and "geometrie" in labels
+        assert not any(label.startswith(("satzwort", "kanalthema")) for label in labels)
+        note = next(n["text"] for n in result["provenance"]["notes"]
+                    if n["code"] == "topics_cleaned")
+        assert "6 Schlagwörter aus Sätzen einzelner Kanäle" in note
+        # ohne Bereinigung bleibt der Satz stehen
+        query["topics"]["stopwords"] = False
+        raw = {t["label"].casefold() for t in cell(ask(client, **query).json(), "Mathematik")[1]}
+        assert "kanalthema" in raw

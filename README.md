@@ -134,7 +134,10 @@ anfordern. Beispiel: Fächer im Hochschulbereich mit OER-Anteil und der Zeile �
   `"frequent"` zählt schlicht. Freie Schlagwörter werden bereinigt: Schreibweisen
   zusammengeführt, Füllwörter („einfach erklärt“), Namen von Zeile und Spalte, Bruchstücke
   und Schlagwortsätze, die ein Kanal an alle seine Materialien hängt, fallen weg
-  (`stopwords: false` schaltet das ab, `exclude` nennt weitere Wörter). Ein Hinweis in
+  (`stopwords: false` schaltet das ab, `exclude` nennt weitere Wörter). Die vorderen Themen je
+  Zelle werden nachgezählt: Hängen an fast allen Materialien eines Schlagworts dieselben
+  weiteren Schlagwörter, ist es der Satz eines Kanals und fällt weg (höchstens 240
+  zusätzliche Zählungen je Abfrage). Ein Hinweis in
   `provenance.notes` sagt, dass bereinigt wurde. Mitgeliefert als Dashboard
   „Wissenslandkarte“ (Reiter unter Qualität).
 - Jede Spalte nennt ihre echte Gesamtzahl (jedes Dokument einmal). Bei mehrwertigen

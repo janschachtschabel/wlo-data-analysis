@@ -192,6 +192,11 @@ class DataRepo:
                     400, "Trying to search for multiple values of a non-multivalue field x")
 
         def select(skip: str | None = None) -> list[Doc]:
+            # Die Facette eines Feldes übergeht den Filter auf demselben Feld; bei den freien
+            # Schlagwörtern nicht (live gemessen am 14.11.2026: Die Facette nennt dort die
+            # Schlagwörter, die mit dem gefilterten zusammen vergeben sind).
+            if skip == "cclom:general_keyword":
+                skip = None
             return [d for n, d in enumerate(self.docs)
                     if all(_matches(d, p, v) for p, v in criteria.items() if p != skip)
                     and all(self.time_of(n, d, TIME_CRITERIA[p]) >= t

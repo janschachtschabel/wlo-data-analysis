@@ -76,3 +76,11 @@ Review durch einen frischen Reviewer (Stand e632026, Dokumente an 800cb40). Nich
 - Die Endmarke der Vorlage ist fest; Doppelgänger in Unicode werden nicht ersetzt. Das Modell kann auch bei gelungener Täuschung nur zählen und vorschlagen (G7).
 - Kein eigenes Budget für Abfragen am Repositorium je Frage; begrenzt sind Zeit, Runden und Schritte (W10).
 - Die Vorlage reist in jeder Runde der einen Frage mit (bis 32.000 Zeichen).
+
+## Liveprobe nach dem Review (Jans Rechner, 998ceab und f461030)
+
+- Vorlagen: docx zu Markdown in 1,0 s (eigener Prozess unter Windows), kaputte Dateien 422. Chat mit Vorlage: 12,7 s, 9 Schritte, 2 Vorschläge, nichts gespeichert. Excel (6 Blätter) und CSV des gespeicherten Laufs gültig.
+- Wissenslandkarte: 5 Kacheln, 393 Abfragen, 8,7 s. Redaktionelle Zellen gut (Biologie × Sek I 9 von 10, Deutsch × Primarstufe 8 von 10), videolastige schwach (Mathematik × Sek I 1 von 10): Sätze einzelner Kanäle rücken nach, sobald einer entfernt ist, und ihre Zahlen liegen in der Zelle nicht dicht genug für die Blockregel.
+- Gemessen: Ein Schlagwort als Kriterium trifft exakt (Groß/Klein zählt), und die Facette desselben Feldes nennt dann die mitvergebenen Schlagwörter („Winston Churchill“ 671, 14 weitere an 97,6 bis 98,7 % derselben Materialien).
+- Folge: Nachzählen. Für die drei vorderen Themen je Zelle (größte Zellen zuerst, höchstens 240 Zählungen je Abfrage, bis zu drei Runden) fragt die Engine die Begleiter ab. Hängen mindestens vier weitere Schlagwörter an 90 % derselben Materialien und liegen 80 % ihres eigenen Vorkommens dort, gilt das Ganze als Satz eines Kanals und fällt in allen Zellen weg (ab 50 Materialien). Der Hinweis nennt die Zahl. Abschaltbar mit `stopwords: false`.
+
