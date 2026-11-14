@@ -42,6 +42,8 @@ class Table:
     sources: list[dict[str, Any]] = field(default_factory=list)
     # Füllgrade: {"show": rate|missing|filled, "by_rows": bool}; sagt Grafiken, was sie zeigen
     fill: dict[str, Any] | None = None
+    # Filter, mit denen sich eine Zelle im Explorer nachzählen lässt; None: nicht möglich
+    drill: dict[str, Any] | None = None
 
 
 @dataclass

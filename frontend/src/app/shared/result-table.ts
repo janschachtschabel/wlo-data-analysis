@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { Drill, cellLink } from './drill';
 import { formatDelta, formatNumber, formatPercent } from '../core/format';
 import { ResultRow } from '../core/types';
 import { fileName, save, tableCsv } from './download';
@@ -7,6 +9,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
 /** Ergebnistabelle: die vollständige Fassung jeder Zahl; fehlende Werte sind „–“. */
 @Component({
   selector: 'app-result-table',
+  imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (topical()) { <p class="rows-note">{{ rows().length }} Zeilen, jede mit den Themen ihrer Zellen. Die Tabelle läuft über die ganze Seite nach unten.</p> }
@@ -34,7 +37,10 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
               <td [class.indent]="indented() && row.kind === 'value'">{{ row.label }}@if (row.new) {<span class="muted"> (neu)</span>}</td>
               @for (value of row.values; track $index) {
                 <td [class]="shades()?.[rowIndex]?.[$index] ?? ''" [class.cell-topics]="!!row.topics">
-                  @if (row.topics) { <span class="n" title="Anzahl der Materialien">{{ number(value) }}</span> } @else { {{ number(value) }} }
+                  @if (links()?.[rowIndex]?.[$index]; as link) {
+                    <a class="drill" [class.n]="!!row.topics" [routerLink]="['/explorer']" [queryParams]="{ q: link }"
+                       [title]="'Diese ' + number(value) + ' im Explorer öffnen: weiter aufschlüsseln oder in der Suche ansehen'">{{ number(value) }}</a>
+                  } @else if (row.topics) { <span class="n" title="Anzahl der Materialien">{{ number(value) }}</span> } @else { {{ number(value) }} }
                   @if (row.topics?.[$index]; as found) {
                     @if (found.length) {
                       <ol class="topics">
@@ -77,6 +83,9 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     .scroll.whole { max-height: none; }
     .rows-note { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
     .pct { margin-left: 6px; font-size: 12px; }
+    a.drill { color: inherit; text-decoration: none; border-bottom: 1px dotted color-mix(in srgb, currentColor 45%, transparent); }
+    a.drill:hover, a.drill:focus-visible { border-bottom-style: solid; color: var(--accent); }
+    @media print { a.drill { border: 0; } }
     .get { margin: 4px 0 0; font-size: 12px; text-align: right; }
     @media print { .get { display: none; } }
     /* Wissenslandkarte: oben die Anzahl, darunter die Themen der Zelle */
@@ -120,6 +129,14 @@ export class ResultTable {
   /** Zellen einfärben: nach Zählung oder nach Anteil, im selben Farbschema */
   readonly heat = input<HeatScale | null>(null);
   readonly heatOptions = input<HeatOptions>({});
+  /** Filter hinter den Zellen: Gezählte Zellen werden zum Link in den Explorer */
+  readonly drill = input<Drill | null | undefined>(null);
+  protected readonly links = computed(() => {
+    const drill = this.drill();
+    if (!drill) return null;
+    const columns = this.columns();
+    return this.rows().map((row) => row.values.map((value, n) => (value ? cellLink(drill, row, columns[n]?.id ?? '') : null)));
+  });
   protected readonly shades = computed(() => {
     const scale = this.heat();
     return scale ? heatClasses(this.columns(), this.rows(), scale, this.heatOptions()) : null;

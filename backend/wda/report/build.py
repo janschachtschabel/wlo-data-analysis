@@ -51,6 +51,41 @@ def describe_filters(filters: list[dict[str, Any]]) -> str:
     return "; ".join(parts)
 
 
+# Abfragearten, deren Zellen keine schlichte Schnittmenge von Filtern sind
+_NO_DRILL = ("fill", "vocab_check", "sizes", "gaps", "snapshot", "profile")
+
+
+def _drill(result: dict[str, Any]) -> dict[str, Any] | None:
+    """Womit die Zellen einer Tabelle gezählt sind: Filter der Abfrage, Feld der Zeilen,
+    Werte der Gruppen und die Filter je gezählter Spalte. Daraus baut die Oberfläche die
+    Abfrage einer Zelle für den Explorer."""
+    prov = result.get("provenance") or {}
+    spec = prov.get("spec")
+    inst = (prov.get("instance") or {}).get("id") or result.get("instance")
+    if not isinstance(spec, dict) or not inst or any(spec.get(k) for k in _NO_DRILL):
+        return None
+    asked = spec.get("rows") or {}
+    if asked.get("rollup") or asked.get("vocab"):
+        return None  # Zeilen samt Unterwerten oder außerhalb der Werteliste
+    rows = prov.get("rows") if isinstance(prov.get("rows"), dict) else None
+    try:
+        columns = {
+            c["id"]: [{"property": f["property"],
+                       "values": [{"value": v["value"], "literal": True}
+                                  for v in f["values"]]} for f in c.get("filters") or []]
+            for c in prov.get("columns") or [] if not c.get("formula")}
+        # Spalten mit eigenem Filter tragen ihn so, wie er in der Abfrage steht (Zeiträume)
+        for series in spec.get("series") or []:
+            if series.get("id") in columns and series.get("filters"):
+                columns[series["id"]] = series["filters"]
+        return {"instance": inst, "filters": spec.get("filters") or [],
+                "rows": rows["property"] if rows else None,
+                "groups": {g["key"]: list(g["values"]) for g in (rows or {}).get("groups") or []},
+                "columns": columns}
+    except (KeyError, TypeError):
+        return None  # älterer Lauf ohne diese Angaben
+
+
 def table_from_result(key: str, title: str, result: dict[str, Any],
                       view: dict[str, Any] | None = None) -> Table | Failure:
     if result.get("schema_version") != SCHEMA_VERSION:
@@ -82,7 +117,7 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
                       "text": "Die gewählte Darstellung passt nicht zu Füllgraden; gezeigt "
                               "wird die Tabelle."})
     return _checked(Table(
-        key, title, columns, rows, view=view, notes=notes, fill=fill,
+        key, title, columns, rows, view=view, notes=notes, fill=fill, drill=_drill(result),
         sources=[{
             "label": inst.get("id") or result.get("instance"), "kind": "query",
             "instance": inst.get("id") or result.get("instance"),

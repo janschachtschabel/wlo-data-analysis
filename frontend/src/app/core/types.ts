@@ -69,6 +69,8 @@ export interface ReportTable {
   type: 'table'; key: string; title: string; fill?: FillInfo | null;
   columns: { id: string; label: string; derived: boolean }[]; rows: ResultRow[];
   header_groups?: [string, number][] | null; view: View; notes: Note[];
+  /** Filter hinter den Zellen, für den Sprung in den Explorer */
+  drill?: { instance: string; filters: Filter[]; rows: string | null; groups: Record<string, string[]>; columns: Record<string, Filter[]> } | null;
   sources: Record<string, any>[];
 }
 export interface ReportText { type: 'text'; key: string; markdown: string; html: string }

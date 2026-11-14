@@ -31,15 +31,15 @@ import { ResultTable } from '../shared/result-table';
                 <div class="big">{{ headline(block) }}</div>
               } @else {
                 @if (block.view.type === 'heatmap') {
-                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups"
+                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill"
                                     [heat]="scale(block)" [heatOptions]="heatOptions(block.view.options, block.fill)" />
                 } @else if (block.view.type !== 'table') {
                   <app-chart [data]="block" [view]="block.view.type" [label]="'Grafik: ' + block.title" />
                   <details><summary class="muted">Tabelle</summary>
-                    <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" />
+                    <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill" />
                   </details>
                 } @else {
-                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" />
+                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill" />
                 }
               }
               @if (block.notes.length || block.sources.length) {
