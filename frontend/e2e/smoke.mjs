@@ -384,6 +384,7 @@ await page.click('.proposal a:has-text("Im Explorer öffnen")');
 await page.waitForSelector('app-result-table td.h6');
 // von einer Auswertung aus fragen: der Bezug steht da
 await page.goto(base + '/qualitaet/abdeckung');
+await page.waitForSelector('app-run-page h1:has-text("Abdeckung")');
 await page.click('a:has-text("Fragen")');
 await page.waitForSelector('.context:has-text("Abdeckung")');
 
