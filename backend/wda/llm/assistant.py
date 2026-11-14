@@ -6,6 +6,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ..report.text import markdown_to_html
 from .client import LlmClient, LlmError
 from .tools import Toolbox
 
@@ -86,8 +87,8 @@ async def system_prompt(services: Any, toolbox: Toolbox, today: str) -> str:
                       for f in fields[:30]) or "- (list_fields benutzen)"
     special = WLO if any(f.property == "ccm:oeh_lrt_aggregated" for f in fields) else ""
     text = GUIDE.format(instance=toolbox.instance, fields=lines, special=special, today=today)
-    if toolbox.run_id:
-        text += ("\nDer Nutzer sieht gerade eine gespeicherte Auswertung an. Ihre Tabellen "
+    if toolbox.has_context:
+        text += ("\nDer Nutzer sieht gerade eine Auswertung an. Ihre Tabellen "
                  "liefert read_run; lies sie, bevor du Fragen dazu beantwortest.")
     return text
 
@@ -122,8 +123,8 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
             answer = await llm.chat(messages, None if last else toolbox.definitions)
             calls = [] if last else answer["tool_calls"]
             if not calls:
-                yield {"type": "final", "text": (answer["content"] or "").strip()
-                       or "Dazu habe ich keine Antwort."}
+                text = (answer["content"] or "").strip() or "Dazu habe ich keine Antwort."
+                yield {"type": "final", "text": text, "html": markdown_to_html(text, 2)}
                 return
             messages.append({"role": "assistant", "content": answer["content"],
                              "tool_calls": calls})

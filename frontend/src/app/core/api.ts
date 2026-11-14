@@ -58,11 +58,55 @@ export class Api {
     return (await response.json()) as T;
   }
 
+  /** POST, dessen Antwort ein Strom aus JSON-Zeilen ist; jede Zeile geht an `onEvent`. */
+  async stream(path: string, body: unknown, onEvent: (event: any) => void, signal?: AbortSignal): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetch('/api' + path, {
+        method: 'POST', signal, credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+    } catch (error) {
+      if (isAbort(error)) throw error;
+      throw new ApiError(0, 'network', 'Der Server ist nicht erreichbar.');
+    }
+    if (response.status === 401) this.unauthenticated.update((n) => n + 1);
+    if (!response.ok) throw await toApiError(response);
+    const reader = response.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    let rest = '';
+    const feed = (text: string) => {
+      rest += text;
+      const lines = rest.split('\n');
+      rest = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try { onEvent(JSON.parse(line)); } catch { /* eine kaputte Zeile bricht den Strom nicht */ }
+      }
+    };
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        feed(decoder.decode(value, { stream: true }));
+      }
+    } catch (error) {
+      if (isAbort(error)) throw error;
+      throw new ApiError(0, 'network', 'Die Verbindung ist abgebrochen.');
+    }
+    feed(decoder.decode() + '\n');
+  }
+
   get<T>(path: string, signal?: AbortSignal): Promise<T> {
     return this.request<T>('GET', path, undefined, signal);
   }
   post<T>(path: string, body: unknown = {}, signal?: AbortSignal): Promise<T> {
     return this.request<T>('POST', path, body, signal);
+  }
+  /** DELETE, das eine Antwort hat */
+  remove<T>(path: string): Promise<T> {
+    return this.request<T>('DELETE', path);
   }
   put<T>(path: string, body: unknown): Promise<T> {
     return this.request<T>('PUT', path, body);

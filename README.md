@@ -169,6 +169,23 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 
+## KI: Assistent und Einstellungen
+
+- **Einstellungen** (Menü): Basis-URL, Modell, Schlüssel und Denkaufwand des Sprachmodells.
+  Jeder Anbieter mit OpenAI-kompatibler Schnittstelle (`…/chat/completions`), Vorgaben für
+  OpenAI und die B-API (`…/api/v1/llm/openai`), Standardmodell `gpt-6-luna`. Der Schlüssel
+  lässt sich nur setzen, nie lesen; für eine andere Adresse muss er neu eingegeben werden.
+  Ohne Eintrag gelten `WDA_LLM_BASE_URL`, `WDA_LLM_MODEL`, `WDA_LLM_API_KEY`.
+- **Assistent** (Menü): Fragen in eigenen Worten. Der Assistent schlägt Felder und Werte nach,
+  zählt über dieselbe Engine wie alle Auswertungen und zeigt Ansichten und Dashboards als
+  Karten („Im Explorer öffnen“, „Als Kennzahl speichern“, „Dashboard anlegen“). Der Knopf
+  „Fragen“ an einer Auswertung öffnet ihn mit dieser Auswertung als Bezug.
+- **Was das Modell sieht:** Feldnamen, Wertelisten und Zählungen, also nur, was auch
+  exportiert werden darf. Es gibt kein Werkzeug, das Datensätze liefert, und keines, das
+  speichert; Vorschläge legt erst der Admin an. Zahlen in den Karten stammen aus der
+  Zählung, nicht vom Modell.
+- Grenzen je Frage: 8 Runden, 16 Werkzeugaufrufe, 30 Nachrichten Verlauf.
+
 ## Verwaltung und Läufe
 
 Vier Arten von Definitionen liegen in einer SQLite-Datei im Datenverzeichnis

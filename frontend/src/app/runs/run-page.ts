@@ -23,11 +23,15 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
       <h1 class="grow">{{ report.value()?.title ?? definition()?.name ?? 'Bericht' }}</h1>
       @if (defId()) {
         <button type="button" (click)="load(true)" [disabled]="report.loading()">Neu abrufen</button>
+        <a class="btn" routerLink="/assistent" [queryParams]="{ definition: defId(), titel: report.value()?.title ?? definition()?.name }"
+           title="Den Assistenten zu dieser Auswertung fragen">Fragen</a>
         <a class="btn" [routerLink]="['/verlauf', defId()]">Verlauf</a>
         <a class="btn" [routerLink]="['/bearbeiten', defId()]">Bearbeiten</a>
         <button type="button" class="primary" (click)="store()" [disabled]="report.loading() || storing()">Lauf speichern</button>
       }
       @if (runId(); as id) {
+        <a class="btn" routerLink="/assistent" [queryParams]="{ lauf: id, titel: report.value()?.title }"
+           title="Den Assistenten zu dieser Auswertung fragen">Fragen</a>
         <span class="muted">Export:</span>
         @for (format of formats(); track format.id) {
           <a class="btn" [class.off]="!format.available" [attr.aria-disabled]="!format.available"

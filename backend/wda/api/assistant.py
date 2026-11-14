@@ -39,6 +39,7 @@ class ChatIn(BaseModel):
     instance: Annotated[StrictStr, Field(min_length=1, max_length=64)]
     messages: list[Message] = Field(min_length=1, max_length=MAX_MESSAGES)
     run_id: Annotated[StrictStr, Field(min_length=1, max_length=64)] | None = None
+    definition_id: Annotated[StrictStr, Field(min_length=1, max_length=64)] | None = None
 
 
 @router.post("/chat")
@@ -54,11 +55,14 @@ async def chat(body: ChatIn, request: Request) -> Any:
             "Für das Sprachmodell ist kein Schlüssel hinterlegt (Einstellungen)."),
             status_code=409)
     try:
-        toolbox = Toolbox(services, body.instance, body.run_id)
+        toolbox = Toolbox(services, body.instance, body.run_id,
+                          definition_id=None if body.run_id else body.definition_id)
     except KeyError:
         raise UnknownInstance(body.instance) from None
     if body.run_id:
         await services.runner.get_run(body.run_id)  # 404, bevor der Strom beginnt
+    elif body.definition_id:
+        await services.definitions.get(body.definition_id)
     history: list[dict[str, str]] = []
     for message in body.messages:
         text = message.content

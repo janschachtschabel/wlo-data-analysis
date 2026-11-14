@@ -15,9 +15,11 @@ import { Instances } from '../core/instances';
       <nav aria-label="Hauptnavigation">
         <a routerLink="/" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">Explorer</a>
         <a routerLink="/qualitaet" routerLinkActive="on">Qualität</a>
+        <a routerLink="/assistent" routerLinkActive="on">Assistent</a>
         <a routerLink="/bibliothek" routerLinkActive="on">Bibliothek</a>
         <a routerLink="/laeufe" routerLinkActive="on">Läufe</a>
         <a routerLink="/instanzen" routerLinkActive="on">Instanzen</a>
+        <a routerLink="/einstellungen" routerLinkActive="on">Einstellungen</a>
       </nav>
       <span class="grow"></span>
       <label class="sr-only" for="instance">Instanz</label>

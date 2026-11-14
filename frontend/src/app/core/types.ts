@@ -76,9 +76,18 @@ export interface Report {
   notes: Note[]; blocks: ReportBlock[];
   definition_id?: string | null; compare?: { run_id: string; started_at: string; empty?: boolean } | null;
 }
+export interface LlmSettings {
+  base_url: string; model: string; effort: 'auto' | 'off' | 'low' | 'medium' | 'high';
+  api_key_set: boolean; ready: boolean; stored: boolean;
+}
 export interface AppSettings {
   version: string; timezone?: string; export: { formats: string[]; pdf_available: boolean };
-  llm: { base_url: string; model: string; api_key_set: boolean };
+  llm: LlmSettings;
+}
+/** Vorschlag des Assistenten: eine geprüfte Definition, die erst der Admin speichert */
+export interface Proposal {
+  kind: 'metric' | 'dashboard'; name: string; description: string;
+  spec: any; report: Report | null;
 }
 export interface Schedule {
   id: string; definition_id: string; definition_name: string; definition_kind: Kind;

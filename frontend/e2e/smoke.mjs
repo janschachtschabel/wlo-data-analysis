@@ -295,6 +295,47 @@ await page.waitForSelector('app-report-view td:has-text("political")');
 await page.goto(base + '/bibliothek');
 await page.waitForSelector('section a:has-text("Abdeckung")');
 
+// Einstellungen: Sprachmodell prüfen und speichern; der Schlüssel erscheint nirgends
+await page.click('nav >> text=Einstellungen');
+await page.waitForSelector('#llm-url');
+assert.equal(await page.inputValue('#llm-key'), '');
+await page.click('button:has-text("Verbindung testen")');
+await page.waitForSelector('text=Verbindung steht');
+await page.click('button:has-text("B-API")');
+await page.waitForFunction(() => /\/api\/v1\/llm\/openai$/.test(document.querySelector('#llm-url').value));
+await page.click('button:has-text("OpenAI")');
+await page.waitForFunction(() => document.querySelector('#llm-url').value === 'https://api.openai.com/v1');
+await page.fill('#llm-key', 'sk-durchstich-geheim');
+await page.click('button:has-text("Speichern")');
+await page.waitForSelector('text=Gespeichert.');
+await page.waitForFunction(() => document.querySelector('#llm-key').value === '');
+assert.ok(!(await page.content()).includes('sk-durchstich-geheim'), 'Schlüssel steht in der Seite');
+await page.click('button:has-text("Zurücksetzen")');
+await page.waitForSelector('text=Es gelten wieder die Werte der Umgebung.');
+
+// Assistent: Frage, Schritt, Vorschlag mit Heatmap, Antwort; Speichern löst der Admin aus
+await page.click('nav >> text=Assistent');
+await page.waitForSelector('.examples button');
+await page.fill('#question', 'Wo fehlt Angebot?');
+await page.keyboard.press('Enter');
+await page.waitForSelector('.steps li:has-text("Bereitet eine Ansicht vor")');
+await page.waitForSelector('.proposal app-report-view td.h6', { timeout: 30000 });
+await page.waitForSelector('.bubble.prose strong:has-text("Mathematik")');
+await page.click('.proposal button:has-text("Als Kennzahl speichern")');
+await page.waitForSelector('.proposal a:has-text("Gespeichert")');
+await page.fill('#question', 'Baue ein Dashboard');
+await page.click('button:has-text("Fragen")');
+await page.waitForSelector('.proposal button:has-text("Dashboard anlegen")', { timeout: 30000 });
+await page.setViewportSize({ width: 390, height: 800 });
+assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Assistent läuft bei 390 px über');
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.click('.proposal a:has-text("Im Explorer öffnen")');
+await page.waitForSelector('app-result-table td.h6');
+// von einer Auswertung aus fragen: der Bezug steht da
+await page.goto(base + '/qualitaet/abdeckung');
+await page.click('a:has-text("Fragen")');
+await page.waitForSelector('.context:has-text("Abdeckung")');
+
 // Abmelden sperrt die API wieder
 await page.click('text=Abmelden');
 await page.waitForURL(/\/login/);

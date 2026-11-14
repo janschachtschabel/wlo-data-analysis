@@ -109,14 +109,21 @@ class Toolbox:
     """Die Werkzeuge einer Unterhaltung, gebunden an eine Instanz (und einen Lauf)."""
 
     def __init__(self, services: Any, instance: str, run_id: str | None = None,
-                 on_proposal: Callable[[dict[str, Any]], None] | None = None) -> None:
+                 on_proposal: Callable[[dict[str, Any]], None] | None = None,
+                 definition_id: str | None = None) -> None:
         self._services, self.instance, self.run_id = services, instance, run_id
+        self.definition_id = definition_id
         self._client, self._vocab = services.client(instance), services.vocab(instance)
         self.on_proposal = on_proposal or (lambda proposal: None)
 
     @property
     def definitions(self) -> list[dict[str, Any]]:
-        return TOOLS + ([RUN_TOOL] if self.run_id else [])
+        return TOOLS + ([RUN_TOOL] if self.has_context else [])
+
+    @property
+    def has_context(self) -> bool:
+        """Die Unterhaltung hängt an einer Auswertung (gespeicherter Lauf oder Definition)."""
+        return bool(self.run_id or self.definition_id)
 
     def describe(self, name: str, args: dict[str, Any]) -> str:
         """Ein Satz für die Oberfläche, was gerade geschieht."""
@@ -142,7 +149,7 @@ class Toolbox:
             "list_fields": self._list_fields, "field_values": self._field_values,
             "run_query": self._run_query, "propose_view": self._propose_view,
             "propose_dashboard": self._propose_dashboard}
-        if self.run_id:
+        if self.has_context:
             handlers["read_run"] = self._read_run
         handler = handlers.get(name)
         if handler is None:
@@ -258,7 +265,11 @@ class Toolbox:
         return {"gezeigt": name, "kacheln": len(tiles)}
 
     async def _read_run(self, args: dict[str, Any]) -> Any:
-        run = await self._services.runner.get_run(self.run_id)
+        if self.run_id:
+            run = await self._services.runner.get_run(self.run_id)
+        else:  # die Definition frisch zählen (aus dem Zwischenspeicher, wenn eben gezeigt)
+            run = await self._services.runner.run(self.definition_id, instance=self.instance,
+                                                  save=False)
         report = report_data(build_report(run), with_html=False)
         tables = [b for b in report["blocks"] if b.get("type") == "table"]
         budget = max(1500, MAX_RESULT_CHARS // max(1, len(tables)) - 200)

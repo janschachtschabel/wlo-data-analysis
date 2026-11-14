@@ -239,7 +239,8 @@ def test_oversized_answer_is_refused():
 
 def test_plain_answer(api, model):
     model.answers = [say("Das weiß ich nicht.")]
-    assert chat(api) == [{"type": "final", "text": "Das weiß ich nicht."}]
+    assert chat(api) == [{"type": "final", "text": "Das weiß ich nicht.",
+                          "html": "<p>Das weiß ich nicht.</p>"}]
     body = model.bodies[0]
     assert body["messages"][0]["role"] == "system"
     assert "ccm:taxonid" in body["messages"][0]["content"]  # Felder der Instanz
@@ -258,7 +259,7 @@ def test_counts_with_the_engine_and_answers(api, model, repo):
     events = chat(api)
     assert events[0] == {"type": "step", "tool": "run_query",
                          "text": f"Zählt: nach {TAX}"}
-    assert events[-1] == {"type": "final", "text": "Mathematik liegt vorn."}
+    assert events[-1]["text"] == "Mathematik liegt vorn."
     tool = model.bodies[1]["messages"][-1]
     assert tool["role"] == "tool" and tool["tool_call_id"] == "c0"
     result = json.loads(tool["content"])
@@ -296,7 +297,7 @@ def test_broken_arguments_do_not_break_the_conversation(api, model):
         {"function": None}, "unsinn"]}}]})
     model.answers = [broken, say("Entschuldigung.")]
     events = chat(api)
-    assert events[-1] == {"type": "final", "text": "Entschuldigung."}
+    assert events[-1]["text"] == "Entschuldigung."
     tools = [m for m in model.bodies[1]["messages"] if m["role"] == "tool"]
     assert len(tools) == 4 and all("fehler" in json.loads(m["content"]) for m in tools)
 
@@ -463,3 +464,24 @@ def test_nothing_the_model_receives_contains_records_or_secrets(api, model, repo
         assert secret not in sent
     for word in ("nodes", "ref", "downloadUrl", "preview"):
         assert f'"{word}"' not in sent
+
+
+def test_answer_is_rendered_without_letting_html_through(api, model):
+    model.answers = [say("**Wichtig:** <script>alert(1)</script>\n\n- eins\n- zwei")]
+    final = chat(api)[-1]
+    assert final["html"] == ("<p><strong>Wichtig:</strong> &lt;script&gt;alert(1)&lt;/script&gt;"
+                             "</p>\n<ul><li>eins</li><li>zwei</li></ul>")
+
+
+def test_chat_about_a_definition_counts_it_fresh_without_saving(api, model, repo):
+    made = api.post("/api/definitions", json={"kind": "metric", "name": "Stufen", "spec": {
+        "query": {"instance": "wlo-prod", "rows": {"property": LVL}}}}).json()
+    model.answers = [call(("read_run", {})), say("ok")]
+    chat(api, "Was fällt auf?", definition_id=made["id"])
+    data = json.loads(model.bodies[1]["messages"][-1]["content"])
+    assert data["auswertung"] == "Stufen" and data["tabellen"][0]["zeilen"]
+    assert api.get("/api/runs").json() == []  # nichts gespeichert
+    r = api.post("/api/assistant/chat", json={
+        "instance": "wlo-prod", "definition_id": "gibt-es-nicht",
+        "messages": [{"role": "user", "content": "x"}]})
+    assert r.status_code == 404
