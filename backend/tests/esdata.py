@@ -130,8 +130,9 @@ def _matches(doc: Doc, prop: str, values: list[str]) -> bool:
         return bool(keys & set(doc.get("ccm:commonlicense_key", [])))
     if prop == "ccm:editorial_checklist":  # live gemessen: vergleicht nicht exakt
         return bool(doc.get("ccm:educationalcontext"))
-    if prop == "cclom:general_language":  # live gemessen: „de“ trifft auch „DE“ und „de-DE“
-        return any(v.casefold() in have.casefold() for v in values for have in doc.get(prop, []))
+    if prop == "cclom:general_language":  # live gemessen: „de“ trifft „DE“, „de_DE“, „Deutsch“
+        return any(have.casefold().startswith(v.casefold())  # ohne Groß/Klein, Wortanfang
+                   for v in values for have in doc.get(prop, []))
     if prop == "ccm:commonlicense_key":  # einwertig, Präfix-Treffer
         return any(key.startswith(values[0]) for key in doc.get(prop, []))
     return bool(set(values) & set(doc.get(prop, [])))

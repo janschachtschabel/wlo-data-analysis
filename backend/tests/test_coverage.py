@@ -155,7 +155,9 @@ def test_fill_counts_a_field_whose_filter_also_finds_other_spellings(repo, tmp_p
         if n % 9 == 0:
             doc[lang] = ["DE"]
         elif n % 11 == 0:
-            doc[lang] = ["de-DE", "en"]
+            doc[lang] = ["de_DE", "en"]
+        elif n % 17 == 0:
+            doc[lang] = ["Deutsch"]
     result = query(repo, tmp_path, fill={"fields": [{"property": lang}]})
     filled = repo.brute(lambda d: bool(d.get(lang)))
     assert result["rows"][0]["values"][0] == filled

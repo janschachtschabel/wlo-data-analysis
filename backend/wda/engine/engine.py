@@ -643,19 +643,14 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
         best = max(values, key=lambda v: (v.count, v.value))
         low, high = best.count, sum(v.count for v in values)
         try:
-            # Probe: Zählt das Kriterium genau wie die Facette? Ein Kriterium, das anders
-            # vergleicht (Textsuche, Teiltreffer), fällt beim häufigsten Wert auf.
-            probe, counted = await asyncio.gather(
-                run.call(base + (Criterion(prop, (best.value,)),)),
+            exact, counted = await asyncio.gather(
+                _criterion_exact(run, base, prop, {v.value: v.count for v in values}),
                 run.call(base + (Criterion(prop, tuple(v.value for v in values)),), row_prop))
         except EduSharingError as exc:
             if not _refused(exc):
                 raise
-            probe = counted = None
-        alike = _alike(best.value, {v.value: v.count for v in values})
-        if (probe is not None and counted is not None
-                and best.count <= probe.total <= best.count + alike
-                and low <= counted.total <= min(high, total)):
+            exact, counted = False, None
+        if exact and counted is not None and low <= counted.total <= min(high, total):
             return counted
         field = await vocab.field(prop)
         if high <= total and (low == high
@@ -1111,31 +1106,35 @@ def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, gro
     return sorted(rows, key=by_count)
 
 
-def _alike(best: str, counts: dict[str, int]) -> int:
-    """So viele Zuordnungen tragen eine andere Schreibweise des Werts (anders groß
-    geschrieben oder mit Zusatz wie „de-DE“). Ein Kriterium, das sie mit trifft, zählt für
-    „irgendein Wert“ trotzdem dieselbe Menge; mehr Überschuss ist ein ungenaues Kriterium."""
-    low = best.casefold()
-    return sum(n for value, n in counts.items()
-               if value != best and (value.casefold() == low
-                                     or value.casefold().startswith((low + "-", low + "_"))))
+def _begins(value: str, other: str) -> bool:
+    return other.casefold().startswith(value.casefold())
 
 
 async def _criterion_exact(run: _Run, criteria: tuple[Criterion, ...], prop: str,
                            counts: dict[str, int]) -> bool:
-    """Probe: Zählt das Kriterium den häufigsten Wert so wie die Facette? Ein Kriterium, das
-    anders vergleicht (Textsuche, Teiltreffer), fällt hier auf."""
+    """Probe: Zählt das Kriterium einen Wert so wie die Facette? Ein Kriterium, das anders
+    vergleicht (Textsuche, Teiltreffer), fällt hier auf.
+
+    Live gemessen vergleichen manche Felder ohne Groß/Klein und als Wortanfang („de“ trifft
+    auch „DE“, „de_DE“, „Deutsch“). Für „irgendein Wert“ ist das unschädlich. Die Probe nimmt
+    deshalb den häufigsten Wert, mit dem kein anderer beginnt, und verlangt dort Gleichheit;
+    gibt es keinen, darf der häufigste um die Werte höher liegen, die mit ihm beginnen."""
     values = {v: n for v, n in counts.items() if v.strip() and n}
     if not values:
         return True
-    best = max(values, key=lambda v: (values[v], v))
+    ranked = sorted(values, key=lambda v: (-values[v], v))
+    alone = next((v for v in ranked
+                  if not any(o != v and _begins(v, o) for o in values)), None)
+    pick = alone if alone is not None else ranked[0]
+    slack = 0 if alone is not None else sum(
+        n for o, n in values.items() if o != pick and _begins(pick, o))
     try:
-        probe = (await run.call(criteria + (Criterion(prop, (best,)),))).total
+        probe = (await run.call(criteria + (Criterion(prop, (pick,)),))).total
     except EduSharingError as exc:
         if not _refused(exc):
             raise
         return False
-    return values[best] <= probe <= values[best] + _alike(best, values)
+    return values[pick] <= probe <= values[pick] + slack
 
 
 async def _count_with_any_value(run: _Run, criteria: tuple[Criterion, ...], prop: str,
