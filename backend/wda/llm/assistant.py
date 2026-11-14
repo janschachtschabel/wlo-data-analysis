@@ -60,6 +60,11 @@ Werteliste. Ohne rows.
 - profile: {{"property": Merkmal, "top": n, "show": "share"|"count"}} zusammen mit rows (mit \
 top bis 60): Ausprägungen eines Merkmals je Zeile, z. B. Kosten oder Werbung je Bezugsquelle. \
 Geht auch bei Feldern, die als Filter nicht zählbar sind. Darstellung heatmap.
+- Zeit: Als Filter gibt es nur „seit“, auf den Feldern virtual:time_after_created (neu \
+angelegt) und virtual:time_after_modified (geändert), mit dem Wert {{"since": "30d"}}, \
+"12m" oder "5y". Zufluss und Pflege je Quelle: rows auf ccm:replicationsource oder \
+ccm:oeh_publisher_combined, dazu series mit so einem Filter. Ein Zeitraum ist die Differenz \
+zweier „seit“-Spalten (formula); Hilfsspalten mit "hidden": true verbergen.
 - sizes: {{"property": Feld}} ohne rows: Größenklassen, z. B. wie viele Bezugsquellen nur \
 ein Material haben.
 - gaps: {{"limit": n, "min_expected": 20, "below": 50}} zusammen mit rows und columns: \

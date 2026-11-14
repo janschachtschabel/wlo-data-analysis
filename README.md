@@ -197,6 +197,12 @@ stehen zwei solche Listen für Schulfächer: gegen die Schulstufen und gegen die
 
 Der Reiter „Quellen“ unter „Qualität“ folgt dem Quellenpanel, zeigt aber nur Zählungen: Bezugsquellen und Crawler nach Größe (wie viele haben nur ein Material), Bindung zwischen Crawler und Bezugsquelle, dünne Metadaten und Offenheit je Bezugsquelle, Kosten, Werbung, Zugang, Datenschutz, Altersfreigabe, Erschließungsstatus, Materialart und Sprache je Bezugsquelle in Prozent, dazu die Vollständigkeit der Quelldatensätze. Dafür gibt es zwei Abfrageformen: `profile` (ein Merkmal je Zeile, je Zeilenwert eine Abfrage) und `sizes` (Größenklassen eines Feldes).
 
+Oben stehen die **Datenströme**: je Quelle und je Bezugsquelle der Bestand, der Zufluss (neu in 30 Tagen und in 12 Monaten) und die Pflege (seit 12 Monaten unberührt), dazu das Alter des Bestands je Quelle als gestapelte Balken. Kein Zufluss und alles unberührt heißt: Der Strom ist versiegt. Dahinter stehen zwei Bausteine der Abfrage: der Filterwert `{"since": "30d"}` (auch `12m`, `5y`) für `virtual:time_after_created` und `virtual:time_after_modified`, und `"hidden": true` an einer Spalte, die nur Formeln speist. Das Repositorium kennt nur „seit“; ein Zeitraum ist deshalb die Differenz zweier Spalten.
+
+### Kontext: Gesamtbestand oder eine Quelle
+
+Die Reiter unter „Qualität“ haben eine Auswahl „Kontext“. Mit einer Quelle (Crawler) oder einer Bezugsquelle zählt dieselbe Auswertung nur diesen Ausschnitt. Technisch nimmt `POST /api/definitions/{id}/run` dafür `scope` (bis zu drei Filter), die vor jede Abfrage treten. Ein Lauf mit Kontext ist eine Ansicht und wird nie gespeichert, damit Verlauf und Zeitreihen beim Gesamtbestand bleiben. Filtert eine Kachel selbst dasselbe Feld, meldet sie das, statt falsch zu zählen; die Tiefenprüfung kennt keinen Kontext.
+
 ### Tiefenprüfung aus dem lokalen Abzug
 
 Manches kann ein Repositorium nicht zählen: wie lang Beschreibungen sind, ob ein Titel
@@ -241,6 +247,8 @@ Rechner mit mindestens fünf Materialien einzeln.
   zählt über dieselbe Engine wie alle Auswertungen und zeigt Ansichten und Dashboards als
   Karten („Im Explorer öffnen“, „Als Kennzahl speichern“, „Dashboard anlegen“). Der Knopf
   „Fragen“ an einer Auswertung öffnet ihn mit dieser Auswertung als Bezug.
+  Der Knopf „Chat“ im Kopf öffnet dieselbe Unterhaltung als Fenster neben der Ansicht, die
+  gerade im Bild ist; sie bleibt beim Seitenwechsel erhalten, bis die Seite neu geladen wird.
 - **Was das Modell sieht:** Feldnamen, Wertelisten und Zählungen, also nur, was auch
   exportiert werden darf. Es gibt kein Werkzeug, das Datensätze liefert, und keines, das
   speichert; Vorschläge legt erst der Admin an. Zahlen in den Karten stammen aus der

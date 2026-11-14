@@ -27,6 +27,21 @@ const VIEWS: { id: ViewType; label: string }[] = [
     <section class="card">
       <app-filter-bar [instance]="spec().instance" [filters]="spec().filters ?? []" [labels]="labels()"
                       (changed)="setFilters($event)" />
+      @if (storedFilters().length || (spec().filters ?? []).length) {
+        <div class="row stored">
+          @if (storedFilters().length) {
+            <label>Gespeicherter Filter
+              <select name="stored-filter" (change)="applyFilter($any($event.target))">
+                <option value="">anwenden …</option>
+                @for (f of storedFilters(); track f.id) { <option [value]="f.id">{{ f.name }}</option> }
+              </select>
+            </label>
+          }
+          @if ((spec().filters ?? []).length) {
+            <button type="button" (click)="saving.set('filter')" title="Die gewählten Filter unter einem Namen ablegen: wiederverwendbar hier, in Dashboards und Templates">Diese Filter speichern</button>
+          }
+        </div>
+      }
       <div class="row controls">
         <div class="views" role="group" aria-label="Was gezählt wird">
           <button type="button" [class.on]="!spec().fill" [attr.aria-pressed]="!spec().fill" (click)="setFill(false)">Verteilung</button>
@@ -118,18 +133,18 @@ const VIEWS: { id: ViewType; label: string }[] = [
         <span class="grow"></span>
         <button type="button" (click)="run(true)" [disabled]="result.loading()" title="Zwischenspeicher umgehen">Neu abrufen</button>
         <button type="button" (click)="copyLink()">{{ copied() ? 'Link kopiert' : 'Link kopieren' }}</button>
-        <button type="button" class="primary" (click)="saving.set(true)" [disabled]="!result.value()">Als Kennzahl speichern</button>
+        <button type="button" class="primary" (click)="saving.set('metric')" [disabled]="!result.value()">Als Kennzahl speichern</button>
       </div>
       @if (saving()) {
         <form class="row save" (ngSubmit)="save()">
-          <label class="grow">Name der Kennzahl <input class="wide" name="name" [(ngModel)]="saveName" required maxlength="200" /></label>
+          <label class="grow">{{ saving() === 'filter' ? 'Name des Filters' : 'Name der Kennzahl' }} <input class="wide" name="name" [(ngModel)]="saveName" required maxlength="200" /></label>
           <button class="primary" type="submit" [disabled]="!saveName.trim()">Speichern</button>
-          <button type="button" (click)="saving.set(false)">Abbrechen</button>
+          <button type="button" (click)="saving.set('')">Abbrechen</button>
           @if (saveError()) { <span class="error" role="alert">{{ saveError() }}</span> }
         </form>
       }
       @if (saved(); as made) {
-        <p class="notice" role="status">Gespeichert als „{{ made.name }}“. <a routerLink="/bibliothek">Zur Bibliothek</a></p>
+        <p class="notice" role="status">{{ made.kind === 'filter' ? 'Filter gespeichert' : 'Gespeichert' }} als „{{ made.name }}“. <a routerLink="/bibliothek">Zur Bibliothek</a></p>
       }
     </section>
 
@@ -202,7 +217,7 @@ const VIEWS: { id: ViewType; label: string }[] = [
     </section>`,
   styles: `
     section + section { margin-top: var(--gap); }
-    .controls { margin-top: var(--gap); }
+    .controls { margin-top: var(--gap); } .stored { margin-top: 8px; align-items: flex-end; }
     .controls label { display: inline-flex; gap: 6px; align-items: center; }
     .save { margin-top: var(--gap); } .wide { width: min(420px, 100%); }
     .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
@@ -239,7 +254,9 @@ export class Explorer {
   /** Startansicht: unter der Gesamtzahl die Füllgrade der wichtigsten Felder */
   protected readonly overview = signal<QueryResult | null>(null);
   protected readonly fields = signal<FieldInfo[]>([]);
-  protected readonly saving = signal(false);
+  /** was gerade einen Namen bekommt */
+  protected readonly saving = signal<'' | 'metric' | 'filter'>('');
+  protected readonly storedFilters = signal<Definition[]>([]);
   protected readonly saved = signal<Definition | null>(null);
   protected readonly saveError = signal('');
   protected readonly copied = signal(false);
@@ -291,6 +308,7 @@ export class Explorer {
       .map((s) => ({ id: s.id as string, label: String(s.caption || s.id) })));
 
   constructor() {
+    this.loadFilters();
     const { state, error } = decodeState(this.route.snapshot.queryParamMap.get('q'));
     this.linkError.set(error);
     if (state) {
@@ -458,15 +476,36 @@ export class Explorer {
     } catch { /* ohne Zwischenablage bleibt die Adresszeile */ }
   }
 
+  private loadFilters(): void {
+    this.api.get<Definition[]>('/definitions?kind=filter').then((all) => this.storedFilters.set(all), () => undefined);
+  }
+
+  /** Ein gespeicherter Filter ersetzt, was schon auf denselben Feldern filtert; der Rest bleibt. */
+  protected async applyFilter(select: HTMLSelectElement): Promise<void> {
+    const id = select.value;
+    select.value = '';
+    if (!id) return;
+    try {
+      const stored = await this.api.get<Definition>('/definitions/' + encodeURIComponent(id));
+      const added: Filter[] = stored.spec?.filters ?? [];
+      const fields = new Set(added.map((f) => f.property));
+      this.setFilters([...(this.spec().filters ?? []).filter((f) => !fields.has(f.property)), ...added]);
+    } catch (error) {
+      this.saveError.set(error instanceof ApiError ? error.message : 'Der Filter ließ sich nicht laden.');
+    }
+  }
+
   protected async save(): Promise<void> {
     this.saveError.set('');
     const { refresh: _refresh, ...query } = this.spec();
     try {
-      const made = await this.api.post<Definition>('/definitions', {
-        kind: 'metric', name: this.saveName.trim(), spec: { query, view: { type: this.view() } } });
+      const made = await this.api.post<Definition>('/definitions', this.saving() === 'filter'
+        ? { kind: 'filter', name: this.saveName.trim(), spec: { instance: query.instance, filters: query.filters ?? [] } }
+        : { kind: 'metric', name: this.saveName.trim(), spec: { query, view: { type: this.view() } } });
       this.saved.set(made);
-      this.saving.set(false);
+      this.saving.set('');
       this.saveName = '';
+      if (made.kind === 'filter') this.loadFilters();
     } catch (error) {
       this.saveError.set(error instanceof ApiError ? error.message : 'Speichern nicht möglich.');
     }

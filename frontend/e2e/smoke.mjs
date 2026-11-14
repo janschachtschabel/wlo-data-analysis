@@ -59,6 +59,16 @@ await page.fill('input[name=name]', EVIL);
 await page.click('form.save button[type=submit]');
 await page.waitForSelector('text=Gespeichert als');
 
+// Die Filter allein ablegen und wieder anwenden: ohne JSON, direkt an der Filterleiste
+await page.click('button:has-text("Diese Filter speichern")');
+await page.fill('input[name=name]', 'Nur Mathematik');
+await page.click('form.save button[type=submit]');
+await page.waitForSelector('text=Filter gespeichert als');
+await page.locator('app-filter-bar .chip > button.x').first().click();
+await page.waitForFunction(() => document.querySelectorAll('app-filter-bar .chip .value').length === 0);
+await page.selectOption('select[name="stored-filter"]', { label: 'Nur Mathematik' });
+await page.waitForFunction(() => document.querySelectorAll('app-filter-bar .chip .value').length === 1);
+
 // Der Link stellt die Ansicht wieder her
 await page.goto(link);
 await page.waitForSelector('app-chart canvas');
