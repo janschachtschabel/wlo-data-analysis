@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { Chart } from '../charts/chart';
 import { formatTime } from '../core/format';
 import { Report, ReportBlock } from '../core/types';
-import { heatScale } from '../shared/heat';
+import { heatOptions, heatScale } from '../shared/heat';
 import { ResultTable } from '../shared/result-table';
 
 /** Zeigt einen Bericht: Texte, Tabellen mit Grafik, Fehlerblöcke. Dashboards als Raster. */
@@ -31,7 +31,7 @@ import { ResultTable } from '../shared/result-table';
               } @else {
                 @if (block.view.type === 'heatmap') {
                   <app-result-table [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups"
-                                    [heat]="scale(block)" />
+                                    [heat]="scale(block)" [heatOptions]="heatOptions(block.view.options, block.fill)" />
                 } @else if (block.view.type !== 'table') {
                   <app-chart [data]="block" [view]="block.view.type" [label]="'Grafik: ' + block.title" />
                   <details><summary class="muted">Tabelle</summary>
@@ -77,6 +77,7 @@ export class ReportView {
     const width = this.widths()?.[block.key] ?? 6;
     return `span ${Math.min(12, Math.max(3, width))}`;
   }
+  protected readonly heatOptions = heatOptions;
   protected scale(block: Extract<ReportBlock, { type: 'table' }>) {
     return heatScale(block.columns, block.view.options?.['scale']);
   }

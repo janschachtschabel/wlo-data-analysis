@@ -64,3 +64,19 @@ Alle 39 Kacheln der drei Dashboards laufen (2 bis 4 s je Dashboard); zwei Zellen
 - Schmutzwerte verlängerten die Heatmaps; die Kacheln der Abdeckung zeigen nur Werte der Werteliste (`vocab: "inside"`), die übrigen stehen unter Datenprobleme.
 - Zwei leere Kacheln (Materialart, Zielgruppe außerhalb des Vokabulars) entfernt; Titel der Übersicht nennt abweichende Schreibweisen.
 - Explorer: Schalter „Vokabular“ (aus den URIs der Werteliste) und „oberste Ebene“.
+
+## Stand nach Review (frischer Reviewer, 2026-11-14)
+
+Behoben, jeweils mit Test (`tests/test_review_p8b.py`):
+
+- K1: „ohne Wert“, „Übrige“ und Gruppen vertrauten einem Kriterium, das nicht genau vergleicht (`ccm:editorial_checklist`). Jetzt einmal je Abfrage die Probe am häufigsten Wert und je Zahl die Schranke häufigster Wert ≤ Zählung ≤ Summe; sonst leer mit Hinweis.
+- K1b: Der leere Wert zählte in der Zeile „ohne Wert“ als Wert.
+- W1: Die gelockerte Probe ließ Teiltreffer durch („1“ in „10“). Als andere Schreibweise gilt nur noch gleiche Schreibung ohne Groß/Klein und der Wert mit Zusatz nach `-` oder `_`.
+- W2: Zeilen ohne Treffer in den Spalten fehlten in der Matrix. Die Zeilen kommen jetzt aus einer eigenen Zählung des Zeilenfelds, sortiert nach ihrer Größe; mit `vocab: "inside"` erscheinen auch Werte der Werteliste ohne Material als Nullzeile.
+- W3: Gruppenzeilen blieben in der Heatmap grau (Oberfläche und Export).
+- W4: 0 als „Lücke“, wo 0 gut ist. Ansichtsoptionen `zero: plain` und `scale_by: column`; Füllgrade als „Anzahl ohne Wert“ lassen 0 ungefärbt; die Lizenz-Kacheln rechnen die Skala je Spalte.
+- W5: Kontrast im Dunkelmodus (schwächere Stufen, Zusätze in Textfarbe).
+- W6: Füllgrad-Läufe von vor dem Kennzeichen `fill` werden aus der gespeicherten Abfrage erkannt.
+- G1 (Hinweis zur Zeile „Gesamt“), G5 (Legende lesbar, Farben beim Drucken).
+
+Offen: G2 (leerer Wert im Abgleich mit der Werteliste), G3 (einwertig laut Widget, mehrwertig in den Daten), G4 (Reiter „Qualität“: Wettlauf beim Wechsel, kein Hinweis auf aktualisierte Vorlage), G6, G7 (Kacheln zu Qualitätsfeldern, ohne Quelle), G8 (Mindestzahl bei `vocab: outside`). Vorschläge für weitere Ansichten: Offenheit als Anteil je Fach, Lückenliste gegen die Werteliste, redaktionell geprüft je Fach.

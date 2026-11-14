@@ -229,7 +229,7 @@ table { border-collapse: collapse; width: 100%; margin: .4rem 0; font-size: 8.5p
 th, td { border: 1px solid #ccc; padding: 2px 5px; text-align: right; }
 th { background: #eef2f6; } th.block { text-align: center; }
 td.label, th.label { text-align: left; } tr.group td, tr.total td { font-weight: bold; }
-tr.group td { background: #f6f7f9; } tr.total td { border-top: 2px solid #555; }
+tr.group td.label { background: #f6f7f9; } tr.total td { border-top: 2px solid #555; }
 td.l1 { padding-left: 1.4em; } .derived { font-style: italic; }
 .notes { color: #444; font-size: 8.5pt; margin: .3rem 0 0; padding-left: 1.2em; }
 .failure { border: 1px solid #b8445a; background: #fbeef0; padding: .5rem; }

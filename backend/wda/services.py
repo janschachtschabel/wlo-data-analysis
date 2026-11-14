@@ -18,6 +18,8 @@ from .edusharing.vocab import VocabStore
 from .external.oersi import OersiClient
 from .instances import Instance, InstanceRegistry
 from .jobs import Jobs
+from .llm import config as llm_config
+from .llm.client import LlmClient
 from .store.db import Database
 from .store.definitions import DefinitionStore
 from .store.history import History
@@ -34,11 +36,15 @@ class Services:
         settings: Settings,
         instances: InstanceRegistry,
         transport: httpx.AsyncBaseTransport | None = None,
+        llm_transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._settings = settings
         self._instances = instances
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
+        self._llm_transport = llm_transport
+        self._llm_http: httpx.AsyncClient | None = None
+        self._llm: llm_config.LlmConfig | None = None
         self.cache = TTLCache(ttl=settings.cache_ttl)
         self._clients: dict[str, EduSharingClient] = {}
         self._vocabs: dict[str, VocabStore] = {}
@@ -92,6 +98,39 @@ class Services:
         self.cache.clear()
         with contextlib.suppress(OSError):
             (self._settings.data_dir / "cache" / f"mds-{instance_id}.json").unlink()
+
+    @property
+    def llm(self) -> llm_config.LlmConfig:
+        """Die geltenden Einstellungen des Sprachmodells (Oberfläche vor Umgebung)."""
+        if self._llm is None:
+            try:
+                row = self.db.read_now(lambda con: con.execute(
+                    "SELECT value FROM meta WHERE key = ?", (llm_config.META_KEY,)).fetchone())
+            except ConfigError:
+                return llm_config.from_env(self._settings)
+            self._llm = llm_config.from_stored(row["value"] if row else None, self._settings)
+        return self._llm
+
+    async def save_llm(self, config: llm_config.LlmConfig | None) -> None:
+        """Speichert die Einstellungen; ``None`` stellt die der Umgebung wieder her."""
+        def fn(con) -> None:
+            if config is None:
+                con.execute("DELETE FROM meta WHERE key = ?", (llm_config.META_KEY,))
+            else:
+                con.execute(
+                    "INSERT INTO meta (key, value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (llm_config.META_KEY, llm_config.to_stored(config)))
+        await self.db.write(fn)
+        self._llm = None
+
+    def llm_client(self, config: llm_config.LlmConfig | None = None) -> LlmClient:
+        if self._llm_http is None:
+            # Keine Weiterleitungen: Der Schlüssel bleibt bei der eingestellten Adresse.
+            self._llm_http = httpx.AsyncClient(
+                transport=self._llm_transport, follow_redirects=False,
+                headers={"User-Agent": "wlo-data-analysis"})
+        return LlmClient(self._llm_http, config or self.llm)
 
     @property
     def db(self) -> Database:
@@ -166,6 +205,9 @@ class Services:
         if self._http is not None:
             await self._http.aclose()
             self._http = None
+        if self._llm_http is not None:
+            await self._llm_http.aclose()
+            self._llm_http = None
         if self._db is not None:
             self._db.close()
             self._db = None

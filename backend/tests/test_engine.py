@@ -100,7 +100,7 @@ def test_columns_from_field(repo, tmp_path):
         assert col["total"] == repo.brute(repo.has(LVL, uri))
         assert cells(r, pos)[M] == repo.brute(lambda d, u=uri: u in d[LVL] and M in d[TAX])
     assert any("häufigsten" in n["text"] for n in r["provenance"]["notes"])
-    assert r["provenance"]["queries"] == 4
+    assert r["provenance"]["queries"] == 5  # eine davon für die vollständigen Zeilen
     r = query(repo, tmp_path, columns={"property": LVL, "include": ["Hochschule", "political"
                                                                     ][:1]})
     assert [c["label"] for c in r["columns"]] == ["Hochschule"]
@@ -119,7 +119,7 @@ def test_groups_distinct_overlapping_and_unknown(repo, tmp_path):
     assert got["g_fremd"] == 0
     assert [x["label"] for x in r["rows"]] == ["MINT", "Mathe und Deutsch", "Fremd"]
     assert all(x["kind"] == "group" for x in r["rows"])
-    assert r["provenance"]["queries"] == 4
+    assert r["provenance"]["queries"] == 5  # eine davon ist die Probe des Kriteriums
     # distinct ist keine Summe der Einzelwerte
     assert got["mint"] < sum(repo.brute(repo.has(TAX, u)) for u in (M, P, DISC + "320"))
 
@@ -163,7 +163,7 @@ def test_missing_on_multi_valued_field(repo, tmp_path):
     assert cells(r, 0)["__missing__"] == repo.brute(lambda d: not d[TAX])
     assert cells(r, 1)["__missing__"] == repo.brute(lambda d: HS in d[LVL] and not d[TAX])
     assert r["rows"][-1]["kind"] == "missing"
-    assert r["provenance"]["queries"] == 4
+    assert r["provenance"]["queries"] == 5  # eine davon ist die Probe des Kriteriums
     # auch mit Gruppen (distinct)
     r = query(repo, tmp_path, rows={"property": TAX, "missing": True, "groups": [
         {"label": "M", "values": [M]}]})
@@ -214,7 +214,7 @@ def test_include_sort_top_other(repo, tmp_path):
     assert r["rows"][-1]["values"][0] < sum(repo.brute(repo.has(TAX, u)) for u in rest)
     assert any("Übrige" in n["text"] for n in r["provenance"]["notes"])
     assert any("ersten 2 von 8" in n["text"] for n in r["provenance"]["notes"])
-    assert r["provenance"]["queries"] == 2
+    assert r["provenance"]["queries"] == 3  # eine davon ist die Probe des Kriteriums
     # einwertig: „Übrige" ist die Summe des Rests
     r = query(repo, tmp_path, rows={"property": LIC, "top": 3, "other": True, "missing": True})
     assert [x["kind"] for x in r["rows"]] == ["value"] * 3 + ["other", "missing"]
@@ -349,7 +349,7 @@ def test_oer_shape_costs_five_calls_per_sector(repo, tmp_path):
     assert row["values"][by_id["d"]] == repo.brute(
         lambda d: hs(d) and M in d[TAX] and not d[LIC])
     # 4 gezählte Spalten, je eine Facetten-Abfrage plus eine für „ohne Wert"
-    assert r["provenance"]["queries"] == 8
+    assert r["provenance"]["queries"] == 9  # eine davon ist die Probe des Kriteriums
     assert all(v is not None for row in r["rows"] for v in row["values"])
 
 

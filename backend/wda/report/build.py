@@ -70,6 +70,11 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
     view = view or {"type": "table", "options": {}}
     notes = list(prov.get("notes") or [])
     fill = result.get("fill") if isinstance(result.get("fill"), dict) else None
+    asked = (prov.get("spec") or {}).get("fill") if isinstance(prov.get("spec"), dict) else None
+    if fill is None and isinstance(asked, dict):
+        # Läufe von vor dem Kennzeichen: aus der gespeicherten Abfrage ableiten
+        fill = {"show": asked.get("show") or "rate",
+                "by_rows": bool((prov.get("spec") or {}).get("rows"))}
     if fill is not None and view.get("type") not in _FILL_VIEWS[bool(fill.get("by_rows"))]:
         # Zahl, Kreis oder Linie ergeben aus Füllgraden kein richtiges Bild
         view = {**view, "type": "table"}

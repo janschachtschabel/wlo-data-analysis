@@ -1,4 +1,4 @@
-import { heatClasses, heatScale } from './heat';
+import { heatOptions, heatClasses, heatScale } from './heat';
 
 const col = (id: string, label = id, derived = false) => ({ id, label, derived });
 const row = (kind: string, values: (number | null)[]) => ({ key: kind + values.join(), label: '', kind, values }) as any;
@@ -35,5 +35,15 @@ describe('Eingefärbte Tabelle', () => {
     const perField = [col('filled', 'mit Wert'), col('missing', 'ohne Wert', true), col('rate', 'Füllgrad %', true)];
     expect(heatScale(perField)).toBe('rate');
     expect(heatClasses(perField, [row('value', [10, 90, 10])], 'rate')).toEqual([['', '', 'r-low']]);
+  });
+
+  it('lässt 0 ungefärbt, wo 0 der gute Fall ist, und rechnet auf Wunsch je Spalte', () => {
+    const columns = [col('gesamt', 'Gesamt'), col('ohne', 'ohne Lizenz', true)];
+    const rows = [row('value', [1000, 0]), row('value', [10, 5]), row('value', [0, -1])];
+    expect(heatClasses(columns, rows, 'count', { zero: 'plain' })).toEqual([['h6', ''], ['h1', 'h1'], ['', '']]);
+    expect(heatClasses(columns, rows, 'count', { by: 'column' })).toEqual([['h6', 'gap'], ['h1', 'h6'], ['gap', '']]);
+    expect(heatOptions(null, { show: 'missing' })).toEqual({ zero: 'plain', by: 'table' });
+    expect(heatOptions({ zero: 'gap', scale_by: 'column' }, { show: 'missing' })).toEqual({ zero: 'gap', by: 'column' });
+    expect(heatOptions(undefined, null)).toEqual({ zero: 'gap', by: 'table' });
   });
 });

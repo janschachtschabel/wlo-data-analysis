@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 
 from . import __version__
 from .api import (
+    assistant,
     auth,
     builtin,
     definitions,
@@ -63,6 +64,7 @@ def create_app(
     *,
     clock: Callable[[], float] = time.monotonic,
     transport: httpx.AsyncBaseTransport | None = None,
+    llm_transport: httpx.AsyncBaseTransport | None = None,
     static_dir: Path | None = None,
     now: Callable[[], datetime] = utc_now,
 ) -> FastAPI:
@@ -94,7 +96,8 @@ def create_app(
     app.state.instances = InstanceRegistry(settings.instances)
     app.state.signer = SessionSigner(session_signing_key(settings), settings.session_max_age)
     app.state.throttle = LoginThrottle(clock=clock)
-    app.state.services = Services(settings, app.state.instances, transport=transport)
+    app.state.services = Services(settings, app.state.instances, transport=transport,
+                                  llm_transport=llm_transport)
 
     app.state.scheduler_clock = now
     app.state.scheduler = Scheduler(
@@ -121,6 +124,7 @@ def create_app(
     protected.include_router(export.router)
     protected.include_router(report.router)
     protected.include_router(builtin.router)
+    protected.include_router(assistant.router)
     query.register_error_handlers(app)
     errors.register_error_handlers(app)
 

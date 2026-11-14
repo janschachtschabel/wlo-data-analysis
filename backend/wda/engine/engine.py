@@ -172,7 +172,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         per_column += (1 if rows_spec.missing and not single else 0)
         per_column += (1 if rows_spec.other and not single else 0)
         per_column += (len(groups) if mode == "distinct" else 0)
-    planned = n_planned * per_column + (1 if spec.columns else 0) + len(prefix_fields)
+    planned = n_planned * per_column + (2 if spec.columns else 0) + len(prefix_fields)
     if planned > MAX_CALLS:
         raise QueryError(
             f"Die Abfrage bräuchte bis zu {planned} Einzelabfragen, erlaubt sind {MAX_CALLS}. "
@@ -206,6 +206,18 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             f"Die Werteliste von '{row_prop}' wurde vom Repositorium gekürzt; "
             "seltene Werte fehlen.")
 
+    row_totals: dict[str, int] = {}
+    probed: list[bool] = []
+
+    async def exact_criterion() -> bool:
+        """Vergleicht das Kriterium des Zeilenfelds genau? Einmal je Abfrage geprüft, an der
+        ersten Spalte; das Verhalten hängt am Feld, nicht an den Filtern der Spalte."""
+        if not probed:
+            col = data_columns[0]
+            probed.append(await _criterion_exact(run, base + col.criteria, rows_spec.property,
+                                                 facet_counts[col.id]))
+        return probed[0]
+
     def cell(col: _Column, value: str) -> int | None:
         fc = facet_counts[col.id]
         if value in fc:
@@ -220,9 +232,17 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 run.call(base + col.criteria + (Criterion(rows_spec.property, g.members),))
                 for col in data_columns for g in groups])
             it = iter(counts)
+            ok = await exact_criterion()
             for col in data_columns:
                 for g in groups:
-                    col.cells[g.key] = next(it).total
+                    counted = next(it).total
+                    parts = [facet_counts[col.id].get(m, 0) for m in g.members]
+                    fits = ok and (col.id in cut or max(parts) <= counted <= sum(parts))
+                    col.cells[g.key] = counted if fits else None
+            if any(col.cells[g.key] is None for col in data_columns for g in groups):
+                notes.add("groups_unknown",
+                          "Einige Gruppen sind nicht bestimmbar: Das Repositorium zählt das "
+                          "Feld nicht genau als Filter.")
         elif mode == "sum":
             rows = groups
             for col in data_columns:
@@ -233,7 +253,13 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                     "Gruppen sind Summen der Einzelwerte. Trägt ein Dokument mehrere Werte "
                     "einer Gruppe, zählt es mehrfach.")
         else:
-            rows = await _value_rows(rows_spec, vocab, base, include, facet_counts, data_columns)
+            if spec.columns is not None:
+                # Die Zeilen einer Matrix sind alle vorkommenden Werte, nicht nur die mit
+                # Treffern in den gezeigten Spalten: Eine leere Zeile ist die größte Lücke.
+                whole = (await run.call(base, row_prop)).facets[row_prop]
+                row_totals = {v.value: v.count for v in whole.values}
+            rows = await _value_rows(rows_spec, vocab, base, include,
+                                     {**facet_counts, "": row_totals}, data_columns)
             if rows_spec.match or rows_spec.vocab:
                 rows = await _select_rows(rows, rows_spec, vocab, notes)
             for row in rows:
@@ -260,7 +286,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
     # ---- Formeln, Sortierung, top/other, „ohne Wert" --------------------------
     _apply_formulas(columns, [r.key for r in rows])
     rows = _sort_rows(rows, columns, rows_spec, include, bool(groups),
-                      across=spec.columns is not None)
+                      across=spec.columns is not None, row_totals=row_totals)
     if rows_spec and rows_spec.top is not None and len(rows) > rows_spec.top:
         kept, rest = rows[: rows_spec.top], rows[rows_spec.top:]
         notes.add("rows_top",
@@ -283,8 +309,15 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 counted = await asyncio.gather(*[
                     run.call(base + col.criteria + (Criterion(rows_spec.property, rest_values),))
                     for col in data_columns])
+                ok = await exact_criterion()
                 for col, agg in zip(data_columns, counted, strict=True):
-                    col.cells[other.key] = agg.total
+                    parts = [facet_counts[col.id].get(v, 0) for v in rest_values]
+                    fits = ok and (col.id in cut or max(parts) <= agg.total <= sum(parts))
+                    col.cells[other.key] = agg.total if fits else None
+                if any(col.cells[other.key] is None for col in data_columns):
+                    notes.add("other_unknown",
+                              "„Übrige“ ist nicht bestimmbar: Das Repositorium zählt das "
+                              "Feld nicht genau als Filter.")
                 notes.add("other_overlap", 
                     "„Übrige“ zählt die Dokumente mit mindestens einem der nicht gezeigten "
                     "Werte; ein Dokument kann zugleich in einer gezeigten Zeile stehen.")
@@ -310,10 +343,12 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                           "„Ohne Wert“ ist die Gesamtzahl minus der Summe der Werte. Das "
                           "stimmt, solange jedes Material höchstens einen Wert trägt (laut "
                           "Metadatenset einwertig); sonst ist die Zahl zu niedrig.")
+        elif not await exact_criterion():
+            with_value = [None] * len(data_columns)
         else:
             with_value = await asyncio.gather(*[
                 _count_with_any_value(run, base + col.criteria, rows_spec.property,
-                                      facet_counts[col.id], col.id in cut)
+                                      facet_counts[col.id], col.id in cut, col.total)
                 for col in data_columns])
         for col, counted in zip(data_columns, with_value, strict=True):
             col.cells[missing.key] = (None if counted is None or col.total is None
@@ -321,7 +356,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         if any(c is None for c in with_value):
             notes.add("missing_unknown", 
                 "„Ohne Wert“ fehlt, wo die Werteliste gekürzt ist, zu viele Werte hat oder "
-                "das Repositorium das Feld nicht als Filter zählt.")
+                "das Repositorium das Feld nicht oder nicht genau als Filter zählt.")
         rows.append(missing)
         _apply_formulas(columns, [missing.key])
 
@@ -615,11 +650,7 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
             if not _refused(exc):
                 raise
             probe = counted = None
-        # Trifft das Kriterium auch andere Schreibweisen desselben Werts („de“ findet „DE“
-        # und „de-DE“), bleibt „irgendein Wert“ dieselbe Menge: Die Probe darf um die Werte
-        # höher liegen, die den häufigsten enthalten.
-        alike = sum(v.count for v in values
-                    if v is not best and best.value.casefold() in v.value.casefold())
+        alike = _alike(best.value, {v.value: v.count for v in values})
         if (probe is not None and counted is not None
                 and best.count <= probe.total <= best.count + alike
                 and low <= counted.total <= min(high, total)):
@@ -992,6 +1023,7 @@ async def _rollup_rows(vocab: VocabStore, rows_spec, notes: Notes) -> list[_Row]
     if skipped:
         text += (" Die Wurzel des Vokabulars („" + skipped[0].caption
                  + "“) ist keine eigene Zeile.")
+    text += " Die Zeile „Gesamt“ zählt alle Materialien, auch die außerhalb dieser Zeilen."
     notes.add("rows_rollup", text)
     return rows
 
@@ -1000,21 +1032,34 @@ async def _select_rows(rows: list[_Row], rows_spec, vocab: VocabStore, notes: No
                        ) -> list[_Row]:
     """``match`` und ``vocab``: Auswahl unter den vorkommenden Werten."""
     total = len(rows)
+    unused: list = []
     if rows_spec.match:
         rows = [r for r in rows if r.key.startswith(rows_spec.match)]
     if rows_spec.vocab:
         known = await known_values(vocab, rows_spec.property)
         inside = rows_spec.vocab == "inside"
         rows = [r for r in rows if (r.key in known) == inside]
+        if inside:
+            # auch Werte der Werteliste, die kein Material trägt: die größten Lücken
+            have = {r.key for r in rows}
+            field = await vocab.field(rows_spec.property)
+            unused = [v for v in field.values if v.id not in have
+                      and (not rows_spec.match or v.id.startswith(rows_spec.match))]
+            rows += [_Row(v.id, v.caption or v.id, "value") for v in unused]
     what = []
     if rows_spec.match:
         what.append(f"die mit „{rows_spec.match}“ beginnen")
     if rows_spec.vocab:
         what.append("die das Vokabular des Feldes "
                     + ("kennt" if rows_spec.vocab == "inside" else "nicht kennt"))
+    if unused:
+        notes.add("rows_unused",
+                  f"{len(unused)} Werte der Werteliste trägt kein Material; sie stehen mit 0 "
+                  "in der Tabelle.")
     notes.add("rows_selected",
-              f"Gezeigt sind nur Werte, {' und '.join(what)}: {len(rows)} von {total} "
-              "vorkommenden Werten.")
+              f"Gezeigt sind nur Werte, {' und '.join(what)}: {len(rows) - len(unused)} von "
+              f"{total} vorkommenden Werten. Die Zeile „Gesamt“ zählt alle Materialien, "
+              "auch die mit anderen Werten oder ohne Wert.")
     return rows
 
 
@@ -1028,6 +1073,8 @@ async def _value_rows(rows_spec, vocab: VocabStore, base, include, facet_counts,
         for col in data_columns:
             for value in facet_counts[col.id]:
                 seen.setdefault(value)
+        for value in facet_counts.get("", {}):  # Zeilen ohne Treffer in einer Spalte
+            seen.setdefault(value)
         keys = list(seen)
     restrict = next((set(c.values) for c in base if c.property == prop), None)
     if restrict is not None:
@@ -1036,7 +1083,7 @@ async def _value_rows(rows_spec, vocab: VocabStore, base, include, facet_counts,
 
 
 def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, grouped: bool,
-               across: bool = False) -> list[_Row]:
+               across: bool = False, row_totals: dict[str, int] | None = None) -> list[_Row]:
     if not rows_spec or not rows:
         return rows
     sort = rows_spec.sort or ("given" if (grouped and not rows_spec.rollup)
@@ -1049,8 +1096,9 @@ def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, gro
     counted = [c for c in columns if not c.derived]
 
     def by_count(row: _Row):
-        if across:
-            # Spalten aus einem Feld: keine ist „die erste“; es zählt die Zeile insgesamt
+        if across and row_totals and row.key in row_totals:
+            value = row_totals[row.key]  # Spalten aus einem Feld: es zählt die Zeile insgesamt
+        elif across:
             cells = [c.cells.get(row.key) for c in counted]
             value = None if all(v is None for v in cells) else sum(v or 0 for v in cells)
         else:
@@ -1060,20 +1108,55 @@ def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, gro
     return sorted(rows, key=by_count)
 
 
+def _alike(best: str, counts: dict[str, int]) -> int:
+    """So viele Zuordnungen tragen eine andere Schreibweise des Werts (anders groß
+    geschrieben oder mit Zusatz wie „de-DE“). Ein Kriterium, das sie mit trifft, zählt für
+    „irgendein Wert“ trotzdem dieselbe Menge; mehr Überschuss ist ein ungenaues Kriterium."""
+    low = best.casefold()
+    return sum(n for value, n in counts.items()
+               if value != best and (value.casefold() == low
+                                     or value.casefold().startswith((low + "-", low + "_"))))
+
+
+async def _criterion_exact(run: _Run, criteria: tuple[Criterion, ...], prop: str,
+                           counts: dict[str, int]) -> bool:
+    """Probe: Zählt das Kriterium den häufigsten Wert so wie die Facette? Ein Kriterium, das
+    anders vergleicht (Textsuche, Teiltreffer), fällt hier auf."""
+    values = {v: n for v, n in counts.items() if v.strip() and n}
+    if not values:
+        return True
+    best = max(values, key=lambda v: (values[v], v))
+    try:
+        probe = (await run.call(criteria + (Criterion(prop, (best,)),))).total
+    except EduSharingError as exc:
+        if not _refused(exc):
+            raise
+        return False
+    return values[best] <= probe <= values[best] + _alike(best, values)
+
+
 async def _count_with_any_value(run: _Run, criteria: tuple[Criterion, ...], prop: str,
-                                counts: dict[str, int], truncated: bool) -> int | None:
-    """Zahl der Dokumente mit mindestens einem Wert im Feld; ``None``, wenn nicht bestimmbar."""
+                                counts: dict[str, int], truncated: bool,
+                                total: int | None = None) -> int | None:
+    """Zahl der Dokumente mit mindestens einem Wert im Feld; ``None``, wenn nicht bestimmbar.
+    Ein leerer Wert ist kein Wert. Die Zählung gilt nur, wenn sie zwischen häufigstem Wert
+    und Summe liegt; ob das Kriterium genau vergleicht, prüft der Aufrufer."""
+    counts = {v: n for v, n in counts.items() if v.strip()}
     values = tuple(counts)
     if truncated or len(values) > MAX_VALUES:
         return None
     if not values:
         return 0
     try:
-        return (await run.call(criteria + (Criterion(prop, values),))).total
+        counted = await run.call(criteria + (Criterion(prop, values),))
     except EduSharingError as exc:
         if not _refused(exc):
             raise
         return None  # das Repositorium zählt dieses Feld nicht als Filter
+    high = sum(counts.values()) if total is None else min(sum(counts.values()), total)
+    if not max(counts.values()) <= counted.total <= high:
+        return None
+    return counted.total
 
 
 def _share(value: Number | None, total: Number | None) -> float | None:

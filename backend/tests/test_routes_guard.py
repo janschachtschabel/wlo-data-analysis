@@ -38,6 +38,7 @@ PROTECTED = {
     "/api/runs/{run_id}/export", "/api/builtin", "/api/builtin/{bundle_id}/install",
     "/api/definitions/{def_id}/history", "/api/definitions/{def_id}/history/keys",
     "/api/schedules", "/api/schedules/{schedule_id}", "/api/schedules/{schedule_id}/run",
+    "/api/settings/llm", "/api/settings/llm/test", "/api/assistant/chat",
 }
 OUTSIDE_API = {"/{rest:path}"}  # nur die Oberfläche
 
@@ -150,4 +151,5 @@ def test_instances_and_settings_leak_no_secrets(admin):
     assert ids == ["wlo-prod", "wlo-staging", "eigene"]
     assert instances.json()[2]["has_credentials"] is True
     assert settings.json()["llm"] == {
-        "base_url": "https://api.openai.com/v1", "model": "gpt-6-luna", "api_key_set": True}
+        "base_url": "https://api.openai.com/v1", "model": "gpt-6-luna", "api_key_set": True,
+        "effort": "auto", "ready": True, "stored": False}

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { formatDelta, formatNumber, formatPercent } from '../core/format';
 import { ResultRow } from '../core/types';
-import { HeatScale, heatClasses } from './heat';
+import { HeatOptions, HeatScale, heatClasses } from './heat';
 
 /** Ergebnistabelle: die vollständige Fassung jeder Zahl; fehlende Werte sind „–“. */
 @Component({
@@ -47,11 +47,13 @@ import { HeatScale, heatClasses } from './heat';
       </table>
     </div>
     @if (heat(); as scale) {
-      <p class="legend muted" aria-hidden="true">
+      <p class="legend muted">
         @if (scale === 'rate') {
           <span class="key r-low"></span> unter 50 % <span class="key r-mid"></span> 50 bis unter 80 % <span class="key r-high"></span> ab 80 %
         } @else {
-          <span class="key gap"></span> 0 (Lücke) <span class="key h1"></span> wenig <span class="key h3"></span> <span class="key h6"></span> viel
+          @if (heatOptions().zero !== 'plain') { <span class="key gap"></span> 0 (Lücke) }
+          <span class="key h1"></span> wenig <span class="key h3"></span> <span class="key h6"></span> viel
+          (im Verhältnis zum größten Wert der {{ heatOptions().by === 'column' ? 'Spalte' : 'Tabelle' }})
         }
       </p>
     }`,
@@ -60,17 +62,26 @@ import { HeatScale, heatClasses } from './heat';
     .pct { margin-left: 6px; font-size: 12px; }
     .delta { margin-left: 6px; font-size: 12px; color: var(--muted); }
     /* Einfärbung: ein Farbton von hell nach dunkel; die Zahl bleibt in Textfarbe lesbar */
-    .h1 { background: color-mix(in srgb, var(--accent) 7%, transparent); }
-    .h2 { background: color-mix(in srgb, var(--accent) 15%, transparent); }
-    .h3 { background: color-mix(in srgb, var(--accent) 24%, transparent); }
-    .h4 { background: color-mix(in srgb, var(--accent) 34%, transparent); }
-    .h5 { background: color-mix(in srgb, var(--accent) 45%, transparent); }
-    .h6 { background: color-mix(in srgb, var(--accent) 57%, transparent); }
+    table.data tr td.h1 { background: color-mix(in srgb, var(--accent) calc(7% * var(--heat-strength, 1)), transparent); }
+    table.data tr td.h2 { background: color-mix(in srgb, var(--accent) calc(15% * var(--heat-strength, 1)), transparent); }
+    table.data tr td.h3 { background: color-mix(in srgb, var(--accent) calc(24% * var(--heat-strength, 1)), transparent); }
+    table.data tr td.h4 { background: color-mix(in srgb, var(--accent) calc(34% * var(--heat-strength, 1)), transparent); }
+    table.data tr td.h5 { background: color-mix(in srgb, var(--accent) calc(45% * var(--heat-strength, 1)), transparent); }
+    table.data tr td.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
     /* Lücke: Schraffur statt nur Farbe */
-    .gap { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 22%, transparent) 0 4px, transparent 4px 8px); }
-    .r-low { background: color-mix(in srgb, var(--danger) 30%, transparent); box-shadow: inset 3px 0 0 var(--danger); }
-    .r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
-    .r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
+    table.data tr td.gap { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 22%, transparent) 0 4px, transparent 4px 8px); }
+    table.data tr td.r-low { background: color-mix(in srgb, var(--danger) 30%, transparent); box-shadow: inset 3px 0 0 var(--danger); }
+    table.data tr td.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
+    table.data tr td.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
+    /* in gefärbten Zellen bleibt auch der Zusatz (Anteil, Veränderung) in Textfarbe lesbar */
+    td[class]:not([class=""]) .pct, td[class]:not([class=""]) .delta { color: inherit; }
+    .key.h1 { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+    .key.h3 { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+    .key.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
+    .key.gap { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--danger) 22%, transparent) 0 4px, transparent 4px 8px); }
+    .key.r-low { background: color-mix(in srgb, var(--danger) 30%, transparent); }
+    .key.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
+    .key.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
     .legend { font-size: 12px; margin: 6px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .key { display: inline-block; width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 3px; margin-left: 8px; }
     th.block { text-align: center; border-left: 1px solid var(--border); }
@@ -86,9 +97,10 @@ export class ResultTable {
   readonly headerGroups = input<[string, number][] | null | undefined>(null);
   /** Zellen einfärben: nach Zählung oder als Ampel für Anteile */
   readonly heat = input<HeatScale | null>(null);
+  readonly heatOptions = input<HeatOptions>({});
   protected readonly shades = computed(() => {
     const scale = this.heat();
-    return scale ? heatClasses(this.columns(), this.rows(), scale) : null;
+    return scale ? heatClasses(this.columns(), this.rows(), scale, this.heatOptions()) : null;
   });
   protected readonly indented = computed(() => this.rows().some((r) => r.kind === 'group'));
   protected readonly number = formatNumber;

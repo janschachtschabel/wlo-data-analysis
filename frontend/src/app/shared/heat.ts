@@ -23,21 +23,40 @@ export function heatScale(columns: { id: string; label: string; derived: boolean
  * Die Ampel färbt nur Prozent-Spalten; die Spalte „Anzahl“ (`count`) neben anderen Spalten
  * bleibt immer ungefärbt und bestimmt die Skala nicht.
  */
+export interface HeatOptions { zero?: 'gap' | 'plain'; by?: 'table' | 'column' }
+
+/** Optionen einer Ansicht: `zero: plain` lässt 0 ungefärbt (wo 0 der gute Fall ist),
+ *  `scale_by: column` rechnet die Skala je Spalte. Füllgrade als „Anzahl ohne Wert“: 0 ist gut. */
+export function heatOptions(options?: Record<string, unknown> | null, fill?: { show?: string } | null): HeatOptions {
+  const zero = options?.['zero'];
+  return {
+    zero: zero === 'gap' || zero === 'plain' ? zero : fill?.show === 'missing' ? 'plain' : 'gap',
+    by: options?.['scale_by'] === 'column' ? 'column' : 'table',
+  };
+}
+
 export function heatClasses(columns: { id: string; label: string; derived: boolean }[], rows: ResultRow[],
-  scale: HeatScale): string[][] {
+  scale: HeatScale, options: HeatOptions = {}): string[][] {
   const plain = (row: ResultRow) => row.kind === 'total' || row.kind === 'missing';
   const skip = columns.map((c) => (columns.length > 1 && c.id === 'count')
     || (scale === 'rate' && !c.label.trimEnd().endsWith('%')));
-  let max = 0;
+  let all = 0;
+  const tops = columns.map(() => 0);
   if (scale === 'count') {
     for (const row of rows) {
-      if (!plain(row)) row.values.forEach((v, n) => { if (!skip[n] && typeof v === 'number' && v > max) max = v; });
+      if (plain(row)) continue;
+      row.values.forEach((v, n) => {
+        if (typeof v !== 'number') return;
+        if (v > tops[n]) tops[n] = v;
+        if (!skip[n] && v > all) all = v;
+      });
     }
   }
   return rows.map((row) => row.values.map((value, n) => {
     if (plain(row) || skip[n] || typeof value !== 'number') return '';
     if (scale === 'rate') return rateClass(value);
-    if (value <= 0 || max <= 0) return 'gap';
+    const max = options.by === 'column' ? tops[n] : all;
+    if (value <= 0 || max <= 0) return value === 0 && options.zero !== 'plain' ? 'gap' : '';
     return 'h' + Math.max(1, Math.ceil(Math.sqrt(value / max) * HEAT_STEPS));
   }));
 }

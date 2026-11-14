@@ -9,7 +9,7 @@ import { Instances } from '../core/instances';
 import { Definition, FieldInfo, FillShow, Filter, QueryResult, QuerySpec, ViewType, VocabPage } from '../core/types';
 import { FilterBar } from '../filters/filter-bar';
 import { ExplorerState, FILL_VIEWS, MAX_FILL_FIELDS, decodeState, emptyState, encodeState, fieldChoices, fillDefaults, replaceValue } from '../filters/state';
-import { heatScale } from '../shared/heat';
+import { heatOptions, heatScale } from '../shared/heat';
 import { ResultTable } from '../shared/result-table';
 import { VocabInfo, vocabInfo } from './vocab-info';
 
@@ -173,7 +173,7 @@ const VIEWS: { id: ViewType; label: string }[] = [
         @if (spec().rows || spec().fill) {
           @if (view() !== 'table' && view() !== 'heatmap') { <app-chart [data]="data" [view]="view()" [label]="'Grafik: ' + (rowTitle() || 'Füllgrade')" /> }
           <app-result-table [columns]="data.columns" [rows]="tableRows()" [rowTitle]="rowTitle() || (spec().fill ? 'Feld' : '')"
-                            [heat]="view() === 'heatmap' ? heatScale(data.columns) : null" />
+                            [heat]="view() === 'heatmap' ? heatScale(data.columns) : null" [heatOptions]="heatOptions(null, data.fill)" />
         }
         <details class="origin" [open]="data.provenance.notes.length > 0">
           <summary>Herkunft: abgerufen {{ time(data.provenance.fetched_at) }}{{ data.provenance.cached ? ' (aus dem Zwischenspeicher)' : '' }},
@@ -269,6 +269,7 @@ export class Explorer {
     return VIEWS.filter((v) => FILL_VIEWS.includes(v.id) && (v.id !== 'stacked_bar' || !this.spec().rows));
   });
   protected readonly heatScale = heatScale;
+  protected readonly heatOptions = heatOptions;
   protected readonly hasFill = (property: string) => !!this.spec().fill?.fields.some((f) => f.property === property);
   protected readonly suggestions = computed<{ id: string; label: string }[]>(() =>
     ((this.result.error()?.extra['suggestions'] ?? []) as any[]).slice(0, 6)

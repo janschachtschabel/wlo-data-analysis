@@ -302,7 +302,11 @@
        ]
       },
       "view": {
-       "type": "heatmap"
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
       },
       "layout": {
        "x": 0,
@@ -401,7 +405,11 @@
        ]
       },
       "view": {
-       "type": "heatmap"
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
       },
       "layout": {
        "x": 0,
@@ -500,7 +508,11 @@
        ]
       },
       "view": {
-       "type": "heatmap"
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
       },
       "layout": {
        "x": 0,

@@ -218,8 +218,8 @@ def test_rollup_with_columns_counts_cells_and_sorts_by_row_sum(repo, tree, tmp_p
 def test_matrix_rows_are_ordered_by_their_sum_not_by_the_first_column(repo, tmp_path):
     result = query(repo, tmp_path, rows={"property": TAX, "match": DISC},
                    columns={"property": LVL, "match": EC})
-    sums = [sum(v or 0 for v in r["values"]) for r in result["rows"]]
-    assert sums == sorted(sums, reverse=True)
+    sizes = [repo.brute(repo.has(TAX, r["key"])) for r in result["rows"]]
+    assert sizes == sorted(sizes, reverse=True)  # nach der Zahl der Materialien je Zeile
     first = [r["values"][0] for r in result["rows"]]
     assert first != sorted(first, reverse=True)  # sonst prüft der Test nichts
 

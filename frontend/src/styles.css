@@ -11,13 +11,13 @@
   :root:not([data-theme="light"]) {
     --bg: #12161c; --surface: #1a2029; --surface-2: #232b37; --border: #354051; --control: #7d8a9c;
     --text: #e6eaf0; --muted: #9aa7b8; --accent: #7fb0ff; --accent-text: #0b1a33;
-    --danger: #ff8a80; --warn-bg: #3d3210; --warn-text: #ffe08a; --ok: #6fd39a;
+    --danger: #ff8a80; --warn-bg: #3d3210; --warn-text: #ffe08a; --ok: #6fd39a; --heat-strength: .72;
   }
 }
 :root[data-theme="dark"] {
   --bg: #12161c; --surface: #1a2029; --surface-2: #232b37; --border: #354051; --control: #7d8a9c;
   --text: #e6eaf0; --muted: #9aa7b8; --accent: #7fb0ff; --accent-text: #0b1a33;
-  --danger: #ff8a80; --warn-bg: #3d3210; --warn-text: #ffe08a; --ok: #6fd39a;
+  --danger: #ff8a80; --warn-bg: #3d3210; --warn-text: #ffe08a; --ok: #6fd39a; --heat-strength: .72;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
