@@ -65,7 +65,7 @@ def _drill(result: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(spec, dict) or not inst or any(spec.get(k) for k in _NO_DRILL):
         return None
     asked = spec.get("rows") or {}
-    if asked.get("rollup") or asked.get("vocab"):
+    if asked.get("rollup") or asked.get("vocab") not in (None, "inside"):
         return None  # Zeilen samt Unterwerten oder außerhalb der Werteliste
     rows = prov.get("rows") if isinstance(prov.get("rows"), dict) else None
     if rows is not None and rows.get("exact") is not True:
@@ -86,6 +86,8 @@ def _drill(result: dict[str, Any]) -> dict[str, Any] | None:
         return {"instance": inst, "filters": spec.get("filters") or [],
                 "rows": rows["property"] if rows else None,
                 "groups": {g["key"]: list(g["values"]) for g in (rows or {}).get("groups") or []},
+                # Werte, die als Filter mehr zählen als in der Tabelle: ohne Link
+                "skip": list((rows or {}).get("widened") or []),
                 "columns": columns}
     except (KeyError, TypeError, AttributeError):
         return None  # älterer Lauf ohne diese Angaben

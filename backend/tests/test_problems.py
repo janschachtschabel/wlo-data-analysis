@@ -76,3 +76,15 @@ def test_blank_values_count_once_and_undetermined_fields_stay_visible(repo, tmp_
     assert rows[f"{LVL}|unknown"] == repo.brute(repo.has(LVL, "political"))
     # gezählt sind Materialien, nicht Zuordnungen
     assert "Zuordnungen" not in " ".join(r["label"] for r in result["rows"])
+
+
+def test_a_value_list_that_does_not_describe_the_field_is_not_compared(repo, tmp_path):  # noqa: F811
+    """Live gemessen: Die Werteliste der Quelle kennt 7 % der Zuordnungen. Dann beschreibt die
+    Liste das Feld nicht, und „außerhalb der Werteliste“ wäre kein Datenproblem."""
+    for n, doc in enumerate(repo.docs):
+        if doc[LVL] and n % 4:
+            doc[LVL] = ["political"]
+    result = query(repo, tmp_path, problems={"fields": FIELDS})
+    keys = {r["key"] for r in result["rows"]}
+    assert f"{LVL}|unknown" not in keys and f"{LVL}|missing" in keys
+    assert "Bildungsstufe" in notes_of(result)["vocab_unfit"]

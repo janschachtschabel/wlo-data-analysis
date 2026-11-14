@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from wda.main import create_app
 
 from .conftest import ADMIN_PASSWORD
-from .esdata import DISC, EC, DataRepo
+from .esdata import DISC, EC, DataRepo, make_docs
 from .test_engine import LIC, LVL, TAX
 
 
@@ -107,6 +107,37 @@ def test_no_drill_where_the_explorer_would_count_something_else(api):
     assert table(api, topics)["drill"] is None
     # ein Feld, das genau zählt, behält den Link
     assert table(api, {"rows": {"property": TAX}})["drill"]["rows"] == TAX
+    # auch auf die Werte der Werteliste beschränkt: jede Zeile ist ein Wert
+    inside = table(api, {"rows": {"property": TAX, "vocab": "inside"}})
+    assert inside["drill"]["rows"] == TAX and inside["drill"]["skip"] == []
+    for row in inside["rows"]:
+        if row["kind"] == "value":
+            assert count(api, cell_filters(inside["drill"], row, "anzahl")) == row["values"][0]
+    assert table(api, {"rows": {"property": TAX, "vocab": "outside"}})["drill"] is None
+
+
+def test_values_that_begin_another_value_have_no_link(settings):
+    """Live gemessen: „en“ als Filter trifft auch „en_US“. Solche Zeilen bekämen eine andere
+    Zahl; die übrigen Zeilen behalten ihren Link."""
+    docs = make_docs()
+    lang = "cclom:general_language"
+    changed = 0
+    for doc in docs:
+        if doc[lang] == ["en"] and changed < 7:
+            doc[lang] = ["en_US"]
+            changed += 1
+    assert changed == 7
+    with TestClient(create_app(settings, transport=DataRepo(docs).transport())) as client:
+        assert client.post("/api/auth/login",
+                           json={"password": ADMIN_PASSWORD}).status_code == 204
+        block = table(client, {"rows": {"property": lang}})
+        assert block["drill"]["skip"] == ["en"]
+        for row in block["rows"]:
+            if row["kind"] == "value" and row["key"] not in block["drill"]["skip"]:
+                assert count(client, cell_filters(block["drill"], row, "anzahl")) == (
+                    row["values"][0])
+        # ein Feld, das genau vergleicht, verliert keinen Link, auch wenn ein Wert so beginnt
+        assert table(client, {"rows": {"property": TAX}})["drill"]["skip"] == []
 
 
 def target_table(api, query, view):

@@ -264,8 +264,9 @@ def test_same_named_values_of_two_vocabularies_get_told_apart(tmp_path):
     repo = FakeRepo()
     mds = copy.deepcopy(MDS)
     widget = next(w for w in mds["widgets"] if w["id"] == "ccm:taxonid" and w["values"])
-    widget["values"] += [
-        {"id": hsf + "n4", "caption": "Mathematik, Naturwissenschaften"},
+    widget["values"] += [  # live gemessen: Die Systematik selbst steht als Wurzel im Baum
+        {"id": hsf, "caption": "Destatis-Systematik der Fächergruppen"},
+        {"id": hsf + "n4", "caption": "Mathematik, Naturwissenschaften", "parent": hsf},
         {"id": hsf + "n37", "caption": "Mathematik", "parent": hsf + "n4"},
         {"id": hsf + "n105", "caption": "Mathematik", "parent": hsf + "n37"},
         {"id": hsf + "n128", "caption": "Physik", "parent": hsf + "n4"}]

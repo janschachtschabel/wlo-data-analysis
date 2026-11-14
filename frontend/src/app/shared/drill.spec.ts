@@ -40,4 +40,12 @@ describe('Von der Zelle zur Abfrage', () => {
     expect(cellLink(drill, { key: 'x', kind: 'value' }, 'constructor')).toBeNull();
     expect(cellLink(drill, { key: 'x', kind: 'value' }, 'count')).not.toBeNull();
   });
+
+  it('gibt keinen Link für Werte, die als Filter mehr zählen', () => {
+    const wide: Drill = { ...drill, skip: ['x:1'] };
+    expect(cellState(wide, { key: 'x:1', kind: 'value' }, 'anzahl')).toBeNull();
+    expect(cellState(wide, { key: 'x:3', kind: 'value' }, 'anzahl')).not.toBeNull();
+    expect(cellState(wide, { key: 'mint', kind: 'group' }, 'anzahl')).toBeNull();
+    expect(cellState(wide, { key: '__total__', kind: 'total' }, 'anzahl')).not.toBeNull();
+  });
 });

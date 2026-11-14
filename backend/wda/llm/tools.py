@@ -535,8 +535,11 @@ class Toolbox:
             sections.append({"id": ident(label, used), "label": label, "values": resolved})
         columns = item.get("columns")
         if not isinstance(columns, list) or not 1 <= len(columns) <= MAX_MATRIX_COLUMNS:
-            raise QueryError(f"columns muss eine Liste mit 1 bis {MAX_MATRIX_COLUMNS} Spalten "
-                             "sein.")
+            raise QueryError(
+                "Ein Abschnitt vom Typ matrix braucht columns: eine Liste mit 1 bis "
+                f"{MAX_MATRIX_COLUMNS} Spalten, jede {{id, label, filters oder formula}}. "
+                "Für eine einfache Tabelle oder ein Diagramm den Typ table oder chart mit "
+                "spec nehmen.")
         ids: set[str] = {str(c.get("id")) for c in columns
                          if isinstance(c, dict) and c.get("id")}
         series = []

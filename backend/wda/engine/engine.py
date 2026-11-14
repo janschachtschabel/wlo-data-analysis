@@ -216,6 +216,10 @@ async def _execute_growth(spec: QuerySpec, client: EduSharingClient, vocab: Voca
     return {**result, "total_row": False, "base_total": main.total}
 
 
+# liegt mehr außerhalb der Werteliste, beschreibt die Liste das Feld nicht
+MAX_OUTSIDE_SHARE = 0.5
+
+
 async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                             run: _Run) -> dict[str, Any]:
     """Rangliste der Datenprobleme: die Füllgrade und der Abgleich mit den Wertelisten,
@@ -249,10 +253,14 @@ async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: Vo
                 "key": f"{row['key']}|missing", "label": f"{row['label']}: ohne Angabe",
                 "kind": "value", "values": [missing, _rate(missing, total)]}))
     base = tuple((await resolve_filters(vocab, spec.filters))[0])
-    counted_uses = []
+    counted_uses: list[str] = []
+    unfit: list[str] = []
     for n, row in enumerate(check["rows"] if check else []):
         bad, uses = row["values"][3], row["values"][2]
         if not bad:
+            continue
+        if uses and bad > uses * MAX_OUTSIDE_SHARE:
+            unfit.append(row["label"])
             continue
         # Materialien statt Zuordnungen, wo das Repositorium die Werte als Filter zählt:
         # ein Kriterium mit allen Werten außerhalb der Werteliste
@@ -298,6 +306,12 @@ async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: Vo
         text += (f" Bei {len(undetermined)} Feldern ließ sich „ohne Angabe“ nicht bestimmen; "
                  "sie stehen ohne Zahl am Ende.")
     notes.add("problems", text)
+    if unfit:
+        notes.add("vocab_unfit",
+                  f"Bei {', '.join(unfit)} liegt mehr als die Hälfte der Zuordnungen außerhalb "
+                  "der Werteliste: Die Liste beschreibt das Feld offenbar nicht, deshalb steht "
+                  "es hier nicht als Datenproblem. Die Werte zeigt der Abgleich mit den "
+                  "Wertelisten.")
     if ask.top is not None and len(rows) > ask.top:
         notes.add("rows_top", f"Angezeigt werden die ersten {ask.top} von {len(rows)} Zeilen.")
         rows = rows[: ask.top]
@@ -631,6 +645,15 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             exact = await exact_criterion()
         except (EduSharingError, QueryError):
             exact = False
+    # Werte, mit denen ein anderer Wert beginnt, zählt manches Feld als Filter mit ihm zusammen
+    widened: list[str] = []
+    if exact and run.probe and rows_spec and data_columns:
+        col = data_columns[0]
+        try:
+            widened = await _widened_values(run, base + col.criteria, rows_spec.property,
+                                            facet_counts[col.id])
+        except (EduSharingError, QueryError):
+            exact = False
 
     fetched = [r.fetched_at for r in run.results]
     inst = client.instance
@@ -649,7 +672,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             "instance": {"id": inst.id, "base_url": inst.base_url, "repository": inst.repository,
                          "metadataset": inst.metadataset, "query": inst.query},
             "spec": spec.model_dump(mode="json", exclude={"refresh"}),
-            "rows": ({"property": row_prop, "mode": mode, "exact": exact,
+            "rows": ({"property": row_prop, "mode": mode, "exact": exact, "widened": widened,
                       "include": include_map,
                       "groups": [{"key": g.key, "label": g.label, "values": list(g.members)}
                                  for g in groups]} if rows_spec else None),
@@ -1665,6 +1688,20 @@ async def _criterion_exact(run: _Run, criteria: tuple[Criterion, ...], prop: str
             raise
         return False
     return values[pick] <= probe <= values[pick] + slack
+
+
+async def _widened_values(run: _Run, criteria: tuple[Criterion, ...], prop: str,
+                          counts: dict[str, int]) -> list[str]:
+    """Die Werte, die als Filter mehr zählen als in der Facette, weil ein anderer Wert mit
+    ihnen beginnt („en“ trifft „en_US“). Geprüft am häufigsten solchen Wert: Zählt er genau,
+    vergleicht das Feld genau, und keiner ist betroffen."""
+    values = {v: n for v, n in counts.items() if v.strip() and n}
+    begin = sorted((v for v in values if any(o != v and _begins(v, o) for o in values)),
+                   key=lambda v: (-values[v], v))
+    if not begin:
+        return []
+    probe = (await run.call(criteria + (Criterion(prop, (begin[0],)),))).total
+    return [] if probe == values[begin[0]] else sorted(begin)
 
 
 async def _count_with_any_value(run: _Run, criteria: tuple[Criterion, ...], prop: str,

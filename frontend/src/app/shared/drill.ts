@@ -5,6 +5,8 @@ import { ExplorerState, MAX_STATE_LENGTH, encodeState } from '../filters/state';
 export interface Drill {
   instance: string; filters: Filter[]; rows: string | null;
   groups: Record<string, string[]>; columns: Record<string, Filter[]>;
+  /** Werte, die als Filter mehr zählen als in der Tabelle („en“ trifft „en_US“): ohne Link */
+  skip?: string[];
 }
 
 /**
@@ -18,7 +20,7 @@ export function cellState(drill: Drill | null | undefined, row: Pick<ResultRow, 
   for (const filter of [...drill.filters, ...drill.columns[column]]) merged.set(filter.property, filter);
   if (row.kind === 'value' || row.kind === 'group') {
     const values = row.kind === 'value' ? [row.key] : Object.hasOwn(drill.groups, row.key) ? drill.groups[row.key] : undefined;
-    if (!drill.rows || !values?.length) return null;
+    if (!drill.rows || !values?.length || values.some((value) => drill.skip?.includes(value))) return null;
     merged.set(drill.rows, { property: drill.rows, values: values.map((value) => ({ value, literal: true })) });
   } else if (row.kind !== 'total') return null;
   return { spec: { instance: drill.instance, filters: [...merged.values()] }, view: 'table' };

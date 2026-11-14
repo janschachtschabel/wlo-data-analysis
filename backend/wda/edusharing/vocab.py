@@ -276,11 +276,14 @@ class VocabStore:
         by_id = {v.id: v for v in values}
         out: dict[str, str] = {}
         levels = self._client.instance.vocab_levels
+        schemes = {prefix.rstrip("/#") for prefix in names}
 
         def level(value: VocabValue, name: str) -> str:
             """Die Ebene im Baum mit ihrem Namen („Studienfach“), sonst „Ebene 3“."""
             depth, at = 1, value
-            while at.parent and at.parent in by_id and depth < 12:
+            # die Systematik selbst (ihre Kennung ist der Anfang aller Werte) ist keine Ebene
+            while (at.parent and at.parent in by_id and depth < 12
+                   and at.parent.rstrip("/#") not in schemes):
                 depth, at = depth + 1, by_id[at.parent]
             named = next((levels[p] for p in prefixes if p in levels
                           and value.id.startswith(p)), ())
