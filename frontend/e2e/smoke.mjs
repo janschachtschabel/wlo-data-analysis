@@ -383,10 +383,15 @@ await page.waitForSelector('.steps li:has-text("Bereitet eine Ansicht vor")');
 await page.waitForSelector('.proposal app-report-view td.h6', { timeout: 30000 });
 await page.waitForSelector('.bubble.prose strong:has-text("Mathematik")');
 await page.click('.proposal button:has-text("Als Kennzahl speichern")');
-await page.waitForSelector('.proposal a:has-text("Gespeichert")');
+await page.waitForSelector('.proposal .done a:has-text("Kennzahl öffnen")');
 await page.fill('#question', 'Baue ein Dashboard');
 await page.click('button:has-text("Fragen")');
 await page.waitForSelector('.proposal button:has-text("Dashboard anlegen")', { timeout: 30000 });
+// die Vorschau zeigt die Kacheln selbst, nicht nur ihre Titel
+await page.waitForSelector('.proposal.dash app-report-view section.card h2');
+await page.click('.proposal button:has-text("Dashboard anlegen")');
+await page.waitForSelector('.proposal.dash .done a:has-text("Dashboard öffnen")');
+assert.match(await page.getAttribute('.proposal.dash .done a.btn', 'href'), /\/ansicht\//);
 await page.setViewportSize({ width: 390, height: 800 });
 assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Assistent läuft bei 390 px über');
 await page.setViewportSize({ width: 1280, height: 900 });

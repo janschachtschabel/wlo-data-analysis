@@ -389,6 +389,14 @@ def test_proposed_dashboard_gets_a_layout_and_failing_tiles_are_reported(api, mo
     layouts = [t["layout"] for t in proposal["spec"]["tiles"]]
     assert layouts == [{"x": 0, "y": 0, "w": 6, "h": 8}, {"x": 6, "y": 0, "w": 6, "h": 8},
                        {"x": 0, "y": 8, "w": 12, "h": 8}]
+    # die Vorschau kommt mit: je Kachel eine Tabelle mit ihrer Darstellung
+    blocks = proposal["report"]["blocks"]
+    assert [b["type"] for b in blocks] == ["table"] * 3
+    assert [b["view"]["type"] for b in blocks] == ["bar", "bar", "table"]
+    assert [b["key"] for b in blocks] == ["k1", "k2", "k3"]
+    told = json.loads(model.bodies[2]["messages"][-1]["content"])
+    assert told["darstellungen"] == ["bar", "bar", "table"] and "anlegen" in told["hinweis"]
+    assert "nie „erstellt“" in model.bodies[0]["messages"][0]["content"]
     assert api.get("/api/definitions").json() == []
     saved = api.post("/api/definitions", json={
         "kind": "dashboard", "name": proposal["name"], "spec": proposal["spec"]})

@@ -64,24 +64,29 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
               </details>
             }
             @for (proposal of turn.proposals; track $index; let pi = $index) {
-              <section class="card proposal">
+              <section class="card proposal" [class.dash]="proposal.kind === 'dashboard'">
                 <div class="row">
                   <strong class="grow">{{ proposal.kind === 'dashboard' ? 'Dashboard: ' : '' }}{{ proposal.name }}</strong>
                   @if (proposal.kind === 'metric') { <a class="btn" [routerLink]="['/explorer']" [queryParams]="{ q: explorerLink(proposal) }">Im Explorer öffnen</a> }
                   @if (chat.target(); as target) {
                     <button type="button" class="primary" (click)="chat.adopt(proposal)" [title]="'Als Kacheln in die geöffnete Bearbeitung übernehmen'">In „{{ target.name }}“ übernehmen</button>
                   }
-                  @if (proposal.saved; as made) {
-                    <a class="btn" [routerLink]="['/ansicht', made.id]">Gespeichert – öffnen</a>
-                  } @else {
+                  @if (!proposal.saved) {
                     <button type="button" class="primary" (click)="chat.keep(ti, pi)" [disabled]="proposal.saving">
                       {{ proposal.kind === 'dashboard' ? 'Dashboard anlegen' : 'Als Kennzahl speichern' }}</button>
                   }
                 </div>
+                @if (proposal.saved; as made) {
+                  <p class="done" role="status">{{ proposal.kind === 'dashboard' ? 'Das Dashboard ist angelegt.' : 'Die Kennzahl ist gespeichert.' }}
+                    <a class="btn primary" [routerLink]="['/ansicht', made.id]">{{ proposal.kind === 'dashboard' ? 'Dashboard öffnen' : 'Kennzahl öffnen' }}</a>
+                    <a [routerLink]="['/bearbeiten', made.id]">bearbeiten</a></p>
+                } @else if (proposal.kind === 'dashboard') {
+                  <p class="muted hint">Vorschau, noch nicht angelegt. „Dashboard anlegen“ legt es in der Bibliothek ab.</p>
+                }
                 @if (proposal.error) { <p class="error" role="alert">{{ proposal.error }}</p> }
                 @if (proposal.description) { <p class="muted">{{ proposal.description }}</p> }
                 @if (proposal.report; as report) {
-                  <app-report-view [report]="report" />
+                  <app-report-view [report]="report" [widths]="widths(proposal)" />
                 } @else {
                   <ul class="tiles">@for (tile of proposal.spec.tiles; track tile.id) { <li>{{ tile.title }}</li> }</ul>
                 }
@@ -128,7 +133,12 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
     /* die Karte trägt den Titel schon; die Ansicht darin ohne eigenen Rahmen */
     :host ::ng-deep .proposal app-report-view section.card { border: 0; padding: 0; margin: 0; background: none; }
     :host ::ng-deep .proposal app-report-view section.card > h2 { display: none; }
-    .tiles { margin: 0; padding-left: 18px; }
+    .tiles { margin: 0; padding-left: 18px; } .hint { margin: 0; font-size: 13px; }
+    .done { margin: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+    .done a:not(.btn) { font-weight: 400; }
+    /* in der Vorschau eines Dashboards behalten die Kacheln Rahmen und Titel */
+    :host ::ng-deep .proposal.dash app-report-view section.card { border: 1px solid var(--border); padding: 12px; background: var(--surface); }
+    :host ::ng-deep .proposal.dash app-report-view section.card > h2 { display: block; font-size: 15px; margin: 0 0 8px; }
     .examples { display: flex; flex-wrap: wrap; gap: 8px; } .examples button { text-align: left; }
     .intro p { margin-top: 0; max-width: 80ch; }
     .ask { display: flex; gap: 8px; align-items: end; }
@@ -179,6 +189,11 @@ export class Assistant {
     if (!text.trim() || this.busy()) return;
     this.draft = '';
     void this.chat.ask(text);
+  }
+
+  protected widths(proposal: Proposal): Record<string, number> | null {
+    if (proposal.kind !== 'dashboard') return null;
+    return Object.fromEntries((proposal.spec.tiles ?? []).map((t: any) => [t.id, t.layout?.w ?? 6]));
   }
 
   protected explorerLink(proposal: Proposal): string {

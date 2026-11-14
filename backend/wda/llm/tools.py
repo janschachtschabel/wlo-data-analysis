@@ -297,11 +297,16 @@ class Toolbox:
                 x, y = 0, y + 8
         spec = {"instance": self.instance, "tiles": tiles}
         parse_spec("dashboard", spec)
-        await self._preview("dashboard", name, spec)
+        run = await self._preview("dashboard", name, spec)
         description = " ".join(str(args.get("description") or "").split())[:1000]
+        # die Vorschau ist schon gerechnet: Der Nutzer sieht die Kacheln mit ihren Grafiken
         self.on_proposal({"kind": "dashboard", "name": name, "description": description,
-                           "spec": spec, "report": None})
-        return {"gezeigt": name, "kacheln": len(tiles)}
+                           "spec": spec,
+                           "report": report_data(build_report(run), with_html=False)})
+        return {"gezeigt": name, "kacheln": len(tiles),
+                "darstellungen": [t["view"]["type"] for t in tiles],
+                "hinweis": "Der Nutzer sieht die Vorschau mit allen Kacheln. Angelegt ist das "
+                           "Dashboard erst, wenn er selbst auf „Dashboard anlegen“ klickt."}
 
     async def _read_run(self, args: dict[str, Any]) -> Any:
         if self.run_id:

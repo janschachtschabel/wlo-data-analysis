@@ -68,9 +68,9 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     table.data tr td.h4 { background: color-mix(in srgb, var(--accent) calc(34% * var(--heat-strength, 1)), transparent); }
     table.data tr td.h5 { background: color-mix(in srgb, var(--accent) calc(45% * var(--heat-strength, 1)), transparent); }
     table.data tr td.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
-    /* Lücke: ruhige Fläche in einem zweiten Farbton, die 0 tritt zurück */
-    table.data tr td.gap { background: color-mix(in srgb, var(--danger) 9%, transparent); color: var(--muted); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 30%, transparent); }
-    table.data tr td.r-low { background: color-mix(in srgb, var(--danger) 30%, transparent); box-shadow: inset 3px 0 0 var(--danger); }
+    /* Lücke und „unter 50 %“ tragen auf allen Seiten dasselbe Rot, ohne Rahmen und Striche */
+    table.data tr td.gap { background: color-mix(in srgb, var(--danger) 22%, transparent); }
+    table.data tr td.r-low { background: color-mix(in srgb, var(--danger) 22%, transparent); }
     table.data tr td.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
     table.data tr td.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
     /* in gefärbten Zellen bleibt auch der Zusatz (Anteil, Veränderung) in Textfarbe lesbar */
@@ -78,8 +78,8 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     .key.h1 { background: color-mix(in srgb, var(--accent) 7%, transparent); }
     .key.h3 { background: color-mix(in srgb, var(--accent) 24%, transparent); }
     .key.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
-    .key.gap { background: color-mix(in srgb, var(--danger) 9%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent); }
-    .key.r-low { background: color-mix(in srgb, var(--danger) 30%, transparent); }
+    .key.gap { background: color-mix(in srgb, var(--danger) 22%, transparent); }
+    .key.r-low { background: color-mix(in srgb, var(--danger) 22%, transparent); }
     .key.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
     .key.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
     .legend { font-size: 12px; margin: 6px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
