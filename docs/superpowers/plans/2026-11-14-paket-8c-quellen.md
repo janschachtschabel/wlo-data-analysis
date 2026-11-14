@@ -48,3 +48,11 @@ Nicht aus Zählungen bestimmbar: Dubletten einzelner Datensätze, Blacklist, Zwe
 - Als Facette zählbar: `ccm:accessibilitySummary` und alle `ccm:oeh_quality_*`, `ccm:oeh_languageLevel`, `ccm:oeh_languageTarget`, `ccm:general_identifier`. Nicht: `ccm:wf_status` (400).
 - DSGVO und Altersfreigabe je Bezugsquelle sagten nichts (fast alles ohne Angabe): ersetzt durch DSGVO und Barrierefreiheit unter den Quelldatensätzen.
 - Offen: Rohwerte als Spaltenköpfe bei Werbung (gemischte Schreibweisen im Feld), drei Schreibweisen von Deutsch bei Sprache; Review durch frischen Reviewer.
+
+## Stand nach Review (2026-11-14)
+
+Frischer Reviewer, HEAD c25b1ba: kein K, 4 W, 5 G. Die Vorgabe „nur Zählungen“ hält; 5.648 Zellen von `profile` gegen die Daten verglichen, keine Abweichung. Tests der Befunde in `backend/tests/test_review_p8c.py`.
+
+Behoben: W1 (Assistent an einem Dashboard zählt gegen die Instanz der Kacheln), W2 (Vorbehalt bei „ohne Angabe“), W3 (`sizes` bei gekürzter Werteliste ohne Anteile, Materialien gesamt mit dem Rest), W4 (Anteile heißen „(%)“ und werden nicht als Füllgrad-Ampel gefärbt), G1 (Suchhilfen), G2 (Ursache je Zeile: gekürzt, abgelehnt, zählt anders), G3 (eindeutige Spalten-IDs).
+
+Offen (gering): G4 Balken und Kreis zeigen bei Anteilen nur „Anzahl“; G5 Zeitbudget des Assistenten wird nur am Rundenanfang geprüft.

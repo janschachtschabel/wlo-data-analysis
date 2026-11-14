@@ -631,6 +631,8 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
                   f"Ein Material kann mehrere Werte von '{prop}' tragen: Die Spalten "
                   "überschneiden sich, und „ohne Angabe“ ist so nicht bestimmbar.")
 
+    refused: set[str] = set()
+
     async def one(row: _Row) -> Aggregate | None:
         if not counts.get(row.key):
             return None
@@ -639,6 +641,7 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
         except EduSharingError as exc:
             if not _refused(exc):
                 raise
+            refused.add(row.key)
             return None
 
     per_row = await asyncio.gather(*[one(row) for row in rows])
@@ -647,23 +650,32 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
     def shown(value: int | None, total: int | None) -> Number | None:
         return _share(value, total) if share else value
 
-    suffix = " %" if share else ""
+    # „(%)“ statt „%“: Anteile eines Merkmals sind kein Füllgrad, die Ampel passt nicht
+    suffix = " (%)" if share else ""
     columns: list[dict[str, Any]] = [
         {"id": "count", "label": "Anzahl", "derived": False, "total": main.total}]
     for v in chosen:
-        columns.append({"id": v.value, "label": await vocab.label(prop, v.value) + suffix,
+        # ein Wert, der wie eine feste Spalte heißt, bekommt eine eigene ID
+        col_id = "v:" + v.value if v.value in ("count", "__missing__") else v.value
+        columns.append({"id": col_id, "label": await vocab.label(prop, v.value) + suffix,
                         "derived": share, "total": shown(v.count, main.total)})
     if with_missing:
         filled = sum(v.count for v in offered)
         columns.append({"id": "__missing__", "label": "ohne Angabe" + suffix, "derived": True,
                         "total": shown(main.total - filled, main.total)
                         if 0 <= filled <= main.total and not facet.truncated else None})
-    out_rows, inexact = [], []
+    out_rows, inexact, cut_rows, refused_rows = [], [], [], []
     for row, agg in zip(rows, per_row, strict=True):
         total = count_column.cells[row.key]
         values: list[Number | None] = [total]
         if total == 0:
             values += [None if share else 0] * (len(columns) - 1)
+        elif total is None:  # die Werteliste der Zeilen ist gekürzt, der Wert fehlt darin
+            cut_rows.append(row.label)
+            values += [None] * (len(columns) - 1)
+        elif row.key in refused:
+            refused_rows.append(row.label)
+            values += [None] * (len(columns) - 1)
         elif agg is None or agg.total != total:
             # das Kriterium zählt nicht dieselben Materialien wie die Facette der Zeile
             inexact.append(row.label)
@@ -683,10 +695,21 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
         notes.add("profile_inexact",
                   f"Nicht bestimmbar: {shown_rows}. Das Repositorium zählt den Wert als "
                   "Filter anders als in der Werteliste (etwa als Wortanfang).")
+    if cut_rows:
+        notes.add("profile_cut",
+                  f"Nicht bestimmbar: {', '.join(cut_rows[:5])}{' …' if len(cut_rows) > 5 else ''}"
+                  ". Der Wert fehlt in der gekürzten Werteliste der Zeilen.")
+    if refused_rows:
+        notes.add("profile_refused",
+                  f"Nicht bestimmbar: {', '.join(refused_rows[:5])}"
+                  f"{' …' if len(refused_rows) > 5 else ''}. Das Repositorium zählt "
+                  f"'{row_prop}' nicht als Filter.")
     notes.add("profile",
               ("Anteile beziehen sich auf die Materialien der Zeile. " if share else "")
               + "Je Zeile eine eigene Abfrage; „ohne Angabe“ ist die Anzahl der Zeile minus "
-              "der Summe der Werte." if with_missing else
+              "der Summe der Werte. Das stimmt, solange jedes Material höchstens einen Wert "
+              "trägt (laut Metadatenset einwertig); sonst ist die Zahl zu niedrig."
+              if with_missing else
               ("Anteile beziehen sich auf die Materialien der Zeile. " if share else "")
               + "Je Zeile eine eigene Abfrage.")
     return _result(spec, client, run, notes, columns, out_rows, base_described,
@@ -714,6 +737,9 @@ async def _execute_sizes(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
         raise QueryError(
             f"'{prop}' steht auch in den Filtern; die Facette ignoriert den Filter auf dem "
             "eigenen Feld. Bitte eines von beiden weglassen.")
+    if _helper(prop):
+        raise QueryError(f"'{prop}' ist eine Suchhilfe des Repositoriums, kein gespeichertes "
+                         "Feld.")
     await vocab.check_facet(prop)
     check_prefix_shape(base, prefix_fields)
 
@@ -725,6 +751,7 @@ async def _execute_sizes(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
     counted = [v.count for v in facet.values if v.value.strip() and v.count > 0]
     n_values, n_uses = len(counted), sum(counted)
     bounds = sizes.bounds
+    cut = facet.truncated
     out_rows = []
     for pos, low in enumerate(bounds):
         high = bounds[pos + 1] - 1 if pos + 1 < len(bounds) else None
@@ -735,13 +762,17 @@ async def _execute_sizes(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
             key, label = str(low), _thousands(low)
         else:
             key, label = f"{low}-{high}", f"{_thousands(low)} bis {_thousands(high)}"
+        # gekürzte Werteliste: Anteile am sichtbaren Teil wären falsch
         out_rows.append({"key": key, "label": label, "kind": "value",
-                         "values": [len(inside), _share(len(inside), n_values),
-                                    sum(inside), _share(sum(inside), n_uses)]})
+                         "values": [len(inside),
+                                    None if cut else _share(len(inside), n_values),
+                                    sum(inside), None if cut else _share(sum(inside), n_uses)]})
     columns = [
-        {"id": "values", "label": "verschiedene Werte", "derived": False, "total": n_values},
+        {"id": "values", "label": "verschiedene Werte", "derived": False,
+         "total": None if cut else n_values},
         {"id": "values_share", "label": "Anteil der Werte %", "derived": True, "total": None},
-        {"id": "uses", "label": "Materialien", "derived": False, "total": n_uses},
+        {"id": "uses", "label": "Materialien", "derived": False,
+         "total": n_uses + facet.other_count},
         {"id": "uses_share", "label": "Anteil der Materialien %", "derived": True,
          "total": None}]
     field = await vocab.field(prop)
@@ -752,7 +783,8 @@ async def _execute_sizes(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
     if facet.truncated:
         notes.add("facet_truncated",
                   f"Die Werteliste von '{prop}' wurde vom Repositorium gekürzt; seltene "
-                  "Werte fehlen, die kleinen Klassen sind zu niedrig.")
+                  "Werte fehlen. Die kleinen Klassen sind zu niedrig, die Zahl der Werte "
+                  "und die Anteile sind deshalb nicht angegeben.")
     return _result(spec, client, run, notes, columns, out_rows, base_described, None)
 
 

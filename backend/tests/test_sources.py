@@ -53,7 +53,7 @@ def test_profile_as_share_of_each_row(repo, tmp_path):
     result = query(repo, tmp_path, rows={"property": SRC, "top": 2},
                    profile={"property": PRICE})
     assert len(result["rows"]) == 2 and "rows_top" in notes_of(result)
-    assert all(c["label"].endswith("%") and c["derived"] for c in result["columns"][1:])
+    assert all(c["label"].endswith("(%)") and c["derived"] for c in result["columns"][1:])
     for src, row in table(result).items():
         docs = [d for d in repo.docs if src in d[SRC]]
         assert row["count"] == len(docs)

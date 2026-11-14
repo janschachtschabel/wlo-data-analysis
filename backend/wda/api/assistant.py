@@ -80,6 +80,19 @@ async def chat(body: ChatIn, request: Request) -> Any:
         if isinstance(spec, dict):
             query = spec.get("query") if isinstance(spec.get("query"), dict) else {}
             found = {str(v) for v in (spec.get("instance"), query.get("instance")) if v}
+            tiles = spec.get("tiles") if isinstance(spec.get("tiles"), list) else []
+            for tile in tiles:  # Dashboard: die Instanz steht je Kachel
+                inner = tile.get("query") if isinstance(tile, dict) else None
+                if isinstance(inner, dict) and inner.get("instance"):
+                    found.add(str(inner["instance"]))
+                elif isinstance(tile, dict) and tile.get("metric_id"):
+                    try:
+                        metric = (await services.definitions.get(str(tile["metric_id"]))).spec
+                    except Exception:  # noqa: BLE001, S112 - gelöschte Kennzahl zählt nicht mit
+                        continue
+                    inner = metric.get("query") if isinstance(metric, dict) else None
+                    if isinstance(inner, dict) and inner.get("instance"):
+                        found.add(str(inner["instance"]))
         instance = _context_instance(services, found, instance)
     try:
         toolbox = Toolbox(services, instance, body.run_id,
