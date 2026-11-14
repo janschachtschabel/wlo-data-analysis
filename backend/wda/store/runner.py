@@ -323,7 +323,10 @@ class Runner:
                 planned.query = query.model_copy(update={
                     "instance": target, "filters": base + list(query.filters)})
             except (QueryError, NotFound) as exc:
-                planned.error = _error("invalid_query", str(exc))
+                # was im Kontext mit Absicht entfällt, ist kein gescheiterter Teil des Laufs
+                dropped = str(exc).startswith("Entfällt im gewählten Kontext")
+                planned.error = _error("not_applicable" if dropped else "invalid_query",
+                                       str(exc))
             return planned
 
         if isinstance(spec, MetricSpec):
@@ -506,8 +509,10 @@ class Runner:
         if progress is not None:
             progress(0, len(plan))
         results = list(await asyncio.gather(*[one(p) for p in plan]))
-        failed = sum(1 for r in results if r["error"] is not None)
-        status = "ok" if not failed else "failed" if failed == len(results) else "partial"
+        failed = sum(1 for r in results if r["error"] is not None
+                     and r["error"].get("kind") != "not_applicable")
+        counted = sum(1 for r in results if r["error"] is None) + failed
+        status = "ok" if not failed else "failed" if failed == counted else "partial"
         run = {
             # ein ungespeicherter Lauf ist nirgends abrufbar und hat deshalb keine ID
             "id": (run_id or new_id()) if save else None,

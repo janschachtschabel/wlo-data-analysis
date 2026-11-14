@@ -116,6 +116,8 @@ def test_the_builtin_dashboards_work_in_the_context_of_a_source(api):
             # allein die Größenklassen des Kontextfeldes entfallen, mit klarem Satz
             assert all("Entfällt im gewählten Kontext" in text for text in errors.values()), (
                 bundle, prop, errors)
+            if not broken:
+                assert run["status"] == "ok", (bundle, prop)
 
 
 def test_rows_on_the_scope_field_count_the_chosen_value(api):
