@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -229,8 +229,10 @@ class Runner:
     # ---- Planung ---------------------------------------------------------------
 
     @staticmethod
-    def _plan(con: sqlite3.Connection, definition: Definition, instance: str | None
-              ) -> list[Planned]:
+    def _plan(con: sqlite3.Connection, definition: Definition, instance: str | None,
+              scope: Sequence[FilterIn] = ()) -> list[Planned]:
+        """``scope`` ist der Kontext eines Laufs (etwa eine Quelle): Filter, die vor jede
+        Abfrage treten, ohne in der Definition zu stehen."""
         spec = parse_spec(definition.kind, definition.spec)
         if isinstance(spec, FilterSpec):
             raise InvalidDefinition(
@@ -248,9 +250,19 @@ class Runner:
                   view: View) -> Planned:
             planned = Planned(key, title, view.model_dump(mode="json"))
             target = instance or getattr(spec, "instance", None) or query.instance
-            base: list[FilterIn] = []
-            used: dict[str, str] = {f.property: "die Abfrage selbst" for f in query.filters}
+            base: list[FilterIn] = list(scope)
+            used: dict[str, str] = {f.property: "der gewählte Kontext" for f in scope}
             try:
+                if scope and query.snapshot:
+                    raise QueryError(
+                        "Der lokale Abzug kennt keinen Kontext; diese Auswertung gilt immer "
+                        "für den Gesamtbestand.")
+                for item in query.filters:
+                    if item.property in used:
+                        raise QueryError(
+                            f"Diese Abfrage filtert selbst das Feld '{item.property}' und "
+                            "lässt sich deshalb nicht auf den gewählten Kontext einengen.")
+                    used[item.property] = "die Abfrage selbst"
                 for fid in dict.fromkeys(filter_ids):
                     name, flt = stored_filter(fid)
                     if flt.instance and flt.instance != target:
@@ -298,6 +310,11 @@ class Runner:
                 filter_ids = metric.filter_ids + filter_ids
             assert query is not None
             plan.append(build(item.id, item.title, query, filter_ids, view or View()))
+        if scope:
+            for planned in plan:
+                if planned.external is not None and planned.error is None:
+                    planned.error = _error(
+                        "invalid_query", "Der Abruf von außerhalb kennt keinen Kontext.")
         return plan
 
     @staticmethod
@@ -404,8 +421,11 @@ class Runner:
     async def run(self, def_id: str, *, refresh: bool = False, instance: str | None = None,
                   save: bool = True, draft: Definition | None = None,
                   origin: str = "manual", run_id: str | None = None,
-                  progress: Callable[[int, int], None] | None = None) -> dict[str, Any]:
-        """``progress(erledigt, gesamt)`` wird nach jeder Abfrage gerufen; ``run_id`` legt die
+                  progress: Callable[[int, int], None] | None = None,
+                  scope: Sequence[FilterIn] = ()) -> dict[str, Any]:
+        """``scope`` engt jede Abfrage auf einen Kontext ein; ein solcher Lauf wird nie
+        gespeichert, damit Verlauf und Zeitreihen beim Gesamtbestand bleiben.
+        ``progress(erledigt, gesamt)`` wird nach jeder Abfrage gerufen; ``run_id`` legt die
         ID des gespeicherten Laufs vorab fest (für Aufträge)."""
         if instance is not None:
             try:
@@ -415,7 +435,7 @@ class Runner:
 
         def prepare(con: sqlite3.Connection) -> tuple[Definition, list[Planned], bool]:
             definition = draft or fetch(con, def_id)
-            plan = self._plan(con, definition, instance)
+            plan = self._plan(con, definition, instance, scope)
             own = False
             if instance is not None:
                 # Nennt jemand ausdrücklich die Instanz, gegen die die Definition ohnehin
@@ -427,7 +447,7 @@ class Runner:
 
         definition, plan, own = await self._db.read(prepare)
         stored_instance = None if own else instance
-        save = save and draft is None
+        save = save and draft is None and not scope
         started = self._clock()
         # Alle Kacheln nebeneinander; der Client begrenzt die gleichzeitigen Abfragen.
         done = 0
@@ -453,6 +473,8 @@ class Runner:
             "spec": definition.spec, "status": status, "started_at": started,
             "finished_at": self._clock(), "origin": origin, "instance": stored_instance,
             "fingerprint": fingerprint(results), "saved": save, "results": results}
+        if scope:
+            run["scope"] = [f.model_dump(mode="json") for f in scope]
         if save:
             points = await asyncio.to_thread(_points, run)
             await self._db.write(lambda con: self._store(con, run, points))

@@ -1,8 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError } from '../core/api';
+import { Filter, QueryResult } from '../core/types';
 import { RunPage } from '../runs/run-page';
 import { SnapshotPanel } from './snapshot-panel';
+
+/** die mitgelieferten Auswertungen zählen gegen WLO */
+const INSTANCE = 'wlo-prod';
 
 interface Builtin { id: string; definitions: { id: string; installed: boolean }[] }
 
@@ -29,14 +33,36 @@ export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?:
            [title]="t.hint">{{ t.label }}</a>
       }
     </nav>
+    @if (!current().snapshot) {
+      <div class="scope row" role="group" aria-label="Kontext der Auswertung">
+        <label>Kontext
+          <select name="context" [value]="kind()" (change)="setKind($any($event.target).value)">
+            <option value="">Gesamtbestand</option>
+            @for (c of contexts; track c.property) { <option [value]="c.property">{{ c.label }}</option> }
+          </select>
+        </label>
+        @if (kind()) {
+          <label class="grow">{{ contextLabel() }}
+            <select name="context-value" [value]="value()" (change)="value.set($any($event.target).value)" [disabled]="!choices().length">
+              <option value="">{{ choices().length ? 'bitte wählen' : 'wird geladen …' }}</option>
+              @for (c of choices(); track c.key) { <option [value]="c.key" [selected]="c.key === value()">{{ c.label }} ({{ c.count }})</option> }
+            </select>
+          </label>
+          @if (value()) { <button type="button" (click)="setKind('')">Zurück zum Gesamtbestand</button> }
+        }
+        <span class="muted hint">{{ value() ? 'Alle Kacheln zählen nur diesen Ausschnitt.' : 'Dieselbe Auswertung lässt sich auf eine Quelle einengen.' }}</span>
+      </div>
+    }
     @if (current().snapshot; as instance) { <app-snapshot-panel [instance]="instance" (changed)="reload($event)" /> }
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @else if (current().snapshot && !complete()) { <p class="muted">Sobald der Abzug vollständig ist, erscheinen hier die Auswertungen.</p> }
-    @else if (ready() && shown()) { <app-run-page [defId]="'builtin-' + current().id" /> }
+    @else if (ready() && shown()) { <app-run-page [defId]="'builtin-' + current().id" [scope]="scope()" /> }
     @else { <p class="muted" role="status">Wird vorbereitet …</p> }`,
   styles: `
     .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: var(--gap); border-bottom: 1px solid var(--border); }
     .tabs a { padding: 8px 14px; text-decoration: none; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+    .scope { align-items: flex-end; margin-bottom: var(--gap); padding: 8px 12px; background: var(--surface, transparent); border: 1px solid var(--border); border-radius: 8px; }
+    .scope select { max-width: 420px; } .scope .hint { align-self: center; }
     .tabs a.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
   `,
 })
@@ -49,12 +75,35 @@ export class Quality {
   protected readonly complete = signal(false);
   protected readonly shown = signal(true);
   protected readonly error = signal('');
+  /** Worauf sich eine Auswertung einengen lässt: die Quelle des Crawlers oder die Bezugsquelle */
+  protected readonly contexts = [
+    { property: 'ccm:replicationsource', label: 'eine Quelle (Crawler)', short: 'Quelle' },
+    { property: 'ccm:oeh_publisher_combined', label: 'eine Bezugsquelle', short: 'Bezugsquelle' },
+  ];
+  protected readonly kind = signal('');
+  protected readonly value = signal('');
+  protected readonly choices = signal<{ key: string; label: string; count: number }[]>([]);
+  protected readonly contextLabel = computed(() => this.contexts.find((c) => c.property === this.kind())?.short ?? '');
+  protected readonly scope = computed<Filter[]>(() =>
+    this.kind() && this.value() && !this.current().snapshot
+      ? [{ property: this.kind(), values: [{ value: this.value(), literal: true }] }] : []);
 
   constructor() {
     effect(() => {
       const id = this.current().id;
       untracked(() => void this.prepare(id));
     });
+  }
+
+  protected setKind(property: string): void {
+    this.kind.set(property);
+    this.value.set('');
+    this.choices.set([]);
+    if (!property) return;
+    this.api.post<QueryResult>('/query', { instance: INSTANCE, rows: { property, top: 300 } }).then((data) => {
+      if (this.kind() !== property) return;
+      this.choices.set(data.rows.filter((r) => r.kind === 'value').map((r) => ({ key: r.key, label: r.label, count: r.values[0] ?? 0 })));
+    }, (error) => this.error.set(error instanceof ApiError ? error.message : 'Die Quellen ließen sich nicht laden.'));
   }
 
   /** nach einem Abzug: die Auswertung neu zählen */

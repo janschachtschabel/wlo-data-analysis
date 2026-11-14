@@ -296,6 +296,15 @@ assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, '
 await page.click('.tabs >> text=Datenprobleme');
 await page.waitForSelector('app-report-view td.r-mid, app-report-view td.r-low, app-report-view td.r-high', { timeout: 60000 });
 await page.waitForSelector('app-report-view td:has-text("political")');
+// Kontext: dieselbe Auswertung nur für eine Quelle; gespeichert wird so nichts
+await page.selectOption('select[name="context"]', 'ccm:replicationsource');
+await page.waitForSelector('select[name="context-value"] option:has-text("oersi_spider")', { state: 'attached' });
+const scoped = page.waitForResponse((r) => r.url().includes('/run') && (r.request().postData() ?? '').includes('"scope":[{'));
+await page.selectOption('select[name="context-value"]', { index: 1 });
+assert.equal((await scoped).status(), 200, 'Lauf mit Kontext');
+await page.waitForSelector('app-report-view td');
+assert.ok(await page.locator('button:has-text("Lauf speichern")').isDisabled(), 'ein Ausschnitt wird nicht gespeichert');
+await page.click('button:has-text("Zurück zum Gesamtbestand")');
 await page.click('.tabs >> text=Quellen');
 await page.waitForSelector('app-report-view :text("Kosten je Bezugsquelle")', { timeout: 60000 });
 await page.waitForSelector('app-report-view td:has-text("2 bis 4")');

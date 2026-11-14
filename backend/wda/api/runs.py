@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, model_validator
 
 from ..errors import UnknownInstance
+from ..filters import FilterIn
 from .report import report_of
 
 router = APIRouter()
@@ -25,12 +26,17 @@ class RunIn(BaseModel):
     report: StrictBool = False  # das Berichtsmodell gleich mitliefern
     # false: als Auftrag starten; Antwort 202, Stand und Ergebnis unter /runs/{id}
     wait: StrictBool = True
+    # Kontext: Filter, die vor jede Abfrage treten (etwa eine Quelle). Nur als Ansicht.
+    scope: list[FilterIn] = Field(default_factory=list, max_length=3)
 
     @model_validator(mode="after")
     def _job_is_saved(self) -> RunIn:
         if not self.wait and (not self.save or self.report):
             raise ValueError("Ein Auftrag (wait=false) wird immer gespeichert und liefert "
                              "keinen Bericht mit")
+        if self.scope and self.save:
+            raise ValueError("Ein Lauf mit Kontext (scope) ist eine Ansicht und wird nicht "
+                             "gespeichert (save=false)")
         return self
 
 
@@ -57,9 +63,11 @@ async def run_definition(def_id: str, request: Request, body: RunIn | None = Non
 
         return JSONResponse(services.jobs.start(def_id, work).view(), status_code=202)
     run = await _runner(request).run(
-        def_id, refresh=body.refresh, instance=body.instance, save=body.save)
+        def_id, refresh=body.refresh, instance=body.instance, save=body.save,
+        scope=body.scope)
     if body.report:
         run["report"] = report_of(run)
+        run["report"]["scope"] = run.get("scope", [])
     return run
 
 

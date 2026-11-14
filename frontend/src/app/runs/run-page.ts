@@ -4,9 +4,11 @@ import { Api, ApiError, Latest, isAbort } from '../core/api';
 import { runAsJob } from '../core/jobs';
 import { formatTime } from '../core/format';
 import { Auth } from '../core/auth';
-import { AppSettings, Definition, Report, RunHead } from '../core/types';
+import { AppSettings, Definition, Filter, Report, RunHead } from '../core/types';
 import { ReportView } from './report-view';
 
+/** der Router setzt fehlende Eingaben auf undefined */
+const EMPTY: Filter[] = [];
 const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise', failed: 'gescheitert' };
 const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Markdown', html: 'HTML', pdf: 'PDF' };
 
@@ -27,7 +29,8 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
            title="Den Assistenten zu dieser Auswertung fragen">Fragen</a>
         <a class="btn" [routerLink]="['/verlauf', defId()]">Verlauf</a>
         <a class="btn" [routerLink]="['/bearbeiten', defId()]">Bearbeiten</a>
-        <button type="button" class="primary" (click)="store()" [disabled]="report.loading() || storing()">Lauf speichern</button>
+        <button type="button" class="primary" (click)="store()" [disabled]="report.loading() || storing() || scope().length > 0"
+                [title]="scope().length ? 'Gespeichert wird nur der Gesamtbestand, damit Verlauf und Zeitreihen vergleichbar bleiben' : ''">Lauf speichern</button>
       }
       @if (runId(); as id) {
         <a class="btn" routerLink="/assistent" [queryParams]="{ lauf: id, titel: report.value()?.title }"
@@ -93,6 +96,8 @@ export class RunPage {
   private readonly auth = inject(Auth);
   readonly runId = input<string>();
   readonly defId = input<string>();
+  /** Kontext: Filter, die vor jede Abfrage treten (etwa eine Quelle); nur für die Ansicht einer Definition */
+  readonly scope = input([], { transform: (value: Filter[] | undefined) => value ?? EMPTY });
   protected readonly report = new Latest<Report>();
   protected readonly definition = signal<Definition | null>(null);
   protected readonly settings = signal<AppSettings | null>(null);
@@ -128,7 +133,7 @@ export class RunPage {
     this.api.get<AppSettings>('/settings').then((s) => this.settings.set(s), () => undefined);
     effect(() => {
       // Die Instanz steht in der Definition; die Wahl im Kopf löst hier keine zweite Zählung aus.
-      this.runId(); this.defId(); this.auth.renewed(); this.compare();
+      this.runId(); this.defId(); this.auth.renewed(); this.compare(); this.scope();
       untracked(() => this.load(false));
     });
     effect(() => {
@@ -168,7 +173,7 @@ export class RunPage {
       });
     } else if (defId) {
       void this.report.run(async (signal) => (await this.api.post<{ report: Report }>(
-        `/definitions/${encodeURIComponent(defId)}/run`, { save: false, report: true, refresh }, signal)).report);
+        `/definitions/${encodeURIComponent(defId)}/run`, { save: false, report: true, refresh, scope: this.scope() }, signal)).report);
     }
   }
 
