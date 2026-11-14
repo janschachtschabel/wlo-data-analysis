@@ -115,9 +115,9 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
     }
     @if (chat.templateError()) { <p class="error" role="alert">{{ chat.templateError() }}</p> }
     <form class="ask card" (ngSubmit)="ask(draft)">
-      <input #file type="file" class="sr-only" tabindex="-1" aria-hidden="true" accept=".pdf,.docx,.txt,.md,.csv,.tsv,.json" (change)="pick(file)">
+      <input #file type="file" class="sr-only" tabindex="-1" aria-hidden="true" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.tsv,.json" (change)="pick(file)">
       <button type="button" (click)="file.click()" [disabled]="chat.reading() || ready() === false"
-              title="PDF, Word (docx) oder Textdatei als Vorlage anhängen, etwa eine Statistik, die nachgebaut werden soll. Die Datei wird nur in Text umgewandelt und nicht gespeichert.">{{ chat.reading() ? 'Liest …' : 'Vorlage' }}</button>
+              title="PDF, Word, Excel, PowerPoint oder Textdatei als Vorlage anhängen, etwa eine Statistik, die nachgebaut werden soll. Die Datei wird nur in Markdown umgewandelt (Überschriften, Listen, Tabellen) und nicht gespeichert.">{{ chat.reading() ? 'Liest …' : 'Vorlage' }}</button>
       <label class="sr-only" for="question">Frage an den Assistenten</label>
       <textarea id="question" name="question" rows="2" [(ngModel)]="draft" [maxlength]="maxText" placeholder="Frage stellen …"
                 (keydown.enter)="enter($event)" [disabled]="ready() === false"></textarea>

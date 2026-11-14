@@ -264,41 +264,15 @@ Rechner mit mindestens fünf Materialien einzeln.
   speichert; Vorschläge legt erst der Admin an. Zahlen in den Karten stammen aus der
   Zählung, nicht vom Modell.
 - Grenzen je Frage: 16 Runden, 32 Werkzeugaufrufe, 8 Minuten, 30 Nachrichten Verlauf.
-- **Vorlagen:** Im Chat lässt sich eine Datei anhängen (PDF, Word `.docx`, Text, Markdown,
-  CSV, JSON; bis 8 MB), etwa eine Statistik, die nachgebaut werden soll.
-  `POST /api/assistant/document` wandelt sie in Text um (höchstens 60 Seiten und
-  24.000 Zeichen) und speichert nichts; der Text geht einmal mit der nächsten Frage an
+- **Vorlagen:** Im Chat lässt sich eine Datei anhängen (PDF, Word `.docx`, Excel `.xlsx`,
+  PowerPoint `.pptx`, Text, Markdown, CSV, JSON; bis 8 MB), etwa eine Statistik, die
+  nachgebaut werden soll. `POST /api/assistant/document` wandelt sie in Markdown um, damit
+  das Sprachmodell den Aufbau sieht: Überschriften, Listen und Tabellen (bei Word aus den
+  Formatvorlagen, bei PDF geschätzt aus Schriftgröße und Tabellenlinien, bei Excel eine
+  Tabelle je Blatt, bei PowerPoint ein Abschnitt je Folie). Höchstens 60 Seiten und
+  32.000 Zeichen; gespeichert wird nichts. Der Text geht einmal mit der nächsten Frage an
   das Sprachmodell und gilt dort als Material, nicht als Anweisung. Gescannte PDFs ohne
   Textebene werden abgewiesen.
-
-## Verwaltung und Läufe
-
-Vier Arten von Definitionen liegen in einer SQLite-Datei im Datenverzeichnis
-(`store.sqlite3`): **Filter**, **Kennzahlen** (eine Abfrage mit Darstellung),
-**Dashboards** (Kacheln) und **Templates** (Abschnitte aus Text, Tabellen, Grafiken).
-Kacheln und Abschnitte verweisen auf eine Kennzahl oder tragen eine eigene Abfrage;
-gespeicherte Filter lassen sich an Kennzahlen, Dashboards und Templates hängen.
-
-| Route | Zweck |
-|---|---|
-| `GET/POST /api/groups`, `PUT/DELETE /api/groups/{id}` | Gruppen (Ordner) |
-| `GET/POST /api/definitions` (`kind`, `group`, `q`) | auflisten (mit `last_run`), anlegen |
-| `GET/PUT/DELETE /api/definitions/{id}` | lesen (mit Verwendern), ändern (mit `version`), löschen |
-| `POST /api/definitions/{id}/duplicate` | Kopie anlegen |
-| `POST /api/definitions/export`, `POST /api/definitions/import?mode=skip\|replace\|copy` | Definitionen als JSON aus- und einführen |
-| `POST /api/definitions/{id}/run` (`refresh`, `instance`, `save`) | alle Abfragen ausführen, Ergebnis speichern |
-| `POST /api/definitions/{id}/run` mit `wait: false` | Lauf als Auftrag: Antwort 202 mit der ID; `GET /api/runs/{id}` nennt den Fortschritt, danach den gespeicherten Lauf |
-| `GET /api/definitions/{id}/history` (`key`, `row`, `column`, `from`, `to`, `instance`, `limit`), `GET /api/definitions/{id}/history/keys` | Zeitreihe gewählter Zahlen über die gespeicherten Läufe |
-| `GET /api/runs/{id}/report?compare=previous\|<Lauf-ID>\|<JJJJ-MM-TT>`, ebenso am Export | Veränderung gegenüber einem früheren Lauf |
-| `GET/POST /api/schedules`, `PUT/DELETE /api/schedules/{id}`, `POST /api/schedules/{id}/run` | Zeitpläne (täglich, wöchentlich, monatlich) |
-| `GET /api/definitions/{id}/runs`, `GET /api/runs` (`definition=<id>` oder `none`, `status`, `kind`), `GET/DELETE /api/runs/{id}`, `DELETE /api/runs?definition=<id>` (alle Läufe einer Definition) | gespeicherte Läufe |
-
-- Ein Lauf speichert die Ergebnis-Tabellen samt Abfrage, Instanz und Zeitpunkt, also nur
-  Zählungen. Er bleibt lesbar, auch wenn die Definition später geändert oder gelöscht wird.
-- Scheitert eine Kachel, trägt sie den Fehler; die übrigen laufen weiter (Status `partial`).
-- `instance` beim Lauf führt dieselbe Definition gegen eine andere Instanz aus.
-- Was noch verwendet wird, lässt sich nicht löschen (409 mit der Liste der Verwender).
-- Fehler haben überall die Form `{"detail": Satz, "kind": Art}`.
 
 ## Berichte, Export und die OER-Statistik
 
