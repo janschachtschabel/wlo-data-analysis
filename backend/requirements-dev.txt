@@ -67,6 +67,8 @@ pydyf==0.13.0
     # via weasyprint
 pygments==2.21.0
     # via pytest
+pypdf==7.1.0
+    # via wda (pyproject.toml)
 pyphen==0.18.1
     # via weasyprint
 pytest==9.2.0
