@@ -116,7 +116,7 @@ def test_settings_are_stored_and_never_return_the_key(api, settings):
     # zurücksetzen stellt die Umgebung wieder her
     assert api.delete("/api/settings/llm").json() == {
         "base_url": "https://api.openai.com/v1", "model": "gpt-6-luna", "effort": "auto",
-        "api_key_set": True, "ready": True, "stored": False}
+        "api_key_set": True, "ready": True, "stored": False, "locked": False}
 
 
 def test_key_is_kept_for_the_same_host_only(api, model):
