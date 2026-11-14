@@ -279,8 +279,10 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             if loose:
                 shown = ", ".join(f"'{v}'" if v else "(leer)" for v in loose[:5])
                 notes.add("values_ungrouped", 
-                    f"{len(loose)} vorkommende Werte von '{row_prop}' stehen in keiner Gruppe "
-                    f"und sind nicht dargestellt ({shown}{' …' if len(loose) > 5 else ''}). "
+                    (f"{len(loose)} vorkommende Werte von '{row_prop}' stehen"
+                     if len(loose) > 1 else f"Ein vorkommender Wert von '{row_prop}' steht")
+                    + f" in keiner Gruppe und {'sind' if len(loose) > 1 else 'ist'} nicht "
+                    f"dargestellt ({shown}{' …' if len(loose) > 5 else ''}). "
                     "Die Zeilen summieren sich deshalb nicht zur Gesamtzahl.")
 
     # ---- Formeln, Sortierung, top/other, „ohne Wert" --------------------------
@@ -1023,7 +1025,8 @@ async def _rollup_rows(vocab: VocabStore, rows_spec, notes: Notes) -> list[_Row]
     if skipped:
         text += (" Die Wurzel des Vokabulars („" + skipped[0].caption
                  + "“) ist keine eigene Zeile.")
-    text += " Die Zeile „Gesamt“ zählt alle Materialien, auch die außerhalb dieser Zeilen."
+    text += (" Die Gesamtzahl einer Spalte zählt alle Materialien, auch die außerhalb "
+             "dieser Zeilen.")
     notes.add("rows_rollup", text)
     return rows
 
@@ -1058,8 +1061,8 @@ async def _select_rows(rows: list[_Row], rows_spec, vocab: VocabStore, notes: No
                   "in der Tabelle.")
     notes.add("rows_selected",
               f"Gezeigt sind nur Werte, {' und '.join(what)}: {len(rows) - len(unused)} von "
-              f"{total} vorkommenden Werten. Die Zeile „Gesamt“ zählt alle Materialien, "
-              "auch die mit anderen Werten oder ohne Wert.")
+              f"{total} vorkommenden Werten. Die Gesamtzahl einer Spalte zählt alle "
+              "Materialien, auch die mit anderen Werten oder ohne Wert.")
     return rows
 
 
