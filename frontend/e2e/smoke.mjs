@@ -36,7 +36,7 @@ const input = page.locator('app-filter-bar input[type=text]');
 await input.fill('bildungsstufe');
 await input.press('Enter');
 await input.fill('hochschule');
-await page.waitForSelector('#filter-options li .hint:has-text("educationalContext/hochschule")');
+await page.waitForSelector('[role=listbox] li .hint:has-text("educationalContext/hochschule")');
 await input.press('Enter');
 await page.waitForFunction((t) => document.querySelector('.big')?.textContent !== t, total);
 await page.locator('.controls select').first().selectOption({ label: 'Fach' });
@@ -50,7 +50,7 @@ assert.match(link, /\?q=[A-Za-z0-9_-]+$/);
 await input.fill('fach');
 await input.press('Enter');
 await input.fill('http://w3id.org/openeduhub/vocabs/discipline/380');
-await page.waitForSelector('#filter-options li:has-text("Mathematik")');
+await page.waitForSelector('[role=listbox] li:has-text("Mathematik")');
 await input.press('Escape');
 
 // Als Kennzahl speichern, mit einem Namen, der HTML sein will
@@ -239,6 +239,38 @@ await page.goto(base + '/bibliothek');
 await page.click('section:has-text("Templates") >> text=Bearbeiten');
 await page.waitForSelector('app-spec-form');
 await page.click('summary:has-text("Spezifikation")');
+// Gegliederte Tabelle im Baukasten: Umbenennen und zurück ändert sonst nichts; Handeintrag, Platzhalter
+{
+  const stored = JSON.parse(await page.inputValue('#spec'));
+  const form = page.locator('app-matrix-form').first();
+  await form.locator('summary:has-text("Zeilen")').click();
+  const group = form.locator('input[name^="mx-group-"]').first();
+  const label = await group.inputValue();
+  await group.fill(label + ' neu'); await group.blur();
+  assert.equal(JSON.parse(await page.inputValue('#spec')).sections.find((x) => x.type === 'matrix').rows.sections[0].label, label + ' neu');
+  await group.fill(label); await group.blur();
+  assert.deepEqual(JSON.parse(await page.inputValue('#spec')), stored);
+  await form.locator('app-filter-bar input[role=combobox]').first().click();
+  await form.locator('app-filter-bar [role=option]').first().waitFor();
+  await page.keyboard.press('Escape');
+  await form.locator('summary:has-text("Blöcke")').click();
+  await form.locator('summary:has-text("Zahlen eintragen")').first().click();
+  const cell = form.locator('table.grid input').first();
+  await cell.fill('abc'); await cell.blur();
+  assert.equal(await cell.getAttribute('aria-invalid'), 'true');
+  await cell.fill('1.234'); await cell.blur();
+  const manual = JSON.parse(await page.inputValue('#spec')).sections.find((x) => x.type === 'matrix').blocks.find((b) => b.source === 'manual');
+  assert.ok(JSON.stringify(manual).includes(':1234'));
+  await page.click('button:text-is("Vorschau")');
+  await page.waitForSelector('app-report-view');
+  const what = page.locator('select[name^="ph-what-"]').first();
+  await what.selectOption(await what.locator('option[value^="t:"]').first().getAttribute('value'));
+  await page.waitForSelector('select[name^="ph-row-"]');
+  await page.locator('.insert button:has-text("Einfügen")').first().click();
+  await page.waitForFunction(() => /\{\{[a-z0-9_]+\.total\.[a-z0-9_.]+\}\}/.test(document.querySelector('#spec').value));
+  await page.click('button:has-text("Gegliederte Tabelle hinzufügen")');
+  await page.waitForFunction(() => JSON.parse(document.querySelector('#spec').value).sections.at(-1).rows?.sections[0].id === 'gruppe_1');
+}
 await page.fill('#spec', '{"title": "", "sections": [{"id": "a", "type": "gibtsnicht"}]}');
 await page.click('text=Prüfen');
 await page.waitForSelector('.problems li.error code:has-text("sections.0")');

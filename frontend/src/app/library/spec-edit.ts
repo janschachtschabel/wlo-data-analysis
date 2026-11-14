@@ -1,4 +1,5 @@
 /** Rechenteil des Baukastens für Dashboards und Templates: ohne Oberfläche, damit prüfbar. */
+import { Report } from '../core/types';
 
 export interface TileSpec {
   id: string; title: string; metric_id?: string | null; query?: unknown; view?: { type: string } | null;
@@ -45,4 +46,33 @@ export function flowLayout(tiles: readonly TileSpec[]): TileSpec[] {
     rowHeight = Math.max(rowHeight, h);
     return placed;
   });
+}
+
+export interface PlaceholderTable {
+  key: string; title: string;
+  rows: { path: string; label: string }[]; columns: { id: string; label: string }[];
+}
+
+/** Die Zahlen eines Berichts, die sich im Text als `{{…}}` nennen lassen: je Tabelle Zeilen und Spalten. */
+export function placeholderTables(report: Report | null | undefined): PlaceholderTable[] {
+  const out: PlaceholderTable[] = [];
+  const plain = (text: string) => !/[{}\n]/.test(text);
+  for (const block of report?.blocks ?? []) {
+    if (block.type !== 'table' || !plain(block.key)) continue;
+    const heads: string[] = [];
+    for (const [label, width] of block.header_groups ?? []) for (let n = 0; n < width; n++) heads.push(label);
+    const columns = block.columns.filter((c) => plain(c.id))
+      .map((c) => ({ id: c.id, label: heads.length === block.columns.length ? `${heads[block.columns.indexOf(c)]}: ${c.label}` : c.label }));
+    const rows = block.rows.filter((r) => plain(r.key) && r.key.length <= 200)
+      .map((r) => ({ path: r.kind === 'total' ? 'total' : 'cell.' + r.key, label: r.label }));
+    if (columns.length && rows.length) out.push({ key: block.key, title: block.title || block.key, rows, columns });
+  }
+  return out;
+}
+
+/** Fügt Text an der Schreibmarke ein und gibt den neuen Inhalt zurück. */
+export function insertAt(text: string, start: number, end: number, piece: string): string {
+  const from = Math.max(0, Math.min(start, text.length));
+  const to = Math.max(from, Math.min(end, text.length));
+  return text.slice(0, from) + piece + text.slice(to);
 }

@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api } from '../core/api';
-import { Definition, Instance } from '../core/types';
-import { SectionSpec, TileSpec, WIDTHS, flowLayout, freeId, move } from './spec-edit';
+import { Definition, Instance, Report } from '../core/types';
+import { MatrixSpec, emptyMatrix } from './matrix-edit';
+import { MatrixForm } from './matrix-form';
+import { PlaceholderTable, SectionSpec, TileSpec, WIDTHS, flowLayout, freeId, insertAt, move, placeholderTables } from './spec-edit';
 
 const VIEW_LABELS: [string, string][] = [
   ['', 'wie die Kennzahl'], ['table', 'Tabelle'], ['number', 'Zahl'], ['bar', 'Balken'],
@@ -17,7 +19,7 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
  */
 @Component({
   selector: 'app-spec-form',
-  imports: [FormsModule],
+  imports: [FormsModule, MatrixForm],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="row top">
@@ -56,12 +58,36 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
             @if (kind() === 'template') { <span class="tag">{{ sectionLabel(item.type) }}</span> }
             @if (item.type === 'text') {
               <label class="wide">Text <span class="muted small">Markdown: Überschriften mit #, Listen mit -</span>
-                <textarea rows="4" [name]="'md-' + item.id" [attr.name]="'md-' + item.id" [ngModel]="item.markdown ?? ''" (ngModelChange)="set(i, { markdown: $event })" maxlength="20000"></textarea></label>
+                <textarea #area rows="4" [name]="'md-' + item.id" [attr.name]="'md-' + item.id" [ngModel]="item.markdown ?? ''" (ngModelChange)="set(i, { markdown: $event })" maxlength="20000"></textarea></label>
+              <div class="row insert">
+                <label>Zahl einfügen
+                  <select #what [attr.name]="'ph-what-' + item.id" (change)="pickTable(item.id, what.value)">
+                    <option value="run.date">Datum des Laufs</option>
+                    <option value="run.name">Name des Berichts</option>
+                    <option value="run.instance">Instanz</option>
+                    @for (table of tables(); track table.key) { <option [value]="'t:' + table.key">aus „{{ table.title }}“</option> }
+                  </select>
+                </label>
+                @if (tableOf(item.id); as table) {
+                  <label>Zeile
+                    <select #row [attr.name]="'ph-row-' + item.id" (change)="picked.set({ item: item.id, table: table.key, row: row.value, col: picked().col })">
+                      @for (r of table.rows; track r.path) { <option [value]="r.path" [selected]="r.path === picked().row">{{ r.label }}</option> }
+                    </select>
+                  </label>
+                  <label>Spalte
+                    <select #col [attr.name]="'ph-col-' + item.id" (change)="picked.set({ item: item.id, table: table.key, row: picked().row, col: col.value })">
+                      @for (c of table.columns; track c.id) { <option [value]="c.id" [selected]="c.id === picked().col">{{ c.label }}</option> }
+                    </select>
+                  </label>
+                }
+                <button type="button" (click)="insert(i, item, area, what.value)">Einfügen</button>
+                @if (!tables().length) { <span class="muted small">Zahlen aus den Tabellen stehen hier nach einem Klick auf „Vorschau“ zur Wahl.</span> }
+              </div>
             } @else {
               <label class="wide">Titel
                 <input [name]="'title-' + item.id" [attr.name]="'title-' + item.id" [ngModel]="item.title ?? ''" (ngModelChange)="set(i, { title: $event })" maxlength="200" /></label>
               @if (item.type === 'matrix') {
-                <span class="muted small">Zeilen, Spalten und Quellen dieser Tabelle stehen unten in der Spezifikation.</span>
+                <app-matrix-form [matrix]="item" [instance]="instanceFor(item)" (changed)="replace(i, $event)" />
               } @else {
                 <label>Kennzahl
                   <select [name]="'metric-' + item.id" [attr.name]="'metric-' + item.id" [ngModel]="item.metric_id ?? ''" (ngModelChange)="setMetric(i, $event)">
@@ -105,6 +131,9 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
       <ol>
         <li><strong>Fertige Auswertung übernehmen:</strong> unten eine vorhandene Auswertung wählen (zum Beispiel „Abdeckung“) und daraus eine {{ kind() === 'dashboard' ? 'Kachel' : 'Tabelle oder Grafik' }} hinzufügen.</li>
         <li><strong>Eigene Kennzahl:</strong> im Explorer filtern und aufschlüsseln, „Als Kennzahl speichern“, dann hier einsetzen.</li>
+        @if (kind() === 'template') {
+          <li><strong>Gegliederte Tabelle:</strong> „Gegliederte Tabelle hinzufügen“ legt eine Tabelle mit Zeilengruppen, Spalten und Blöcken je Quelle an, wie in der OER-Statistik. Zahlen ohne Schnittstelle trägst du als Handeintrag ein.</li>
+        }
         <li><strong>Den Assistenten bauen lassen:</strong> oben beschreiben, was die Seite zeigen soll, dann „Vom Assistenten vorschlagen lassen“. Den Vorschlag übernimmst du im Chatfenster mit einem Klick hierher.</li>
       </ol>
       <p class="muted small">Ordnen durch Ziehen oder mit den Pfeilen. Nichts ist gespeichert, bevor du unten „Speichern“ drückst; „Vorschau“ zeigt das Ergebnis vorher.</p>
@@ -146,7 +175,10 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
       } @else {
         <span class="muted">Es gibt noch keine Kennzahlen. Im Explorer eine Abfrage „Als Kennzahl speichern“, dann lässt sie sich hier einsetzen.</span>
       }
-      @if (kind() === 'template') { <button type="button" (click)="addText()">Text hinzufügen</button> }
+      @if (kind() === 'template') {
+        <button type="button" (click)="addText()">Text hinzufügen</button>
+        <button type="button" (click)="addMatrix()">Gegliederte Tabelle hinzufügen</button>
+      }
     </div>
     }`,
   styles: `
@@ -164,7 +196,8 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
     .wide { flex: 1 1 260px; } .wide input, textarea { width: 100%; }
     .tag { align-self: center; font-size: 12px; font-weight: 600; background: var(--surface); border-radius: 10px; padding: 1px 8px; }
     .tools { display: flex; gap: 4px; } .tools button { padding: 3px 8px; }
-    .empty { padding: 8px 0; } .add { align-items: flex-end; }
+.empty { padding: 8px 0; } .add { align-items: flex-end; }
+    .insert { flex: 1 1 100%; align-items: flex-end; gap: 8px; }
     .help { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; background: var(--surface-2); }
     .help summary { cursor: pointer; font-weight: 600; } .help ol { margin: 8px 0; padding-left: 20px; display: grid; gap: 4px; } .help p { margin: 0; }
   `,
@@ -175,6 +208,13 @@ export class SpecForm {
   readonly metrics = input<Definition[]>([]);
   readonly filters = input<Definition[]>([]);
   readonly instances = input<Instance[]>([]);
+  /** letzte Vorschau: aus ihr stammen die Zahlen, die sich im Text einsetzen lassen */
+  readonly report = input<Report | null>(null);
+  protected readonly tables = computed<PlaceholderTable[]>(() => {
+    const ids = new Set(this.items().map((item) => item.id));
+    return placeholderTables(this.report()).filter((table) => ids.has(table.key));
+  });
+  protected readonly picked = signal({ item: '', table: '', row: '', col: '' });
   readonly changed = output<Record<string, any>>();
   /** der Assistent soll einen Vorschlag machen */
   readonly assistant = output<void>();
@@ -310,6 +350,42 @@ export class SpecForm {
         : { id, type: !t.view?.type || ['table', 'heatmap', 'number'].includes(t.view.type) ? 'table' : 'chart', title: t.title, ...data };
     });
     this.setItems([...this.items(), ...added]);
+  }
+
+  /** Instanz für die Wertesuche einer gegliederten Tabelle: ihre eigene, die des Berichts, sonst die erste. */
+  protected instanceFor(item: any): string {
+    const own = typeof item.instance === 'string' && item.instance ? item.instance : this.spec()['instance'];
+    return typeof own === 'string' && own ? own : this.instances()[0]?.id ?? '';
+  }
+
+  protected replace(index: number, next: MatrixSpec): void {
+    this.setItems(this.items().map((item, i) => (i === index ? next : item)));
+  }
+
+  protected addMatrix(): void {
+    const ids = this.items().map((item) => item.id as string);
+    this.setItems([...this.items(), emptyMatrix(freeId(ids, 'a'), 'ccm:taxonid')]);
+  }
+
+  protected pickTable(item: string, value: string): void {
+    const table = value.startsWith('t:') ? this.tables().find((t) => t.key === value.slice(2)) : undefined;
+    this.picked.set(table ? { item, table: table.key, row: table.rows[table.rows.length - 1].path, col: table.columns[0].id } : { item: '', table: '', row: '', col: '' });
+  }
+  protected tableOf(item: string): PlaceholderTable | undefined {
+    const picked = this.picked();
+    return picked.item === item ? this.tables().find((t) => t.key === picked.table) : undefined;
+  }
+
+  /** Setzt den Platzhalter an die Schreibmarke des Textes. */
+  protected insert(index: number, item: any, area: HTMLTextAreaElement, what: string): void {
+    const table = what.startsWith('t:') ? this.tableOf(item.id) : undefined;
+    if (what.startsWith('t:') && !table) return;
+    const picked = this.picked();
+    const piece = table ? `{{${table.key}.${picked.row}.${picked.col}}}` : `{{${what}}}`;
+    const text = String(item.markdown ?? '');
+    const start = area.selectionStart ?? text.length;
+    this.set(index, { markdown: insertAt(text, start, area.selectionEnd ?? start, piece).slice(0, 20000) });
+    afterNextRender(() => { area.focus(); area.setSelectionRange(start + piece.length, start + piece.length); }, { injector: this.injector });
   }
 
   protected addText(): void {

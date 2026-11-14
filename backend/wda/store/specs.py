@@ -322,6 +322,24 @@ def references(spec: Spec) -> dict[str, str]:
     return found
 
 
+def spec_hints(kind: str, data: Any) -> list[dict[str, str]]:
+    """Was an einer gültigen Spezifikation beim Lauf scheitern würde. Bisher: eine gegliederte
+    Tabelle mit Abfragen, für die keine Instanz feststeht."""
+    if kind != "template" or not isinstance(data, dict) or data.get("instance"):
+        return []
+    hints = []
+    for pos, section in enumerate(data.get("sections") or []):
+        if (isinstance(section, dict) and section.get("type") == "matrix"
+                and not section.get("instance")
+                and any(isinstance(b, dict) and b.get("source") == "query"
+                        for b in section.get("blocks") or [])):
+            hints.append({"loc": f"sections.{pos}", "msg": (
+                f"Für die gegliederte Tabelle „{section.get('title')}“ steht keine Instanz "
+                "fest. Ohne Instanz am Bericht muss sie bei jedem Lauf angegeben werden; "
+                "die Vorschau bleibt sonst leer.")})
+    return hints
+
+
 def check_spec(kind: str, data: Any) -> list[dict[str, str]]:
     """Alle Fehler einer Spezifikation mit ihrem Ort, ohne etwas zu speichern (für Editoren)."""
     model = _MODELS.get(kind)

@@ -19,7 +19,7 @@ from ..report.compare import apply_previous
 from ..report.formats import report_data
 from ..report.model import Report
 from ..store.runner import DamagedRun
-from ..store.specs import check_spec
+from ..store.specs import check_spec, spec_hints
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -98,4 +98,5 @@ async def preview(body: PreviewIn, request: Request) -> dict[str, Any]:
 @router.post("/check")
 def check(body: CheckIn) -> dict[str, Any]:
     errors = check_spec(body.kind, body.spec)
-    return {"ok": not errors, "errors": errors}
+    return {"ok": not errors, "errors": errors,
+            "hints": [] if errors else spec_hints(body.kind, body.spec)}

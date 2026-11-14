@@ -1,4 +1,5 @@
-import { TileSpec, flowLayout, freeId, move } from './spec-edit';
+import { Report } from '../core/types';
+import { TileSpec, flowLayout, freeId, insertAt, move, placeholderTables } from './spec-edit';
 
 const tile = (id: string, w: number, h = 4): TileSpec => ({ id, title: id, metric_id: 'm-123456', layout: { x: 40, y: 99, w, h } });
 
@@ -24,5 +25,27 @@ describe('Baukasten', () => {
   it('findet eine freie Kennung', () => {
     expect(freeId(['k1', 'k2', 'x'], 'k')).toBe('k3');
     expect(freeId([], 'a')).toBe('a1');
+  });
+
+  it('nennt die Zahlen eines Berichts, die sich als Platzhalter einsetzen lassen', () => {
+    const report = { blocks: [
+      { type: 'text', key: 'a1', markdown: '', html: '' },
+      { type: 'table', key: 'oer', title: 'Materialien', header_groups: [['Schule', 2], ['Hochschule', 2]],
+        columns: [{ id: 'schule.gesamt', label: 'Gesamt' }, { id: 'schule.a', label: 'A' }, { id: 'hs.gesamt', label: 'Gesamt' }, { id: 'hs.a', label: 'A' }],
+        rows: [{ key: 'mint', label: 'MINT', kind: 'group', values: [] }, { key: 'x{1}', label: 'kaputt', kind: 'value', values: [] },
+          { key: '__total__', label: 'Gesamt', kind: 'total', values: [] }] },
+      { type: 'failure', key: 'a3', title: 'x', detail: '', kind: 'missing' },
+    ] } as unknown as Report;
+    expect(placeholderTables(report)).toEqual([{ key: 'oer', title: 'Materialien',
+      rows: [{ path: 'cell.mint', label: 'MINT' }, { path: 'total', label: 'Gesamt' }],
+      columns: [{ id: 'schule.gesamt', label: 'Schule: Gesamt' }, { id: 'schule.a', label: 'Schule: A' },
+        { id: 'hs.gesamt', label: 'Hochschule: Gesamt' }, { id: 'hs.a', label: 'Hochschule: A' }] }]);
+    expect(placeholderTables(null)).toEqual([]);
+  });
+
+  it('fügt an der Schreibmarke ein', () => {
+    expect(insertAt('Stand: .', 7, 7, '{{run.date}}')).toBe('Stand: {{run.date}}.');
+    expect(insertAt('abc', 1, 2, 'X')).toBe('aXc');
+    expect(insertAt('abc', 99, 99, 'X')).toBe('abcX');
   });
 });

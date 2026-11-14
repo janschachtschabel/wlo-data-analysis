@@ -32,7 +32,7 @@ import { SpecForm } from './spec-form';
         @if (def.kind === 'dashboard' || def.kind === 'template') {
           @if (parsed(); as spec) {
             <app-spec-form #form [kind]="def.kind" [spec]="spec" [metrics]="metrics()" [filters]="filters()" [sources]="sources()"
-                           [instances]="instances.list()" (changed)="fromForm($event)" (assistant)="askAssistant(def)" />
+                           [instances]="instances.list()" [report]="report.value() ?? null" (changed)="fromForm($event)" (assistant)="askAssistant(def)" />
           } @else {
             <p class="muted">Die Spezifikation unten ist gerade kein gültiges JSON; der Baukasten erscheint wieder, sobald sie es ist.</p>
           }
@@ -48,6 +48,7 @@ import { SpecForm } from './spec-form';
             <li class="error">@if (problem.loc) { <code>{{ problem.loc }}</code> } {{ problem.msg }}</li>
           }
           @if (checked() && !problems().length) { <li class="ok">Die Spezifikation ist gültig.</li> }
+          @for (hint of hints(); track $index) { <li class="hint">Hinweis: {{ hint.msg }}</li> }
         </ul>
         <div class="row">
           <button type="button" (click)="check()">Prüfen</button>
@@ -76,7 +77,7 @@ import { SpecForm } from './spec-form';
     .form label { display: grid; gap: 4px; min-width: 0; } .form input { min-width: 0; width: 100%; }
     .form { min-width: 0; } details { min-width: 0; }
     #spec { font: 13px/1.45 var(--mono); width: 100%; resize: vertical; tab-size: 2; margin-top: 8px; }
-    .problems { margin: 0; padding-left: 18px; } .ok { color: var(--ok); } .top { margin-top: 20px; }
+    .problems { margin: 0; padding-left: 18px; } .ok { color: var(--ok); } .hint { color: var(--muted); } .top { margin-top: 20px; }
   `,
 })
 export class Editor {
@@ -85,6 +86,7 @@ export class Editor {
   protected readonly definition = signal<Definition | null>(null);
   protected readonly problems = signal<{ loc: string; msg: string }[]>([]);
   protected readonly checked = signal(false);
+  protected readonly hints = signal<{ loc: string; msg: string }[]>([]);
   protected readonly message = signal('');
   protected readonly error = signal('');
   protected readonly conflict = signal(false);
@@ -177,7 +179,7 @@ export class Editor {
     } catch (error) { this.error.set(error instanceof ApiError ? error.message : 'Nicht ladbar.'); }
   }
 
-  protected dirty(): void { this.checked.set(false); this.message.set(''); }
+  protected dirty(): void { this.checked.set(false); this.hints.set([]); this.message.set(''); }
 
   private parse(): unknown | undefined {
     try { return JSON.parse(this.text()); } catch (error) {
@@ -192,8 +194,8 @@ export class Editor {
     const def = this.definition();
     if (spec === undefined || !def) return false;
     try {
-      const out = await this.api.post<{ ok: boolean; errors: { loc: string; msg: string }[] }>('/check', { kind: def.kind, spec });
-      this.problems.set(out.errors); this.checked.set(true);
+      const out = await this.api.post<{ ok: boolean; errors: { loc: string; msg: string }[]; hints?: { loc: string; msg: string }[] }>('/check', { kind: def.kind, spec });
+      this.problems.set(out.errors); this.hints.set(out.hints ?? []); this.checked.set(true);
       return out.ok;
     } catch (error) {
       this.problems.set([{ loc: '', msg: error instanceof ApiError ? error.message : 'Prüfung nicht möglich.' }]);

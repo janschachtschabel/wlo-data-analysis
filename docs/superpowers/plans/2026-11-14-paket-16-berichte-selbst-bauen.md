@@ -6,7 +6,7 @@
 
 **Goal:** Ein Bericht wie die OER-Statistik entsteht ganz in der App: von Hand im Baukasten, oder als Vorschlag des Assistenten, auch aus einer angehängten Vorlage. Angelegt wird weiterhin nur durch Klick des Admins.
 
-**Status:** Plan. Die Reihenfolge der Pakete 16 bis 19 liegt bei Jan zur Wahl; gebaut wird nach seiner Antwort.
+**Status:** Jan hat das Paket am 2026-11-14 (20:18 Berlin) gewählt; in Arbeit.
 
 ## Entscheidungen (Vorschlag)
 

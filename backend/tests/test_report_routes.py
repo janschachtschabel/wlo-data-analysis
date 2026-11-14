@@ -75,7 +75,7 @@ def test_preview_runs_an_unsaved_definition_and_stores_nothing(api):
 
 def test_check_lists_every_problem_with_its_place(api):
     ok = api.post("/api/check", json={"kind": "metric", "spec": {"query": QUERY}})
-    assert ok.status_code == 200 and ok.json() == {"ok": True, "errors": []}
+    assert ok.status_code == 200 and ok.json() == {"ok": True, "errors": [], "hints": []}
     bad = api.post("/api/check", json={"kind": "template", "spec": {"title": "", "sections": [
         {"id": "a", "type": "text", "markdown": "x"},
         {"id": "a", "type": "gibtsnicht"}], "extra": 1}}).json()
@@ -86,6 +86,26 @@ def test_check_lists_every_problem_with_its_place(api):
         **QUERY, "series": [{"id": "a", "label": "A", "formula": "__import__('os')"}]}}}).json()
     assert formula["ok"] is False and formula["errors"]
     assert api.get("/api/definitions").json() == []
+
+
+def test_check_hints_at_a_grouped_table_without_instance(api):
+    matrix = {"id": "m", "type": "matrix", "title": "Fächer", "rows": {
+        "property": "ccm:taxonid", "sections": [{"id": "g", "label": "G", "values": ["x"]}]},
+        "series": [{"id": "gesamt", "label": "Gesamt"}],
+        "blocks": [{"id": "b", "label": "Bestand", "source": "query"}]}
+    spec = {"title": "Bericht", "sections": [matrix]}
+    out = api.post("/api/check", json={"kind": "template", "spec": spec}).json()
+    assert out["ok"] is True and len(out["hints"]) == 1
+    assert "Fächer" in out["hints"][0]["msg"] and "Instanz" in out["hints"][0]["msg"]
+    assert out["hints"][0]["loc"] == "sections.0"
+    for fixed in ({**spec, "instance": "wlo-prod"},
+                  {**spec, "sections": [{**matrix, "instance": "wlo-prod"}]},
+                  {**spec, "sections": [{**matrix, "blocks": [
+                      {"id": "h", "label": "Hand", "source": "manual"}]}]}):
+        assert api.post("/api/check", json={"kind": "template", "spec": fixed}).json() == {
+            "ok": True, "errors": [], "hints": []}
+    broken = api.post("/api/check", json={"kind": "template", "spec": {"sections": 3}}).json()
+    assert broken["ok"] is False and broken["hints"] == []
 
 
 def test_settings_name_the_export_formats(api):

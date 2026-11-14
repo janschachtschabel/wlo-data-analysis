@@ -21,8 +21,10 @@ const TIME_LABELS: Record<string, string> = { 'virtual:time_after_created': 'neu
     <div class="chips">
       @for (filter of filters(); track filter.property) {
         <span class="chip">
-          <button type="button" class="link name" (click)="pick(filter.property)"
-                  [title]="filter.property + ' – weitere Werte hinzufügen'">{{ fieldLabel(filter.property) }}</button>
+          @if (!only()) {
+            <button type="button" class="link name" (click)="pick(filter.property)"
+                    [title]="filter.property + ' – weitere Werte hinzufügen'">{{ fieldLabel(filter.property) }}</button>
+          }
           @for (value of filter.values; track text(value); let last = $last) {
             <span class="value" [title]="text(value)">
               {{ showUris() ? text(value) : valueLabel(filter.property, text(value)) }}
@@ -31,24 +33,26 @@ const TIME_LABELS: Record<string, string> = { 'virtual:time_after_created': 'neu
             </span>
             @if (!last) { <span class="muted or">oder</span> }
           }
-          <button type="button" class="x" (click)="drop(filter.property)"
-                  [attr.aria-label]="'Filter entfernen: ' + fieldLabel(filter.property)">✕</button>
+          @if (!only()) {
+            <button type="button" class="x" (click)="drop(filter.property)"
+                    [attr.aria-label]="'Filter entfernen: ' + fieldLabel(filter.property)">✕</button>
+          }
         </span>
       }
       <span class="entry">
-        @if (field(); as current) {
+        @if (!only() && field(); as current) {
           <span class="chip open">{{ current.caption || current.property }}
             <button type="button" class="x" (click)="leaveField()" aria-label="Feld schließen">✕</button></span>
         }
         <input type="text" role="combobox" aria-autocomplete="list" [attr.aria-expanded]="listShown()"
-               aria-label="Filter hinzufügen" [attr.aria-controls]="listShown() ? 'filter-options' : null" [attr.aria-activedescendant]="options().length ? 'fo-' + active() : null"
-               [placeholder]="field() ? 'Wert suchen oder URI einfügen …' : 'Filter hinzufügen: Feld suchen …'"
+               [attr.aria-label]="only() ? 'Wert hinzufügen' : 'Filter hinzufügen'" [attr.aria-controls]="listShown() ? uid + '-options' : null" [attr.aria-activedescendant]="options().length ? uid + '-' + active() : null"
+               [placeholder]="field() ? 'Wert suchen oder URI einfügen …' : only() ? 'Feld wird geladen …' : 'Filter hinzufügen: Feld suchen …'"
                [ngModel]="query()" (ngModelChange)="query.set($event)"
                (keydown)="key($event)" (focus)="open.set(true)" (input)="open.set(true)" (blur)="blur()" />
         @if (listShown()) {
-          <ul id="filter-options" role="listbox" class="options card">
+          <ul [id]="uid + '-options'" role="listbox" class="options card">
             @for (option of options(); track option.kind + option.id; let i = $index) {
-              <li role="option" [id]="'fo-' + i" [attr.aria-selected]="i === active()" [class.on]="i === active()"
+              <li role="option" [id]="uid + '-' + i" [attr.aria-selected]="i === active()" [class.on]="i === active()"
                   (mousedown)="$event.preventDefault(); choose(option)">
                 <span>{{ option.label }}</span><span class="muted hint">{{ option.hint }}</span>
               </li>
@@ -72,7 +76,7 @@ const TIME_LABELS: Record<string, string> = { 'virtual:time_after_created': 'neu
     .x { border: 0; background: none; padding: 0 2px; color: var(--muted); line-height: 1; }
     .x:hover { color: var(--danger); }
     .or { font-size: 12px; }
-    .entry { position: relative; display: inline-flex; gap: 6px; flex: 1; min-width: 260px; }
+    .entry { position: relative; display: inline-flex; gap: 6px; flex: 1; min-width: min(260px, 100%); }
     .entry input { flex: 1; }
     .options { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; margin: 4px 0 0; padding: 4px;
                list-style: none; max-height: 340px; overflow: auto; box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
@@ -91,7 +95,12 @@ export class FilterBar {
   readonly filters = input.required<Filter[]>();
   /** bekannte Namen zu Werten (aus dem letzten Ergebnis), Schlüssel "feld\\nwert" */
   readonly labels = input<Map<string, string>>(new Map());
+  /** nur Werte dieses einen Feldes wählen (Zeilen einer gegliederten Tabelle) */
+  readonly only = input('');
   readonly changed = output<Filter[]>();
+  private static count = 0;
+  /** mehrere Leisten auf einer Seite: eigene Kennungen für die Vorschlagsliste */
+  protected readonly uid = 'fo' + ++FilterBar.count;
 
   protected readonly query = signal('');
   protected readonly open = signal(false);
@@ -111,10 +120,15 @@ export class FilterBar {
       this.fields.set([]);
       this.fieldsError.set('');
       this.field.set(null);
+      this.only();
       if (!instance) return;
       this.instances.fields(instance).then(
-        (fields) => { if (instance === this.instance()) this.fields.set(fields); },
-        (error) => { if (instance === this.instance()) this.fieldsError.set(error instanceof ApiError ? error.message : 'Felder nicht ladbar.'); },
+        (fields) => { if (instance === this.instance()) { this.fields.set(fields); this.fixField(); } },
+        (error) => {
+          if (instance !== this.instance()) return;
+          this.fieldsError.set(error instanceof ApiError ? error.message : 'Felder nicht ladbar.');
+          this.fixField();
+        },
       );
     });
     // Werte suchen: nach kurzer Ruhe, und nur die jüngste Eingabe zählt
@@ -135,7 +149,7 @@ export class FilterBar {
     effect(() => {
       const index = this.active();
       if (!this.listShown()) return;
-      queueMicrotask(() => this.host.nativeElement.querySelector('#fo-' + index)?.scrollIntoView({ block: 'nearest' }));
+      queueMicrotask(() => this.host.nativeElement.querySelector('#' + this.uid + '-' + index)?.scrollIntoView({ block: 'nearest' }));
     });
   }
 
@@ -236,7 +250,11 @@ export class FilterBar {
     }
   }
 
-  protected leaveField(): void { this.field.set(null); this.query.set(''); }
+  protected leaveField(): void { this.field.set(null); this.query.set(''); this.fixField(); }
+  private fixField(): void {
+    const only = this.only();
+    if (only) this.field.set(this.fields().find((f) => f.property === only) ?? { property: only, caption: only, type: '', value_count: 0 });
+  }
   protected blur(): void { this.open.set(false); }
   protected remove(property: string, value: string): void { this.changed.emit(removeValue(this.filters(), property, value)); }
   protected drop(property: string): void { this.changed.emit(removeFilter(this.filters(), property)); }
