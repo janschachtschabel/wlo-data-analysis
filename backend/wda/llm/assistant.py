@@ -79,8 +79,7 @@ eine Matrix (z. B. Fach × Bildungsstufe; Darstellung heatmap).
 "label": "Anteil %", "formula": "round(100 * offen / gesamt, 1)"}}]. Eine Spalte ohne filters \
 zählt alles. IDs klein, a–z, Ziffern, Unterstrich.
 - rows.groups: [{{"label": "MINT", "values": [Wert, …]}}, …] fasst Werte des Feldes zu \
-eigenen Zeilen zusammen (jedes Material zählt je Gruppe einmal); mit "other": true kommt \
-der Rest als eigene Zeile dazu.
+eigenen Zeilen zusammen (jedes Material zählt je Gruppe einmal).
 - percent: "column"|"row" ergänzt Anteile (im Ergebnis unter "anteile").
 - Was nicht zusammengeht: match oder vocab mit missing, other, include, groups; rollup mit \
 vocab; fill mit columns, series, percent, missing, other, rollup. Ein Feld steht nur in einem \
@@ -125,7 +124,8 @@ obersten Ebene zusammen. vocab "outside" zeigt Werte, die die Werteliste nicht k
 Bericht (propose_template): sections ist eine Liste aus
 - {{"type": "text", "markdown": "…"}}: Überschriften mit #, Listen, Fließtext. Zahlen nie \
 selbst hineinschreiben, sondern als Platzhalter: {{{{run.date}}}}, {{{{run.instance}}}} und \
-{{{{a2.total.<block>.<spalte>}}}} für die Gesamtzeile des zweiten Abschnitts (Abschnitte \
+{{{{run.name}}}}, {{{{a2.total.<block>.<spalte>}}}} für die Gesamtzeile und \
+{{{{a2.cell.<gruppe>.<block>.<spalte>}}}} für eine Zeile des zweiten Abschnitts (Abschnitte \
 heißen a1, a2, … in ihrer Reihenfolge; das Werkzeug nennt nach dem Vorschlag die Platzhalter, \
 die es gibt). Erkläre im Text Abgrenzungen und Kategorien, nicht einzelne Zahlen.
 - {{"type": "table"|"chart", "title": …, "spec": Abfrage, "view": Darstellung}}.
@@ -136,7 +136,8 @@ Gruppe, "values": [Bezeichnung oder URI, …]}}, …], "missing": true}}, "colum
 [{{"label": "Schule", "filters": […]}}, {{"label": "Hochschule", "filters": […]}}]}}: die \
 gegliederte Tabelle. Jede Gruppe wird eine Zwischensumme mit ihren Werten als Zeilen darunter; \
 die Spalten wiederholen sich je Block (z. B. je Bildungsbereich oder Quelle). Ist ein Name \
-mehrdeutig, nimm die URI aus field_values.
+mehrdeutig, nimm die URI aus field_values. Höchstens 3 gegliederte Tabellen je Bericht, \
+je Tabelle höchstens 12 Spalten und 6 Blöcke; eine Spalte hat filters oder formula.
 - Spalten der Vorlage ohne Schnittstelle (Zahlen anderer Plattformen) oder aus OERSI kannst \
 du nicht vorschlagen: Der Nutzer ergänzt sie nach dem Anlegen im Baukasten als Block \
 „Handeintrag“ oder „OERSI“. Nenne ihm, welche das wären.

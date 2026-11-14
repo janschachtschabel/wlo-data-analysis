@@ -65,18 +65,18 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
                     <option value="run.date">Datum des Laufs</option>
                     <option value="run.name">Name des Berichts</option>
                     <option value="run.instance">Instanz</option>
-                    @for (table of tables(); track table.key) { <option [value]="'t:' + table.key">aus „{{ table.title }}“</option> }
+                    @for (table of tables(); track table.key) { <option [value]="'t:' + table.key" [selected]="picked()[item.id]?.table === table.key">aus „{{ table.title }}“</option> }
                   </select>
                 </label>
                 @if (tableOf(item.id); as table) {
                   <label>Zeile
-                    <select #row [attr.name]="'ph-row-' + item.id" (change)="picked.set({ item: item.id, table: table.key, row: row.value, col: picked().col })">
-                      @for (r of table.rows; track r.path) { <option [value]="r.path" [selected]="r.path === picked().row">{{ r.label }}</option> }
+                    <select #row [attr.name]="'ph-row-' + item.id" (change)="pick(item.id, { row: row.value })">
+                      @for (r of table.rows; track r.path) { <option [value]="r.path" [selected]="r.path === choice(item.id, table).row">{{ r.label }}</option> }
                     </select>
                   </label>
                   <label>Spalte
-                    <select #col [attr.name]="'ph-col-' + item.id" (change)="picked.set({ item: item.id, table: table.key, row: picked().row, col: col.value })">
-                      @for (c of table.columns; track c.id) { <option [value]="c.id" [selected]="c.id === picked().col">{{ c.label }}</option> }
+                    <select #col [attr.name]="'ph-col-' + item.id" (change)="pick(item.id, { col: col.value })">
+                      @for (c of table.columns; track c.id) { <option [value]="c.id" [selected]="c.id === choice(item.id, table).col">{{ c.label }}</option> }
                     </select>
                   </label>
                 }
@@ -214,7 +214,8 @@ export class SpecForm {
     const ids = new Set(this.items().map((item) => item.id));
     return placeholderTables(this.report()).filter((table) => ids.has(table.key));
   });
-  protected readonly picked = signal({ item: '', table: '', row: '', col: '' });
+  /** je Text-Abschnitt: aus welcher Tabelle, welche Zeile und Spalte */
+  protected readonly picked = signal<Record<string, { table: string; row: string; col: string }>>({});
   readonly changed = output<Record<string, any>>();
   /** der Assistent soll einen Vorschlag machen */
   readonly assistant = output<void>();
@@ -368,20 +369,28 @@ export class SpecForm {
   }
 
   protected pickTable(item: string, value: string): void {
-    const table = value.startsWith('t:') ? this.tables().find((t) => t.key === value.slice(2)) : undefined;
-    this.picked.set(table ? { item, table: table.key, row: table.rows[table.rows.length - 1].path, col: table.columns[0].id } : { item: '', table: '', row: '', col: '' });
+    this.pick(item, { table: value.startsWith('t:') ? value.slice(2) : '', row: '', col: '' });
+  }
+  protected pick(item: string, change: Partial<{ table: string; row: string; col: string }>): void {
+    this.picked.update((all) => ({ ...all, [item]: { ...(all[item] ?? { table: '', row: '', col: '' }), ...change } }));
   }
   protected tableOf(item: string): PlaceholderTable | undefined {
-    const picked = this.picked();
-    return picked.item === item ? this.tables().find((t) => t.key === picked.table) : undefined;
+    const table = this.picked()[item]?.table;
+    return table ? this.tables().find((t) => t.key === table) : undefined;
+  }
+  /** Die Wahl, wie sie zu sehen ist: Passt sie nicht mehr zur Vorschau, gilt Gesamtzeile und erste Spalte. */
+  protected choice(item: string, table: PlaceholderTable): { row: string; col: string } {
+    const picked = this.picked()[item];
+    return { row: table.rows.find((r) => r.path === picked?.row)?.path ?? table.rows[table.rows.length - 1].path,
+      col: table.columns.find((c) => c.id === picked?.col)?.id ?? table.columns[0].id };
   }
 
   /** Setzt den Platzhalter an die Schreibmarke des Textes. */
   protected insert(index: number, item: any, area: HTMLTextAreaElement, what: string): void {
-    const table = what.startsWith('t:') ? this.tableOf(item.id) : undefined;
+    const table = what.startsWith('t:') ? this.tables().find((t) => t.key === what.slice(2)) : undefined;
     if (what.startsWith('t:') && !table) return;
-    const picked = this.picked();
-    const piece = table ? `{{${table.key}.${picked.row}.${picked.col}}}` : `{{${what}}}`;
+    const picked = table ? this.choice(item.id, table) : null;
+    const piece = table && picked ? `{{${table.key}.${picked.row}.${picked.col}}}` : `{{${what}}}`;
     const text = String(item.markdown ?? '');
     const start = area.selectionStart ?? text.length;
     this.set(index, { markdown: insertAt(text, start, area.selectionEnd ?? start, piece).slice(0, 20000) });

@@ -26,6 +26,8 @@ const LICENSES: [string, string][] = [
   selector: 'app-matrix-form',
   imports: [FilterBar],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // Der Editor steht im Formular der Bearbeitung: Enter in einem Feld übernimmt den Wert, speichert aber nicht.
+  host: { '(keydown.enter)': 'enter($event)' },
   template: `
     @if (problem(); as text) {
       <p class="notice">{{ text }} Bitte unten in der Spezifikation berichtigen.</p>
@@ -54,7 +56,7 @@ const LICENSES: [string, string][] = [
             <li class="entry">
               <div class="line">
                 <label class="grow">Gruppe
-                  <input [attr.name]="'mx-group-' + group.id" [value]="group.label" maxlength="200"
+                  <input [attr.name]="'mx-group-' + matrix().id + '-' + group.id" [value]="group.label" maxlength="200"
                          (change)="rename('group', group.id, $any($event.target))" /></label>
                 <span class="tools">
                   <button type="button" (click)="shift('groups', i, -1, group.label)" [disabled]="i === 0" [attr.aria-label]="'Nach oben: ' + group.label">↑</button>
@@ -83,8 +85,8 @@ const LICENSES: [string, string][] = [
         </ol>
         <div class="line">
           <label>Neue Gruppe <input #newGroup [attr.name]="'mx-new-group-' + matrix().id" maxlength="200" placeholder="Name, z. B. MINT"
-                 (keydown.enter)="$event.preventDefault(); add('group', newGroup)" /></label>
-          <button type="button" (click)="add('group', newGroup)">Gruppe hinzufügen</button>
+                  (keydown.enter)="add('group', newGroup)" /></label>
+          <button type="button" (click)="add('group', newGroup)" [disabled]="groups().length >= 40">Gruppe hinzufügen</button>
         </div>
       }
     </details>
@@ -98,15 +100,15 @@ const LICENSES: [string, string][] = [
             <li class="entry">
               <div class="line">
                 <label class="grow">Spalte <code class="muted small">{{ series.id }}</code>
-                  <input [attr.name]="'mx-series-' + series.id" [value]="series.label" maxlength="200"
+                  <input [attr.name]="'mx-series-' + matrix().id + '-' + series.id" [value]="series.label" maxlength="200"
                          (change)="rename('series', series.id, $any($event.target))" /></label>
                 <label>Inhalt
-                  <select [attr.name]="'mx-mode-' + series.id" (change)="setMode(series, $any($event.target).value)">
+                  <select [attr.name]="'mx-mode-' + matrix().id + '-' + series.id" (change)="setMode(series, $any($event.target).value)">
                     <option value="count" [selected]="!isFormula(series)">Zählung</option>
                     <option value="formula" [selected]="isFormula(series)">Formel</option>
                   </select>
                 </label>
-                <label class="check"><input type="checkbox" [attr.name]="'mx-show-' + series.id" [checked]="shown(series.id)"
+                <label class="check"><input type="checkbox" [attr.name]="'mx-show-' + matrix().id + '-' + series.id" [checked]="shown(series.id)"
                        (change)="emit(show(series.id, $any($event.target).checked))" /> anzeigen</label>
                 <span class="tools">
                   <button type="button" (click)="shift('series', i, -1, series.label)" [disabled]="i === 0" [attr.aria-label]="'Nach oben: ' + series.label">↑</button>
@@ -116,7 +118,7 @@ const LICENSES: [string, string][] = [
               </div>
               @if (isFormula(series)) {
                 <label>Formel <span class="muted small">rechnet mit den Kennungen anderer Spalten: {{ otherIds(series.id) }}; + - * / und round(x, 1)</span>
-                  <input class="mono" [attr.name]="'mx-formula-' + series.id" [value]="series.formula ?? ''" maxlength="300" placeholder="round(a / gesamt * 100, 1)"
+                  <input class="mono" [attr.name]="'mx-formula-' + matrix().id + '-' + series.id" [value]="series.formula ?? ''" maxlength="300" placeholder="round(a / gesamt * 100, 1)"
                          (change)="setFormula(series, $any($event.target))" /></label>
               } @else if (instance()) {
                 <span class="muted small">Zusätzliche Filter dieser Spalte (ohne Filter: alles, was der Block zählt)</span>
@@ -128,7 +130,7 @@ const LICENSES: [string, string][] = [
         </ol>
         <div class="line">
           <label>Neue Spalte <input #newSeries [attr.name]="'mx-new-series-' + matrix().id" maxlength="200" placeholder="Name, z. B. A: OER"
-                 (keydown.enter)="$event.preventDefault(); add('series', newSeries)" /></label>
+                  (keydown.enter)="add('series', newSeries)" /></label>
           <button type="button" (click)="add('series', newSeries)" [disabled]="matrix().series.length >= 12">Spalte hinzufügen</button>
         </div>
       }
@@ -143,7 +145,7 @@ const LICENSES: [string, string][] = [
               <div class="line">
                 <span class="tag">{{ sourceLabel(block.source) }}</span>
                 <label class="grow">Block
-                  <input [attr.name]="'mx-block-' + block.id" [value]="block.label" maxlength="200"
+                  <input [attr.name]="'mx-block-' + matrix().id + '-' + block.id" [value]="block.label" maxlength="200"
                          (change)="rename('block', block.id, $any($event.target))" /></label>
                 <span class="tools">
                   <button type="button" (click)="shift('blocks', i, -1, block.label)" [disabled]="i === 0" [attr.aria-label]="'Nach oben: ' + block.label">↑</button>
@@ -162,7 +164,7 @@ const LICENSES: [string, string][] = [
                 @for (series of counted(); track series.id) {
                   <div class="line">
                     <label>{{ series.label }}
-                      <select [attr.name]="'mx-count-' + block.id + '-' + series.id" (change)="setCountMode(block, series.id, $any($event.target).value)">
+                      <select [attr.name]="'mx-count-' + matrix().id + '-' + block.id + '-' + series.id" (change)="setCountMode(block, series.id, $any($event.target).value)">
                         <option value="" [selected]="countMode(block, series.id) === ''">nicht zählen</option>
                         <option value="total" [selected]="countMode(block, series.id) === 'total'">alle Materialien</option>
                         <option value="licensed" [selected]="countMode(block, series.id) === 'licensed'">mit Lizenzangabe</option>
@@ -172,7 +174,7 @@ const LICENSES: [string, string][] = [
                     @if (countMode(block, series.id) === 'list') {
                       <fieldset class="licenses"><legend class="sr-only">Lizenzen für {{ series.label }}</legend>
                         @for (license of licenses; track license[0]) {
-                          <label class="check"><input type="checkbox" [attr.name]="'mx-lic-' + block.id + '-' + series.id + '-' + license[0]"
+                          <label class="check"><input type="checkbox" [attr.name]="'mx-lic-' + matrix().id + '-' + block.id + '-' + series.id + '-' + license[0]"
                                  [checked]="hasLicense(block, series.id, license[0])"
                                  (change)="setLicense(block, series.id, license[0], $any($event.target).checked)" /> {{ license[1] }}</label>
                         }
@@ -182,9 +184,9 @@ const LICENSES: [string, string][] = [
                 }
               } @else {
                 <div class="line">
-                  <label>Stand <input [attr.name]="'mx-asof-' + block.id" [value]="block.as_of ?? ''" maxlength="40" placeholder="z. B. 03/2026"
+                  <label>Stand <input [attr.name]="'mx-asof-' + matrix().id + '-' + block.id" [value]="block.as_of ?? ''" maxlength="40" placeholder="z. B. 03/2026"
                          (change)="emit(block_(block.id, { as_of: $any($event.target).value.trim() }))" /></label>
-                  <label class="grow">Anmerkung <input [attr.name]="'mx-note-' + block.id" [value]="block.note ?? ''" maxlength="500"
+                  <label class="grow">Anmerkung <input [attr.name]="'mx-note-' + matrix().id + '-' + block.id" [value]="block.note ?? ''" maxlength="500"
                          (change)="emit(block_(block.id, { note: $any($event.target).value.trim() }))" /></label>
                 </div>
                 <details class="sub" [open]="opened().has('grid:' + block.id)" (toggle)="toggle('grid:' + block.id, $event)">
@@ -201,7 +203,7 @@ const LICENSES: [string, string][] = [
                             <tr [class.sum]="row.scope !== 'cell'">
                               <th scope="row" [title]="row.key">{{ row.label }}</th>
                               @for (series of matrix().series; track series.id) {
-                                <td><input inputmode="decimal" [attr.name]="'mx-cell-' + block.id + '-' + row.scope + '-' + row.key + '-' + series.id"
+                                <td><input inputmode="decimal" [attr.name]="'mx-cell-' + matrix().id + '-' + block.id + '-' + row.scope + '-' + row.key + '-' + series.id"
                                            [attr.aria-label]="row.label + ', ' + series.label" [value]="shownNumber(row.values[series.id])"
                                            [placeholder]="isFormula(series) ? 'berechnet' : ''"
                                            (change)="setCell(block.id, row.scope, row.key, series.id, $any($event.target))" /></td>
@@ -218,12 +220,13 @@ const LICENSES: [string, string][] = [
           }
         </ol>
         <div class="line">
-          <label>Neuer Block <input #newBlock [attr.name]="'mx-new-block-' + matrix().id" maxlength="200" placeholder="Name, z. B. Hochschule" /></label>
+          <label>Neuer Block <input #newBlock [attr.name]="'mx-new-block-' + matrix().id" maxlength="200" placeholder="Name, z. B. Hochschule"
+                 (keydown.enter)="addBlock(newBlock, $any(newSource.value))" /></label>
           <label>Quelle
             <select #newSource [attr.name]="'mx-new-source-' + matrix().id">
               <option value="query">Abfrage im Repositorium</option>
               <option value="manual">Handeintrag</option>
-              <option value="oersi">OERSI</option>
+              <option value="oersi" [disabled]="!counted().length">OERSI</option>
             </select>
           </label>
           <button type="button" (click)="addBlock(newBlock, $any(newSource.value))" [disabled]="matrix().blocks.length >= 12">Block hinzufügen</button>
@@ -253,7 +256,7 @@ const LICENSES: [string, string][] = [
     .grid { border-collapse: collapse; font-size: 13px; }
     .grid th, .grid td { padding: 2px 6px; border-bottom: 1px solid var(--border); text-align: left; }
     .grid thead th { position: sticky; top: 0; background: var(--surface-2); z-index: 1; }
-    .grid tbody th { font-weight: 400; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    .grid tbody th { font-weight: 400; max-width: min(280px, 38vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
                      position: sticky; left: 0; background: var(--surface); }
     .grid tr.sum th { font-weight: 600; }
     .grid input { width: 7.5em; text-align: right; padding: 2px 6px; }
@@ -285,6 +288,8 @@ export class MatrixForm {
     if (!list(m.blocks) || m.blocks.some((b: any) => !(b.source in SOURCES))) return 'Die Blöcke („blocks“) sind unvollständig.';
     return '';
   });
+  /** Feld der Zeilen; als eigener Wert, damit nicht jede Änderung der Tabelle die Namen neu lädt */
+  private readonly property = computed(() => (this.problem() ? '' : this.matrix().rows.property));
   protected readonly groups = computed<MatrixGroup[]>(() => this.matrix().rows.sections);
   protected readonly valueCount = computed(() => this.groups().reduce((sum, g) => sum + g.values.length, 0));
   protected readonly counted = computed(() => this.matrix().series.filter((s) => !this.isFormula(s)));
@@ -309,11 +314,11 @@ export class MatrixForm {
     });
     effect(() => {
       const instance = this.instance();
-      const property = this.problem() ? '' : this.matrix().rows.property;
+      const property = this.property();
       this.names.set(new Map());
       if (!instance || !property) return;
       this.api.get<VocabPage>(`/instances/${encodeURIComponent(instance)}/vocab?property=${encodeURIComponent(property)}&q=&limit=5000`).then((page) => {
-        if (instance !== this.instance() || property !== this.matrix().rows.property) return;
+        if (instance !== this.instance() || property !== this.property()) return;
         this.names.set(new Map(page.values.map((v) => [property + '\n' + v.id, v.caption || v.id])));
       }, () => undefined);
     });
@@ -324,6 +329,13 @@ export class MatrixForm {
     if (!this.problem() && !this.valueCount()) this.opened.update((set) => new Set(set).add('rows'));
     this.start.destroy();
   });
+
+  protected enter(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || target.type === 'checkbox') return;
+    event.preventDefault();
+    if (!target.name.includes('-new-')) target.blur();   // löst die Übernahme (change) aus
+  }
 
   protected emit(matrix: MatrixSpec): void { this.changed.emit(matrix); }
   protected toggle(key: string, event: Event): void {
@@ -350,7 +362,7 @@ export class MatrixForm {
   protected setProperty(select: HTMLSelectElement): void {
     const property = select.value;
     if (property === this.matrix().rows.property) return;
-    if (this.valueCount() && !confirmChange()) { select.value = this.matrix().rows.property; return; }
+    if (this.groups().some((g) => g.values.length || g.extra?.length) && !confirmChange()) { select.value = this.matrix().rows.property; return; }
     this.emit(this.rows({ property }));
   }
 

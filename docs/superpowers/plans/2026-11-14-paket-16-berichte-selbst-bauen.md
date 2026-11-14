@@ -43,3 +43,26 @@
 - Der Leitfaden des Assistenten erklärt Gruppen (`rows.groups`) nicht; im Versuch baute er 41 Fächer nach Alphabet statt der verlangten Fächergruppen. Gehört in Task 4.
 - Geprüft und kein Fehler: „ohne Wert“ zeigt in „A: OER“ für Primarstufe und Sekundarstufe I dieselbe Zahl (2.090). 1.994 davon sind Klexikon-Artikel ohne Fach, die beide Stufen tragen.
 
+
+## Stand nach Review (2026-11-14)
+
+Umgesetzt in drei Commits (Baukasten, `propose_template`, Befunde). Frischer Reviewer, ohne Schreibrecht im Repo: keine kritischen Befunde. 56 schiefe Eingaben an `propose_template` kamen alle als Fehlertext zurück, Filter auf gesperrten Feldern werden in Spalten, Blöcken und Tabellen abgewiesen, gespeichert wird nichts, Text-HTML ist maskiert, der Hin- und Rückweg der OER-Statistik ist bytegleich.
+
+Behoben:
+
+1. Last: Ein Vorschlag mit 12 gegliederten Tabellen löste 5.832 Abfragen aus. Jetzt höchstens 3 gegliederte Tabellen je Bericht, 12 Spalten, 6 Blöcke, 300 Werte je Gruppe.
+2. Leitfaden nannte `"other": true` bei `rows.groups`; das gibt es so nicht. Satz entfernt, Platzhalter `cell` und `run.name` ergänzt.
+3. Jede Änderung im Baukasten lud die Wertenamen jeder Tabelle neu. Jetzt nur bei Wechsel von Feld oder Instanz.
+4. Enter in einem Feld des Editors speicherte das Template. Enter übernimmt jetzt nur den Wert.
+5. `tidy` warf Handeinträge weg, die unter der aufgelösten Fassung eines Wertes stehen. Zeilen fallen nur noch weg, wenn ihr Wert entfernt wird.
+6. Der Editor erzeugt kein leeres `show`, keine leeren OERSI-Zählungen, keine Kennung `max`, `min`, `round`, höchstens 40 Gruppen.
+7. Platzhalterwahl je Text-Abschnitt statt einer gemeinsamen; eine veraltete Wahl fällt auf Gesamtzeile und erste Spalte.
+8. Rückfrage beim Feldwechsel auch, wenn nur Mitzähler betroffen sind.
+9. Eine eigene Reihenfolge in `show` bleibt.
+10. Werkzeug: Fehler statt stiller Änderung (zu viele Werte, Filter und Formel zugleich, `missing` kein Wahrheitswert, doppelte Gruppe); offene Platzhalter gehen an das Modell zurück.
+11. Namen der Felder je Tabelle eindeutig, schmalere feste Spalte im Raster.
+12. `ident` in Python wie in der Oberfläche (Akzente).
+
+Dazu aus der CI: Die Filterleiste startete ihre verzögerte Wertesuche noch nach dem Abbau.
+
+Offen gelassen: Fokus nach dem Umordnen von Gruppen, Spalten und Blöcken; wiederholte Meldung „Keine Zahl“ wird nicht erneut vorgelesen.

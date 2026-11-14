@@ -258,7 +258,9 @@ await page.click('summary:has-text("Spezifikation")');
   const cell = form.locator('table.grid input').first();
   await cell.fill('abc'); await cell.blur();
   assert.equal(await cell.getAttribute('aria-invalid'), 'true');
-  await cell.fill('1.234'); await cell.blur();
+  // Enter übernimmt die Zahl und speichert nicht
+  await cell.fill('1.234'); await cell.press('Enter');
+  assert.equal(await page.locator('form .row [role=status]').count(), 0);
   const manual = JSON.parse(await page.inputValue('#spec')).sections.find((x) => x.type === 'matrix').blocks.find((b) => b.source === 'manual');
   assert.ok(JSON.stringify(manual).includes(':1234'));
   await page.click('button:text-is("Vorschau")');

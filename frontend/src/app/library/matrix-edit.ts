@@ -24,6 +24,9 @@ export interface MatrixSpec {
 export type Scope = 'total' | 'section' | 'cell';
 export interface ManualRow { scope: Scope; key: string; label: string; values: Cells }
 
+/** Wörter der Formeln taugen nicht als Kennung einer Spalte. */
+const RESERVED = ['round', 'max', 'min'];
+export const MAX_GROUPS = 40;
 const UMLAUTS: Record<string, string> = { ä: 'ae', ö: 'oe', ü: 'ue', ß: 'ss' };
 
 /** Eine Kennung aus einem Namen: klein, ohne Sonderzeichen, noch nicht vergeben. */
@@ -33,7 +36,7 @@ export function ident(label: string, used: readonly string[]): string {
   if (!base) base = 's';
   if (/^[0-9]/.test(base)) base = 's_' + base;
   base = base.slice(0, 40).replace(/_+$/, '');
-  const taken = new Set(used);
+  const taken = new Set([...used, ...RESERVED]);
   if (!taken.has(base)) return base;
   for (let n = 2; ; n++) {
     const suffix = '_' + n;
@@ -74,26 +77,33 @@ function cleaned(block: MatrixBlock): MatrixBlock {
   return out;
 }
 
-/** Handeinträge auf die Gruppen, Zeilen und Spalten beschränken, die es noch gibt. */
-function tidy(matrix: MatrixSpec): MatrixSpec {
+/**
+ * Handeinträge auf die Gruppen und Spalten beschränken, die es noch gibt. Zeilen fallen nur
+ * weg, wenn ihr Wert gerade entfernt wurde (`gone`): Ein Handeintrag darf auch unter der
+ * aufgelösten Fassung eines Wertes stehen, die hier niemand kennt.
+ */
+function tidy(matrix: MatrixSpec, gone: ReadonlySet<string> | 'all' = new Set()): MatrixSpec {
   const groups = new Set(matrix.rows.sections.map((s) => s.id));
-  const listed = new Set(matrix.rows.sections.flatMap((s) => s.values.map(valueOf)));
+  const kept = { has: (key: string) => gone !== 'all' && !gone.has(key) };
   const series = new Set(matrix.series.map((s) => s.id));
   const counted = new Set(matrix.series.filter((s) => !s.formula).map((s) => s.id));
   const cells = (row: Cells | undefined) => pruned(row, (id) => series.has(id));
   const blocks = matrix.blocks.map((block) => {
     if (block.source === 'oersi' && block.counts) {
       const counts = pruned(block.counts, (id) => counted.has(id)) ?? {};
-      return Object.keys(counts).length === Object.keys(block.counts).length ? block : { ...block, counts };
+      if (Object.keys(counts).length === Object.keys(block.counts).length) return block;
+      // ein OERSI-Block zählt mindestens eine Spalte
+      const first = matrix.series.find((s) => !s.formula);
+      return { ...block, counts: Object.keys(counts).length || !first ? counts : { [first.id]: 'total' as Count } };
     }
     if (block.source !== 'manual') return block;
-    const rows = (record: Record<string, Cells> | undefined, known: Set<string>) => {
+    const rows = (record: Record<string, Cells> | undefined, known: { has(key: string): boolean }) => {
       if (!record) return undefined;
       const entries = Object.entries(record).filter(([key]) => known.has(key))
         .map(([key, row]) => [key, cells(row)] as const).filter(([, row]) => row);
       return entries.length ? Object.fromEntries(entries) as Record<string, Cells> : undefined;
     };
-    return cleaned({ ...block, totals: cells(block.totals), sections: rows(block.sections, groups), cells: rows(block.cells, listed) });
+    return cleaned({ ...block, totals: cells(block.totals), sections: rows(block.sections, groups), cells: rows(block.cells, kept) });
   });
   const show = matrix.show ? matrix.show.filter((id) => series.has(id)) : matrix.show;
   const out: MatrixSpec = { ...matrix, blocks };
@@ -123,10 +133,11 @@ export function setRows(matrix: MatrixSpec, change: { property?: string; missing
   if (change.property === undefined || change.property === matrix.rows.property) return { ...matrix, rows };
   delete rows.labels;
   rows.sections = matrix.rows.sections.map(({ extra: _extra, ...section }) => ({ ...section, values: [] }));
-  return tidy({ ...matrix, rows });
+  return tidy({ ...matrix, rows }, 'all');
 }
 
 export function addGroup(matrix: MatrixSpec, label: string): MatrixSpec {
+  if (matrix.rows.sections.length >= MAX_GROUPS) return matrix;
   const id = ident(label, matrix.rows.sections.map((s) => s.id));
   return withSections(matrix, [...matrix.rows.sections, { id, label, values: [] }]);
 }
@@ -143,11 +154,18 @@ export function setGroup(matrix: MatrixSpec, id: string, change: Partial<Pick<Ma
     if (!change.values || !section.values.some((v) => taken.has(valueOf(v)))) return section;
     return { ...section, values: section.values.filter((v) => !taken.has(valueOf(v))) };
   });
-  return change.values ? tidy(withSections(matrix, sections)) : withSections(matrix, sections);
+  return change.values ? tidy(withSections(matrix, sections), unlisted(matrix, sections)) : withSections(matrix, sections);
 }
 
 export function removeGroup(matrix: MatrixSpec, id: string): MatrixSpec {
-  return tidy(withSections(matrix, matrix.rows.sections.filter((s) => s.id !== id)));
+  const sections = matrix.rows.sections.filter((s) => s.id !== id);
+  return tidy(withSections(matrix, sections), unlisted(matrix, sections));
+}
+
+/** Werte, die vorher eine Zeile hatten und jetzt keine mehr. */
+function unlisted(matrix: MatrixSpec, sections: MatrixGroup[]): Set<string> {
+  const now = new Set(sections.flatMap((s) => s.values.map(valueOf)));
+  return new Set(matrix.rows.sections.flatMap((s) => s.values.map(valueOf)).filter((value) => !now.has(value)));
 }
 
 export function addSeries(matrix: MatrixSpec, label: string): MatrixSpec {
@@ -183,7 +201,11 @@ export function toggleShow(matrix: MatrixSpec, id: string, on: boolean): MatrixS
   const all = matrix.series.map((s) => s.id);
   const shown = new Set(matrix.show ?? all);
   if (on) shown.add(id); else shown.delete(id);
-  const show = all.filter((item) => shown.has(item));
+  if (!shown.size) return matrix;   // mindestens eine Spalte bleibt sichtbar
+  // eine eigene Reihenfolge in `show` bleibt; sonst gilt die der Spalten
+  const custom = !!matrix.show && matrix.show.join() !== all.filter((item) => matrix.show!.includes(item)).join();
+  const show = custom ? [...matrix.show!.filter((item) => shown.has(item)), ...(on && !matrix.show!.includes(id) ? [id] : [])]
+    : all.filter((item) => shown.has(item));
   const out: MatrixSpec = { ...matrix };
   // Wer nie ausgeblendet hat, bekommt kein `show`; eine vorhandene Liste bleibt eine Liste.
   if (show.length === all.length && !matrix.show) delete out.show; else out.show = show;
@@ -193,6 +215,7 @@ export function toggleShow(matrix: MatrixSpec, id: string, on: boolean): MatrixS
 export function addBlock(matrix: MatrixSpec, source: MatrixBlock['source'], label: string): MatrixSpec {
   const id = ident(label, matrix.blocks.map((b) => b.id));
   const first = matrix.series.find((s) => !s.formula);
+  if (source === 'oersi' && !first) return matrix;   // OERSI zählt; ohne gezählte Spalte gibt es nichts zuzuordnen
   const block: MatrixBlock = source === 'query' ? { id, label, source, filters: [] }
     : source === 'oersi' ? { id, label, source, counts: first ? { [first.id]: 'total' } : {} }
       : { id, label, source };
@@ -252,6 +275,6 @@ export function setCount(matrix: MatrixSpec, blockId: string, series: string, co
     if (block.id !== blockId) return block;
     const counts = { ...(block.counts ?? {}) };
     if (count === null) delete counts[series]; else counts[series] = count;
-    return { ...block, counts };
+    return Object.keys(counts).length ? { ...block, counts } : block;   // mindestens eine Spalte bleibt gezählt
   }) };
 }

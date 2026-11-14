@@ -670,6 +670,18 @@ def test_proposed_template_carries_the_report_and_saves_nothing(api, model):
     (lambda s: s[2].update(spec={"rows": {"property": "cclom:title"}}), "Stufen"),
     (lambda s: s.extend([{"type": "text", "markdown": "x"}] * 20), "Höchstens"),
     (lambda s: s.clear(), "mindestens"),
+    (lambda s: s[1]["columns"][0].update(filters=[{"property": "cclom:title",
+                                                   "values": ["x"]}]), "cclom:title"),
+    (lambda s: s[1]["columns"][1].update(filters=[{"property": LVL, "values": ["x"]}]),
+     "entweder"),
+    (lambda s: s[1]["rows"]["groups"][0].update(values=["Mathematik"] * 301), "300"),
+    (lambda s: s[1]["rows"]["groups"].append({"label": "MINT", "values": ["Deutsch"]}),
+     "zweimal"),
+    (lambda s: s[1]["rows"].update(missing="no"), "missing"),
+    (lambda s: s[1].update(columns=[{"label": f"S{n}"} for n in range(13)]), "12"),
+    (lambda s: s.extend([dict(s[1]), dict(s[1]), dict(s[1])]), "gegliederte"),
+    (lambda s: s.__setitem__(1, [1, 2]), "Abschnitt 2"),
+    (lambda s: s[1]["columns"].append(7), "Abschnitt 2"),
 ])
 def test_template_proposals_with_mistakes_come_back_as_text(api, model, change, expected):
     sections = _template_sections()
@@ -694,3 +706,19 @@ def test_template_proposals_share_the_limit_and_the_guide_explains_them(api, mod
     assert "groups" in guide and "Handeintrag" in guide
     names = [t["function"]["name"] for t in model.bodies[0]["tools"]]
     assert "propose_template" in names
+
+
+def test_template_proposal_names_reserved_columns_and_unknown_placeholders(api, model):
+    sections = _template_sections()[:2]
+    sections[0]["markdown"] = "Gesamt {{a2.total.alle.max_2}}, falsch {{a2.total.gibts.nicht}}."
+    sections[1]["columns"] = [{"label": "Max"}, {"label": "Café 2024"}]
+    model.answers = [call(("propose_template", {"name": "B", "sections": sections})), say("So.")]
+    events = chat(api)
+    assert [e["type"] for e in events] == ["step", "proposal", "final"]
+    # „max“ ist ein Wort der Formeln: Die Kennung weicht aus
+    assert [c["id"] for c in events[1]["spec"]["sections"][1]["series"]] == [
+        "max_2", "cafe_2024"]
+    told = json.loads(model.bodies[1]["messages"][-1]["content"])
+    assert "a2.total.gibts.nicht" in json.dumps(told["offene_platzhalter"], ensure_ascii=False)
+    guide = model.bodies[0]["messages"][0]["content"]
+    assert ".cell." in guide and '"other": true' not in guide

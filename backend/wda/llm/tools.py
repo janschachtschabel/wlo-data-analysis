@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -29,6 +30,9 @@ MAX_ROWS, MAX_COLUMNS, MAX_RESULT_CHARS = 40, 12, 12000
 MAX_RUN_TABLES, MAX_DASHBOARDS = 30, 2
 MAX_TILES = 12
 MAX_SECTIONS, MAX_GROUPS, MAX_BLOCKS = 12, 40, 6
+# Eine gegliederte Tabelle kostet je Block und Spalte Abfragen: wenige davon je Vorschlag
+MAX_MATRICES, MAX_MATRIX_COLUMNS, MAX_GROUP_VALUES = 3, 12, 300
+RESERVED = {"round", "max", "min"}  # Wörter der Formeln taugen nicht als Kennung
 VIEWS = ("table", "number", "bar", "stacked_bar", "line", "pie", "heatmap")
 
 _SPEC = {"type": "object", "description": "Abfrage im beschriebenen Format (ohne instance)."}
@@ -89,12 +93,14 @@ _UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
 
 def ident(label: str, used: set[str]) -> str:
     """Kennung aus einem Namen (klein, a–z, Ziffern, Unterstrich), die es noch nicht gibt."""
-    base = re.sub(r"[^a-z0-9]+", "_", label.lower().translate(_UMLAUTS)).strip("_") or "s"
+    plain = unicodedata.normalize("NFKD", label.lower().translate(_UMLAUTS))
+    base = re.sub(r"[^a-z0-9]+", "_", "".join(
+        c for c in plain if not unicodedata.combining(c))).strip("_") or "s"
     if base[0].isdigit():
         base = "s_" + base
     base = base[:40].rstrip("_")
     candidate, n = base, 1
-    while candidate in used:
+    while candidate in used or candidate in RESERVED:
         n += 1
         candidate = base[:40 - len(str(n)) - 1] + f"_{n}"
     used.add(candidate)
@@ -387,6 +393,9 @@ class Toolbox:
             raise QueryError("sections muss eine Liste mit mindestens einem Abschnitt sein.")
         if len(raw) > MAX_SECTIONS:
             raise QueryError(f"Höchstens {MAX_SECTIONS} Abschnitte.")
+        if sum(1 for item in raw if isinstance(item, dict)
+               and item.get("type") == "matrix") > MAX_MATRICES:
+            raise QueryError(f"Höchstens {MAX_MATRICES} gegliederte Tabellen je Bericht.")
         sections = []
         for n, item in enumerate(raw, 1):
             try:
@@ -405,10 +414,14 @@ class Toolbox:
         tables = [b for b in (report or {}).get("blocks", []) if b.get("type") == "table"]
         if _size(report) > MAX_PREVIEW_CHARS:  # dann zeigt die Karte nur die Abschnitte
             report = None
+        built = report or {}
         self.on_proposal({"kind": "template", "name": name,
                           "description": _text(args.get("description"), 1000), "spec": spec,
                           "report": report})
+        open_ones = [n["text"] for n in built.get("notes", [])
+                     if n.get("code") == "placeholder_unknown"][:10]
         return {"gezeigt": name, "abschnitte": len(sections),
+                **({"offene_platzhalter": open_ones} if open_ones else {}),
                 "platzhalter": {
                     "allgemein": ["{{run.date}}", "{{run.instance}}"],
                     **{t["key"]: [f"{{{{{t['key']}.total.{c['id']}}}}}"
@@ -449,6 +462,8 @@ class Toolbox:
         except EduSharingError:
             raise QueryError(f"Nach '{prop[:80]}' lässt sich nicht aufschlüsseln.") from None
         groups = rows.get("groups")
+        if "missing" in rows and not isinstance(rows["missing"], bool):
+            raise QueryError("rows.missing muss true oder false sein.")
         if not isinstance(groups, list) or not groups or len(groups) > MAX_GROUPS:
             raise QueryError(f"rows.groups muss eine Liste mit 1 bis {MAX_GROUPS} Gruppen sein.")
         used: set[str] = set()
@@ -460,8 +475,12 @@ class Toolbox:
             if not label or not isinstance(values, list) or not values:
                 raise QueryError(f"Die Gruppe „{label or '?'}“ braucht label und mindestens "
                                  "einen Wert in values.")
+            if len(values) > MAX_GROUP_VALUES:
+                raise QueryError(f"Die Gruppe „{label}“ hat mehr als {MAX_GROUP_VALUES} Werte.")
+            if label in seen.values() or any(s["label"] == label for s in sections):
+                raise QueryError(f"Die Gruppe „{label}“ steht zweimal in rows.groups.")
             resolved = []
-            for value in values[:300]:
+            for value in values:
                 found = (await self._vocab.resolve(prop, str(value))).value
                 if found in seen:
                     if seen[found] != label:
@@ -472,8 +491,9 @@ class Toolbox:
                 resolved.append({"value": found, "literal": True})
             sections.append({"id": ident(label, used), "label": label, "values": resolved})
         columns = item.get("columns")
-        if not isinstance(columns, list) or not columns:
-            raise QueryError("columns muss eine Liste mit mindestens einer Spalte sein.")
+        if not isinstance(columns, list) or not 1 <= len(columns) <= MAX_MATRIX_COLUMNS:
+            raise QueryError(f"columns muss eine Liste mit 1 bis {MAX_MATRIX_COLUMNS} Spalten "
+                             "sein.")
         ids: set[str] = {str(c.get("id")) for c in columns
                          if isinstance(c, dict) and c.get("id")}
         series = []
@@ -484,6 +504,9 @@ class Toolbox:
                 "id": str(column["id"]) if column.get("id") else ident(
                     _text(column["label"]), ids),
                 "label": _text(column["label"])}
+            if column.get("formula") and column.get("filters"):
+                raise QueryError(f"Die Spalte „{entry['label']}“ braucht entweder filters "
+                                 "oder formula, nicht beides.")
             if column.get("formula"):
                 entry["formula"] = str(column["formula"])
             elif column.get("filters"):

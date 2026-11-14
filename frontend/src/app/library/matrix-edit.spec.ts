@@ -154,4 +154,39 @@ describe('Gegliederte Tabelle bearbeiten', () => {
       rows: { property: 'ccm:taxonid', missing: true, subtotal: 'distinct', sections: [{ id: 'gruppe_1', label: 'Gruppe 1', values: [] }] },
       series: [{ id: 'gesamt', label: 'Gesamt' }], blocks: [{ id: 'bestand', label: 'Bestand', source: 'query', filters: [] }] });
   });
+
+  it('behält Handeinträge, die unter der aufgelösten Fassung eines Wertes stehen', () => {
+    const start = base();
+    start.rows.sections[0].values = ['Mathematik', { value: 'x:2', literal: true }];
+    start.blocks[2].cells = { 'http://fach/380': { gesamt: 5 }, 'x:2': { gesamt: 1, a: 2 } };
+    expect(setSeries(start, 'a', { label: 'Anders' }).blocks[2].cells).toEqual(start.blocks[2].cells);
+    expect(removeSeries(start, 'a').matrix.blocks[2].cells).toEqual({ 'http://fach/380': { gesamt: 5 }, 'x:2': { gesamt: 1 } });
+    // nur der entfernte Wert verliert seinen Eintrag
+    expect(setGroup(start, 'mint', { values: ['Mathematik'] }).blocks[2].cells).toEqual({ 'http://fach/380': { gesamt: 5 } });
+    // in eine andere Gruppe verschoben: der Eintrag bleibt
+    expect(setGroup(start, 'sprachen', { values: [{ value: 'x:3', literal: true }, { value: 'x:2', literal: true }] }).blocks[2].cells).toEqual(start.blocks[2].cells);
+  });
+
+  it('erzeugt nichts, was die Prüfung ablehnt', () => {
+    let matrix = toggleShow(toggleShow(base(), 'gesamt', false), 'a', false);
+    expect(matrix.show).toEqual(['anteil']);
+    expect(toggleShow(matrix, 'anteil', false).show).toEqual(['anteil']);
+    expect(setCount(setCount(base(), 'oersi', 'a', null), 'oersi', 'gesamt', null).blocks[1].counts).toEqual({ gesamt: 'total' });
+    // die einzige gezählte Spalte des OERSI-Blocks wird zur Formel: eine andere rückt nach
+    matrix = setCount(base(), 'oersi', 'gesamt', null);
+    expect(setSeries(matrix, 'a', { formula: 'gesamt * 2' }).blocks[1].counts).toEqual({ gesamt: 'total' });
+    const formulas = { ...base(), series: [{ id: 'f', label: 'F', formula: '1' }] } as MatrixSpec;
+    expect(addBlock(formulas, 'oersi', 'OERSI 2').blocks).toHaveLength(3);
+    expect(ident('Max', [])).toBe('max_2');
+    expect(ident('Round', ['round_2'])).toBe('round_3');
+    let many = base();
+    for (let n = 0; n < 50; n++) many = addGroup(many, 'Gruppe ' + n);
+    expect(many.rows.sections).toHaveLength(40);
+  });
+
+  it('lässt eine eigene Reihenfolge der gezeigten Spalten stehen', () => {
+    const matrix = { ...base(), show: ['anteil', 'gesamt'] } as MatrixSpec;
+    expect(toggleShow(matrix, 'a', true).show).toEqual(['anteil', 'gesamt', 'a']);
+    expect(toggleShow(matrix, 'gesamt', false).show).toEqual(['anteil']);
+  });
 });
