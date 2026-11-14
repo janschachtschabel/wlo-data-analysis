@@ -90,14 +90,21 @@ def millis(node: Any, key: str, prop: str) -> int | None:
 
 
 def _key(secret: bytes, kind: str, text: str) -> str:
-    return hmac.new(secret, f"{kind}\0{text}".encode(), hashlib.sha256).hexdigest()[:24]
+    return hmac.new(secret, f"{kind}\0{text}".encode(errors="replace"),
+                    hashlib.sha256).hexdigest()[:24]
+
+
+def _clean(text: str) -> str:
+    """Einzelne Surrogate lassen sich nicht ablegen; sie werden ersetzt."""
+    return text.encode("utf-8", "replace").decode("utf-8")
 
 
 def _url(text: str) -> tuple[str, str, int] | None:
     """(Normalform, Rechner, https?) einer Web-Adresse; ``None``, wenn es keine ist."""
     try:
         parts = urlsplit(text.strip())
-        host = (parts.hostname or "").lower()
+        host = _clean((parts.hostname or "").lower())
+        port = parts.port
     except ValueError:
         return None
     if parts.scheme.lower() not in ("http", "https") or not host:
@@ -106,13 +113,17 @@ def _url(text: str) -> tuple[str, str, int] | None:
     path = parts.path.rstrip("/")
     # http und https, mit und ohne www, mit und ohne Schrägstrich am Ende: dieselbe Seite
     normal = f"{host}{path}" + (f"?{parts.query}" if parts.query else "")
+    if port and port not in (80, 443):
+        normal = f"{host}:{port}{normal[len(host):]}"
+    if parts.fragment.startswith(("/", "!")):  # Seiten, die ihren Pfad hinter # führen
+        normal += "#" + parts.fragment.rstrip("/")
     return normal, host[:MAX_GROUP_CHARS], int(parts.scheme.lower() == "https")
 
 
 def _groups(values: list[str]) -> tuple[str, ...]:
     seen: dict[str, None] = {}
     for value in values:
-        seen.setdefault(value[:MAX_GROUP_CHARS])
+        seen.setdefault(_clean(value[:MAX_GROUP_CHARS]))
     return tuple(seen)[:MAX_GROUPS]
 
 

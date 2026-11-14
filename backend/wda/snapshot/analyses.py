@@ -13,7 +13,8 @@ from .store import Snapshot
 
 SCHEMA_VERSION = 1
 KINDS = {"source": "Quelle", "publisher": "Bezugsquelle"}
-MIN_GROUP = 1
+MIN_HOST = 5  # Rechner mit weniger Materialien stehen nicht einzeln in der Liste
+YEARS = (1990, 2100)  # Jahre außerhalb gelten als unbekannt
 YEAR = 365.25 * 86400
 
 _DUP_URL = ("n.url_key IN (SELECT url_key FROM nodes WHERE url_key IS NOT NULL "
@@ -122,7 +123,8 @@ def _stamp(state: dict[str, str]) -> float | None:
 def run_analysis(snapshot: Snapshot, spec: Any, instance: Any) -> dict[str, Any]:
     """``spec`` ist die geprüfte Abfrage (``QuerySpec`` mit ``snapshot``)."""
     ask = spec.snapshot
-    state = snapshot.state()
+    state = snapshot.read(lambda con: {r["key"]: r["value"] for r in con.execute(
+        "SELECT key, value FROM state")})
     stamp = _stamp(state)
     if stamp is None:
         raise QueryError(
@@ -141,7 +143,7 @@ def run_analysis(snapshot: Snapshot, spec: Any, instance: Any) -> dict[str, Any]
                 rows = [{**r, "values": r["values"][:1]} for r in rows]
             return columns, rows, total
         if ask.analysis == "rechner":
-            return _hosts(con, total, ask.top)
+            return _hosts(con, total, ask.top, notes)
         analysis = ANALYSES[ask.analysis]
         sums = ", ".join(f"SUM(CASE WHEN {m.where} THEN 1 ELSE 0 END)" for m in analysis.measures)
         if ask.by is None:
@@ -174,17 +176,26 @@ def run_analysis(snapshot: Snapshot, spec: Any, instance: Any) -> dict[str, Any]
             value = whole[n] or 0
             columns.append({"id": m.id, "label": m.label + suffix, "derived": share,
                             "total": _share(value, total) if share else value})
-        rows = [{"key": r[0], "label": r[0], "kind": "value",
-                 "values": [r[1], *[(_share(r[2 + n] or 0, r[1]) if share else r[2 + n] or 0)
-                                    for n in range(len(analysis.measures))]]}
+        def values(r: Any) -> list[Any]:
+            return [r[0], *[(_share(r[1 + n] or 0, r[0]) if share else r[1 + n] or 0)
+                            for n in range(len(analysis.measures))]]
+
+        rows = [{"key": r[0], "label": r[0], "kind": "value", "values": values(r[1:])}
                 for r in found]
+        # Materialien ohne diese Angabe gehören zu keiner Zeile, aber zur Gesamtzahl
+        none = con.execute(
+            f"SELECT COUNT(*), {sums} FROM nodes n WHERE NOT EXISTS (SELECT 1 "  # noqa: S608
+            "FROM memberships m WHERE m.node = n.id AND m.kind = :kind)", params).fetchone()
+        if none[0]:
+            rows.append({"key": "__missing__", "label": "ohne Angabe", "kind": "missing",
+                         "values": values(none)})
         return columns, rows, total
 
-    columns, rows, total = snapshot.run(table)
+    columns, rows, total = snapshot.read(table)
     notes.add("snapshot",
               f"Aus dem lokalen Abzug vom {when}: {total} Materialien. Der Abzug enthält nur "
               "Merkmale (Längen, Anzahlen, Zeitpunkte), keine Inhalte.")
-    if state.get("status") == "running":
+    if snapshot.busy:
         notes.add("snapshot_running", "Der Abzug wird gerade erneuert; die Zahlen können "
                                       "sich während des Laufs ändern.")
     analysis = ANALYSES.get(ask.analysis)
@@ -219,7 +230,8 @@ def run_analysis(snapshot: Snapshot, spec: Any, instance: Any) -> dict[str, Any]
 def _years(con: sqlite3.Connection, total: int):
     found = con.execute(
         "SELECT CAST(strftime('%Y', created, 'unixepoch') AS INTEGER) AS y, COUNT(*) "
-        "FROM nodes WHERE created IS NOT NULL GROUP BY y ORDER BY y").fetchall()
+        "FROM nodes WHERE created IS NOT NULL GROUP BY y HAVING y BETWEEN ? AND ? ORDER BY y",
+        YEARS).fetchall()
     known = sum(r[1] for r in found)
     rows = [{"key": str(r[0]), "label": str(r[0]), "kind": "value",
              "values": [r[1], _share(r[1], total)]} for r in found]
@@ -231,13 +243,25 @@ def _years(con: sqlite3.Connection, total: int):
             rows, total)
 
 
-def _hosts(con: sqlite3.Connection, total: int, top: int):
+def _hosts(con: sqlite3.Connection, total: int, top: int, notes: Notes):
+    """Nur Rechner mit mindestens ``MIN_HOST`` Materialien stehen einzeln; der Rest ist
+    eine Sammelzeile. So zeigt die Liste Anbieter, nicht einzelne Materialien."""
     found = con.execute(
         "SELECT url_host, COUNT(*), COUNT(DISTINCT url_key) FROM nodes "
-        "WHERE url_host IS NOT NULL GROUP BY url_host ORDER BY COUNT(*) DESC, url_host "
-        "LIMIT ?", (top,)).fetchall()
+        "WHERE url_host IS NOT NULL GROUP BY url_host HAVING COUNT(*) >= ? "
+        "ORDER BY COUNT(*) DESC, url_host LIMIT ?", (MIN_HOST, top)).fetchall()
+    hosts, with_url, keys = con.execute(
+        "SELECT COUNT(DISTINCT url_host), COUNT(*), COUNT(DISTINCT url_key) FROM nodes "
+        "WHERE url_host IS NOT NULL").fetchone()
     rows = [{"key": r[0], "label": r[0], "kind": "value",
              "values": [r[1], _share(r[1], total), r[1] - r[2]]} for r in found]
+    rest = with_url - sum(r[1] for r in found)
+    if rest:
+        rows.append({"key": "__other__", "label": f"übrige {hosts - len(found)} Rechner",
+                     "kind": "other", "values": [rest, _share(rest, total), None]})
+        notes.add("rows_top", f"Einzeln stehen die {len(found)} häufigsten von {hosts} "
+                              f"Rechnern; Rechner mit weniger als {MIN_HOST} Materialien "
+                              "stehen nie einzeln.")
     return ([{"id": "count", "label": "Anzahl", "derived": False, "total": total},
              {"id": "share", "label": "Anteil (%)", "derived": True, "total": None},
              {"id": "repeated", "label": "davon Wiederholungen derselben Adresse",

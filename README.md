@@ -203,10 +203,12 @@ heraus kommen nur Zählungen in der Form aller anderen Abfragen:
 nach `publisher` (Bezugsquelle) oder `source` (Quelle), `show` wählt Anteile oder Anzahlen.
 Das mitgelieferte Dashboard „Tiefenprüfung“ stellt 18 solche Kacheln zusammen.
 
-Ein vollständiger Abzug von WLO (rund 320.000 Materialien) dauert etwa 80 Minuten. Er
+Ein vollständiger Abzug von WLO (rund 320.000 Materialien) dauert etwa zweieinhalb Stunden (gemessen: rund 36 Materialien je Sekunde) und belegt rund 180 MB. Er
 lässt sich anhalten und fortsetzen; „Änderungen nachziehen“ liest danach nur, was sich
 seit dem letzten Abzug geändert hat. Gelöschte Materialien verschwinden erst mit einem
-vollständigen Abzug. Ändert sich die Adresse einer Instanz, wird ihr Abzug verworfen.
+vollständigen Abzug. Ändern sich Adresse, Repositorium, Metadatenset, Query oder Anmeldung einer Instanz, wird ihr
+Abzug verworfen; eine Umbenennung lässt ihn stehen. In der Liste der Rechner stehen nur
+Rechner mit mindestens fünf Materialien einzeln.
 
 ## KI: Assistent und Einstellungen
 

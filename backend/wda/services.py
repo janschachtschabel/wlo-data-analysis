@@ -89,8 +89,16 @@ class Services:
             "INSERT INTO instances (id, data, updated_at) VALUES (?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
             (inst.id, json.dumps(data, ensure_ascii=False), now)))
+        try:
+            old = self.registry.get(inst.id)
+        except KeyError:
+            old = None
         self.registry.put(inst)
-        self.forget(inst.id)
+        # Der Abzug gilt weiter, solange dieselben Daten gemeint sind (etwa nur ein neuer Name)
+        same = old is not None and all(
+            getattr(old, name) == getattr(inst, name)
+            for name in ("base_url", "repository", "metadataset", "query", "username"))
+        self.forget(inst.id, snapshot=not same)
 
     async def delete_instance(self, instance_id: str) -> None:
         await self.db.write(
@@ -98,12 +106,14 @@ class Services:
         self.registry.remove(instance_id)
         self.forget(instance_id)
 
-    def forget(self, instance_id: str) -> None:
+    def forget(self, instance_id: str, snapshot: bool = True) -> None:
         """Nach einer Änderung: Client, Vokabular samt Kopie auf der Platte und gemerkte
         Zählungen verwerfen, damit nichts von der alten Adresse oder Anmeldung bleibt."""
         self._clients.pop(instance_id, None)
         self._vocabs.pop(instance_id, None)
         self.cache.clear()
+        if not snapshot:
+            return
         # der Abzug gehört zur alten Adresse
         running = self.syncs.pop(instance_id, None)
         if running is not None:
@@ -233,11 +243,15 @@ class Services:
                 existing = b""
             if len(existing) < 32:
                 existing = secrets.token_bytes(32)
-                with contextlib.suppress(OSError):
+                try:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
                     with os.fdopen(fd, "wb") as handle:
                         handle.write(existing)
+                except OSError:
+                    log.error("Der Schlüssel des Abzugs ließ sich nicht speichern; nach einem "
+                              "Neustart erkennt Nachziehen gleiche Adressen und Titel nicht "
+                              "mehr. Datenverzeichnis prüfen.")
             self._snapshot_secret = existing
         return self._snapshot_secret
 

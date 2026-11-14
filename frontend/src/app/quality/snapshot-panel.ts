@@ -5,7 +5,7 @@ import { formatNumber, formatTime } from '../core/format';
 export interface SnapshotState {
   status: 'none' | 'running' | 'ok' | 'failed' | 'stopped'; mode: string | null; count: number;
   total: number | null; done: number | null; started_at: number | null; finished_at: number | null;
-  error: string | null; complete: boolean; resumable: boolean;
+  error: string | null; complete: boolean; resumable: boolean; skipped: number;
 }
 
 /**
@@ -21,13 +21,13 @@ export interface SnapshotState {
         <div>
           <strong>Lokaler Abzug</strong>
           @if (state(); as s) {
-            <span class="muted" role="status">
+            <span class="muted" [attr.role]="s.status === 'running' ? null : 'status'">
               @switch (s.status) {
                 @case ('none') { · noch keiner vorhanden }
                 @case ('running') { · läuft: {{ number(shownDone()) }}@if (s.total) { von {{ number(s.total) }} } Materialien }
                 @case ('ok') { · {{ number(s.count) }} Materialien, Stand {{ time(s.finished_at) }} }
-                @case ('stopped') { · angehalten bei {{ number(s.count) }} Materialien }
-                @case ('failed') { · abgebrochen bei {{ number(s.count) }} Materialien }
+                @case ('stopped') { · angehalten, bisher {{ number(s.count) }} Materialien gelesen }
+                @case ('failed') { · abgebrochen, bisher {{ number(s.count) }} Materialien gelesen }
               }
             </span>
           }
@@ -47,11 +47,12 @@ export interface SnapshotState {
         <progress [value]="percent()" max="100" aria-label="Fortschritt des Abzugs"></progress>
       }
       @if (state()?.status === 'failed' && state()?.error) { <p class="error" role="alert">{{ state()!.error }}</p> }
+      @if (state()?.skipped) { <p class="muted small">{{ number(state()!.skipped) }} Einträge ließen sich nicht lesen und fehlen im Abzug.</p> }
       @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
       <p class="muted small">
         Für diese Auswertungen liest die Anwendung alle Materialien einmal seitenweise aus dem Repositorium und merkt sich je Material nur Merkmale:
-        Längen, Anzahlen, Zeitpunkte und nicht umkehrbare Schlüssel für gleiche Adressen und Titel. Titel, Beschreibungen und Adressen werden nicht gespeichert.
-        Ein vollständiger Abzug großer Bestände dauert lange (WLO: etwa 80 Minuten) und lässt sich anhalten und fortsetzen.
+        Längen, Anzahlen, Zeitpunkte und nicht umkehrbare Schlüssel für gleiche Adressen und Titel. Titel, Beschreibungen und Schlagwörter werden nicht gespeichert, von Web-Adressen nur der Rechnername.
+        Ein vollständiger Abzug großer Bestände dauert lange (WLO: etwa zweieinhalb Stunden) und lässt sich anhalten und fortsetzen.
       </p>
     </section>`,
   styles: `
@@ -103,13 +104,19 @@ export class SnapshotPanel {
   }
 
   private async load(): Promise<void> {
-    try { this.take(await this.api.get<SnapshotState>(this.path())); }
-    catch (error) { this.error.set(error instanceof ApiError ? error.message : 'Der Stand des Abzugs ließ sich nicht lesen.'); }
+    try { this.take(await this.api.get<SnapshotState>(this.path())); this.error.set(''); }
+    catch (error) {
+      this.error.set(error instanceof ApiError ? error.message : 'Der Stand des Abzugs ließ sich nicht lesen.');
+      // weiter nachfragen, solange zuletzt ein Abzug lief; sonst bliebe die Anzeige stehen
+      if (this.timer) clearTimeout(this.timer);
+      if (this.state()?.status === 'running' && !this.gone) this.timer = setTimeout(() => void this.load(), 5000);
+    }
   }
 
   protected async start(mode: 'full' | 'update'): Promise<void> { await this.send(() => this.api.post<SnapshotState>(this.path() + '/start', { mode })); }
   protected async act(what: 'stop'): Promise<void> { await this.send(() => this.api.post<SnapshotState>(this.path() + '/' + what)); }
   protected async clear(): Promise<void> {
+    if (!confirm('Den lokalen Abzug löschen? Die Auswertungen der Tiefenprüfung brauchen dann einen neuen Abzug.')) return;
     await this.send(() => this.api.remove<SnapshotState>(this.path()));
   }
 

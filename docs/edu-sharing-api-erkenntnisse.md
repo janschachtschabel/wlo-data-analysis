@@ -166,4 +166,6 @@ beantwortet die Instanz mit 500; alles darüber geht nur mit einem wandernden Ze
 - Im Knoten: `ref.id`, `createdAt` und `modifiedAt` als ISO-Text, in `properties`
   `cm:created` und `cm:modified` als 13-stellige Texte; Werte sind Listen von Texten,
   fehlende Felder fehlen ganz.
-- Hochrechnung für WLO: rund 320 Seiten, etwa 80 Minuten, 2 bis 6 GB Übertragung.
+- Probe mit der Anwendung (12.988 Materialien in 362 s): rund 36 Materialien je
+  Sekunde, eine Seite zu 1000 im Mittel 27 s. Hochrechnung für WLO: rund 320 Seiten,
+  etwa zweieinhalb Stunden, 2 bis 6 GB Übertragung, Datei rund 180 MB.

@@ -49,7 +49,10 @@ async def start(instance: str, body: StartIn, request: Request) -> Any:
     snap = _snapshot(request, instance)
     if _running(request, instance):
         return JSONResponse(error_body("conflict", "Der Abzug läuft schon."), status_code=409)
-    if body.mode == "update" and "finished_at" not in snap.state():
+    state = await asyncio.to_thread(snap.state)
+    if _running(request, instance):  # während des Wartens gestartet
+        return JSONResponse(error_body("conflict", "Der Abzug läuft schon."), status_code=409)
+    if body.mode == "update" and "finished_at" not in state:
         return JSONResponse(error_body(
             "conflict", "Nachziehen geht erst nach einem vollständigen Abzug."),
             status_code=409)
@@ -61,9 +64,12 @@ async def start(instance: str, body: StartIn, request: Request) -> Any:
             await sync(client, snap, secret, body.mode,
                        page=request.app.state.settings.snapshot_page)
 
-    snap.set_state(status="running", mode=body.mode, error=None)
+    # Den Stand schreibt allein der Abzug: Er muss erst lesen, was vorher war.
     services.syncs[instance] = asyncio.create_task(go())
-    return await asyncio.to_thread(status, snap, True)
+    await asyncio.sleep(0)
+    out = await asyncio.to_thread(status, snap, True)
+    out["status"] = "running"
+    return out
 
 
 @router.post("/{instance}/stop")
@@ -82,5 +88,8 @@ async def clear(instance: str, request: Request) -> Any:
     if _running(request, instance):
         return JSONResponse(error_body("conflict", "Erst den laufenden Abzug anhalten."),
                             status_code=409)
-    await asyncio.to_thread(snap.clear)
+    # als laufende Aufgabe eingetragen, damit währenddessen kein Abzug beginnt
+    task = asyncio.create_task(asyncio.to_thread(snap.clear))
+    request.app.state.services.syncs[instance] = task
+    await task
     return await asyncio.to_thread(status, snap, False)

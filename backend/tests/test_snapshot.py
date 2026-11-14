@@ -117,7 +117,8 @@ def test_text_fill_overall_and_per_source(snap):
     assert whole["provenance"]["queries"] == 0 and "snapshot" in {
         n["code"] for n in whole["provenance"]["notes"]}
     by = ask(snap, analysis="freitext", by="source")
-    assert [r["key"] for r in by["rows"]] == ["a_spider", "b_spider"]
+    assert [r["key"] for r in by["rows"]] == ["a_spider", "b_spider", "__missing__"]
+    assert by["rows"][-1]["kind"] == "missing" and by["rows"][-1]["values"][0] == 1
     assert col(by, "a_spider", "count") == 2 and col(by, "a_spider", "beschreibung") == 50.0
     assert col(by, "b_spider", "schlagwoerter") == 0
     assert [c["id"] for c in ask(snap, analysis="freitext", show="count")["columns"]] == ["count"]
@@ -126,7 +127,8 @@ def test_text_fill_overall_and_per_source(snap):
     assert not any(c["derived"] for c in counts["columns"])
 
 
-def test_thin_metadata_duplicates_and_age(snap):
+def test_thin_metadata_duplicates_and_age(snap, monkeypatch):
+    monkeypatch.setattr("wda.snapshot.analyses.MIN_HOST", 1)
     thin = ask(snap, analysis="duenn")
     assert col(thin, "duenn", "count") == 2            # 2 und 5
     assert col(thin, "ohne_fach", "count") == 3
@@ -159,8 +161,8 @@ def test_every_analysis_runs_and_classes_cover_everything(snap):
         assert sum(r["values"][0] for r in ask(snap, analysis=name)["rows"]) == 5, name
     assert sum(r["values"][0] for r in ask(snap, analysis="titel")["rows"][:5]) == 5
     top = ask(snap, analysis="duenn", by="source", top=1)
-    assert len(top["rows"]) == 1 and "rows_top" in {n["code"] for n in
-                                                    top["provenance"]["notes"]}
+    assert [r["kind"] for r in top["rows"]] == ["value", "missing"]
+    assert "rows_top" in {n["code"] for n in top["provenance"]["notes"]}
 
 
 def test_no_snapshot_no_numbers_and_spec_rules(tmp_path):

@@ -40,7 +40,12 @@ class Snapshot:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self._lock = threading.Lock()
+        self._read_lock = threading.Lock()
+        self._reader: sqlite3.Connection | None = None
+        self.busy = False  # ein Abzug schreibt gerade (nur im Speicher)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        with contextlib.suppress(OSError):
+            os.chmod(self.path.parent, 0o700)
         if not self.path.exists():
             os.close(os.open(self.path, os.O_CREAT | os.O_WRONLY, 0o600))
         con = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
@@ -69,6 +74,28 @@ class Snapshot:
                         con.execute("ROLLBACK")
                 raise
             return result
+
+    def read(self, fn: Callable[[sqlite3.Connection], T]) -> T:
+        """Für Auswertungen: eigene, nur lesende Verbindung. Eine lange Zählung hält so
+        weder den Abzug noch die Abfrage des Stands auf (WAL)."""
+        with self._read_lock:
+            if self._con is None:
+                raise RuntimeError("Der Abzug ist geschlossen.")
+            if self._reader is None:
+                reader = sqlite3.connect(self.path, check_same_thread=False,
+                                         isolation_level=None)
+                reader.row_factory = sqlite3.Row
+                reader.execute("PRAGMA query_only=ON")
+                reader.execute("PRAGMA busy_timeout=5000")
+                self._reader = reader
+            con = self._reader
+            con.execute("BEGIN")
+            try:
+                return fn(con)
+            finally:
+                if con.in_transaction:
+                    with contextlib.suppress(sqlite3.Error):
+                        con.execute("ROLLBACK")
 
     # ---- Zustand ---------------------------------------------------------------------
     def state(self) -> dict[str, str]:
@@ -114,6 +141,10 @@ class Snapshot:
             return gone
         return self.run(fn, write=True)
 
+    def seen(self, pass_no: int) -> int:
+        return self.run(lambda con: con.execute(
+            "SELECT COUNT(*) FROM nodes WHERE pass >= ?", (pass_no,)).fetchone()[0])
+
     def count(self) -> int:
         return self.run(lambda con: con.execute("SELECT COUNT(*) FROM nodes").fetchone()[0])
 
@@ -125,6 +156,10 @@ class Snapshot:
         self.run(fn, write=True)
 
     def close(self) -> None:
+        with self._read_lock:
+            if self._reader is not None:
+                self._reader.close()
+                self._reader = None
         with self._lock:
             if self._con is not None:
                 self._con.close()
