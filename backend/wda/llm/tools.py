@@ -7,6 +7,7 @@ wie alle Auswertungen, Vorschläge durch dieselbe Prüfung wie gespeicherte Defi
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -27,6 +28,7 @@ from ..store.specs import InvalidDefinition, parse_spec
 MAX_ROWS, MAX_COLUMNS, MAX_RESULT_CHARS = 40, 12, 12000
 MAX_RUN_TABLES, MAX_DASHBOARDS = 30, 2
 MAX_TILES = 12
+MAX_SECTIONS, MAX_GROUPS, MAX_BLOCKS = 12, 40, 6
 VIEWS = ("table", "number", "bar", "stacked_bar", "line", "pie", "heatmap")
 
 _SPEC = {"type": "object", "description": "Abfrage im beschriebenen Format (ohne instance)."}
@@ -59,9 +61,48 @@ TOOLS = [
                    "title": {"type": "string"}, "spec": _SPEC, "view": _VIEW,
                    "width": {"type": "string", "enum": ["half", "full"]}},
                "required": ["title", "spec"]}}}, ["name", "tiles"]),
+    _tool("propose_template", "Schlägt einen Bericht (Template) aus Abschnitten vor, den der "
+          "Nutzer mit einem Klick anlegen kann: Text, Tabelle, Grafik und gegliederte Tabelle "
+          "(Zeilengruppen × Spalten × Blöcke).",
+          {"name": {"type": "string"}, "description": {"type": "string"},
+           "sections": {"type": "array", "maxItems": MAX_SECTIONS, "items": {
+               "type": "object", "properties": {
+                   "type": {"type": "string", "enum": ["text", "table", "chart", "matrix"]},
+                   "markdown": {"type": "string", "description": "nur text"},
+                   "title": {"type": "string"},
+                   "spec": {**_SPEC, "description": "nur table und chart: Abfrage"},
+                   "view": _VIEW,
+                   "rows": {"type": "object", "description": "nur matrix: {property, groups: "
+                            "[{label, values: [Bezeichnung oder URI]}], missing}"},
+                   "columns": {"type": "array", "description": "nur matrix: [{id, label, "
+                               "filters oder formula}]", "items": {"type": "object"}},
+                   "blocks": {"type": "array", "description": "nur matrix: [{label, filters}]",
+                              "items": {"type": "object"}}},
+               "required": ["type"]}}}, ["name", "sections"]),
 ]
 RUN_TOOL = _tool("read_run", "Die Tabellen der Auswertung, die der Nutzer gerade ansieht.",
                  {}, [])
+
+
+_UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+
+
+def ident(label: str, used: set[str]) -> str:
+    """Kennung aus einem Namen (klein, a–z, Ziffern, Unterstrich), die es noch nicht gibt."""
+    base = re.sub(r"[^a-z0-9]+", "_", label.lower().translate(_UMLAUTS)).strip("_") or "s"
+    if base[0].isdigit():
+        base = "s_" + base
+    base = base[:40].rstrip("_")
+    candidate, n = base, 1
+    while candidate in used:
+        n += 1
+        candidate = base[:40 - len(str(n)) - 1] + f"_{n}"
+    used.add(candidate)
+    return candidate
+
+
+def _text(value: Any, limit: int = 200) -> str:
+    return " ".join(str(value or "").split())[:limit]
 
 
 def _norm(text: str) -> str:
@@ -170,6 +211,8 @@ class Toolbox:
             return f"Bereitet eine Ansicht vor: {str(args.get('title'))[:80]}"
         if name == "propose_dashboard":
             return f"Stellt ein Dashboard zusammen: {str(args.get('name'))[:80]}"
+        if name == "propose_template":
+            return f"Stellt einen Bericht zusammen: {str(args.get('name'))[:80]}"
         if name == "read_run":
             return "Liest die Tabellen der Auswertung"
         return "Unbekannter Schritt"
@@ -180,7 +223,8 @@ class Toolbox:
         handlers: dict[str, Callable[[dict[str, Any]], Awaitable[Any]]] = {
             "list_fields": self._list_fields, "field_values": self._field_values,
             "run_query": self._run_query, "propose_view": self._propose_view,
-            "propose_dashboard": self._propose_dashboard}
+            "propose_dashboard": self._propose_dashboard,
+            "propose_template": self._propose_template}
         if self.has_context:
             handlers["read_run"] = self._read_run
         handler = handlers.get(name)
@@ -285,7 +329,8 @@ class Toolbox:
         name = " ".join(str(args.get("name") or "").split())[:200] or "Dashboard"
         self._dashboards += 1
         if self._dashboards > MAX_DASHBOARDS:  # jedes kostet viele Abfragen am Repositorium
-            raise QueryError(f"Je Frage höchstens {MAX_DASHBOARDS} Dashboard-Vorschläge.")
+            raise QueryError(f"Je Frage höchstens {MAX_DASHBOARDS} Vorschläge für Dashboards "
+                             "oder Templates.")
         raw = args.get("tiles")
         if not isinstance(raw, list) or not raw:
             raise QueryError("tiles muss eine Liste mit mindestens einer Kachel sein.")
@@ -330,6 +375,142 @@ class Toolbox:
                 "darstellungen": [t["view"]["type"] for t in tiles],
                 "hinweis": "Der Nutzer sieht die Vorschau mit allen Kacheln. Angelegt ist das "
                            "Dashboard erst, wenn er selbst auf „Dashboard anlegen“ klickt."}
+
+    async def _propose_template(self, args: dict[str, Any]) -> Any:
+        name = _text(args.get("name")) or "Bericht"
+        self._dashboards += 1
+        if self._dashboards > MAX_DASHBOARDS:  # jeder kostet viele Abfragen am Repositorium
+            raise QueryError(f"Je Frage höchstens {MAX_DASHBOARDS} Vorschläge für Dashboards "
+                             "oder Templates.")
+        raw = args.get("sections")
+        if not isinstance(raw, list) or not raw:
+            raise QueryError("sections muss eine Liste mit mindestens einem Abschnitt sein.")
+        if len(raw) > MAX_SECTIONS:
+            raise QueryError(f"Höchstens {MAX_SECTIONS} Abschnitte.")
+        sections = []
+        for n, item in enumerate(raw, 1):
+            try:
+                section = await self._section(f"a{n}", item)
+                # dieselbe Prüfung wie beim Speichern, je Abschnitt, damit der Fehler ihn nennt
+                parse_spec("template", {"title": name, "instance": self.instance,
+                                        "sections": [section]})
+            except (QueryError, InvalidDefinition) as exc:
+                raise QueryError(f"Abschnitt {n}: {exc}") from None
+            sections.append(section)
+        spec = {"instance": self.instance, "title": name, "sections": sections}
+        parse_spec("template", spec)
+        run = await self._preview("template", name, spec)
+        # Texte kommen als fertiges, maskiertes HTML mit, wie in jeder Vorschau der App
+        report: dict[str, Any] | None = report_data(build_report(run), with_html=True)
+        tables = [b for b in (report or {}).get("blocks", []) if b.get("type") == "table"]
+        if _size(report) > MAX_PREVIEW_CHARS:  # dann zeigt die Karte nur die Abschnitte
+            report = None
+        self.on_proposal({"kind": "template", "name": name,
+                          "description": _text(args.get("description"), 1000), "spec": spec,
+                          "report": report})
+        return {"gezeigt": name, "abschnitte": len(sections),
+                "platzhalter": {
+                    "allgemein": ["{{run.date}}", "{{run.instance}}"],
+                    **{t["key"]: [f"{{{{{t['key']}.total.{c['id']}}}}}"
+                                  for c in t["columns"][:8]] for t in tables[:8]}},
+                "hinweis": ("Der Nutzer sieht die Vorschau des Berichts." if report else
+                            "Die Vorschau ist zu groß für den Chat; der Nutzer sieht nur die "
+                            "Abschnitte.")
+                + " Angelegt ist das Template erst, wenn er selbst auf „Template anlegen“ "
+                  "klickt. Handeinträge und OERSI-Blöcke ergänzt er danach im Baukasten."}
+
+    async def _section(self, sid: str, item: Any) -> dict[str, Any]:
+        if not isinstance(item, dict):
+            raise QueryError("muss ein JSON-Objekt sein.")
+        kind = item.get("type")
+        if kind == "text":
+            markdown = item.get("markdown")
+            if not isinstance(markdown, str) or not markdown.strip():
+                raise QueryError("Ein Text-Abschnitt braucht markdown.")
+            return {"id": sid, "type": "text", "markdown": markdown[:20000]}
+        title = _text(item.get("title")) or "Tabelle"
+        if kind in ("table", "chart"):
+            query = await self._query(item.get("spec"))
+            default = "bar" if kind == "chart" else "table"
+            view = item.get("view") if item.get("view") in VIEWS else default
+            return {"id": sid, "type": kind, "title": title, "view": {"type": view},
+                    "query": query.model_dump(mode="json", exclude={"refresh"})}
+        if kind == "matrix":
+            return await self._matrix(sid, title, item)
+        raise QueryError("type muss text, table, chart oder matrix sein.")
+
+    async def _matrix(self, sid: str, title: str, item: dict[str, Any]) -> dict[str, Any]:
+        rows = item.get("rows")
+        if not isinstance(rows, dict) or not isinstance(rows.get("property"), str):
+            raise QueryError("Eine gegliederte Tabelle braucht rows mit property und groups.")
+        prop = rows["property"]
+        try:
+            await self._vocab.check_facet(prop)
+        except EduSharingError:
+            raise QueryError(f"Nach '{prop[:80]}' lässt sich nicht aufschlüsseln.") from None
+        groups = rows.get("groups")
+        if not isinstance(groups, list) or not groups or len(groups) > MAX_GROUPS:
+            raise QueryError(f"rows.groups muss eine Liste mit 1 bis {MAX_GROUPS} Gruppen sein.")
+        used: set[str] = set()
+        seen: dict[str, str] = {}
+        sections = []
+        for group in groups:
+            label = _text(group.get("label") if isinstance(group, dict) else "")
+            values = group.get("values") if isinstance(group, dict) else None
+            if not label or not isinstance(values, list) or not values:
+                raise QueryError(f"Die Gruppe „{label or '?'}“ braucht label und mindestens "
+                                 "einen Wert in values.")
+            resolved = []
+            for value in values[:300]:
+                found = (await self._vocab.resolve(prop, str(value))).value
+                if found in seen:
+                    if seen[found] != label:
+                        raise QueryError(f"Der Wert '{str(value)[:80]}' steht in zwei Gruppen "
+                                         f"(„{seen[found]}“ und „{label}“).")
+                    continue
+                seen[found] = label
+                resolved.append({"value": found, "literal": True})
+            sections.append({"id": ident(label, used), "label": label, "values": resolved})
+        columns = item.get("columns")
+        if not isinstance(columns, list) or not columns:
+            raise QueryError("columns muss eine Liste mit mindestens einer Spalte sein.")
+        ids: set[str] = {str(c.get("id")) for c in columns
+                         if isinstance(c, dict) and c.get("id")}
+        series = []
+        for column in columns:
+            if not isinstance(column, dict) or not _text(column.get("label")):
+                raise QueryError("Jede Spalte braucht ein label.")
+            entry: dict[str, Any] = {
+                "id": str(column["id"]) if column.get("id") else ident(
+                    _text(column["label"]), ids),
+                "label": _text(column["label"])}
+            if column.get("formula"):
+                entry["formula"] = str(column["formula"])
+            elif column.get("filters"):
+                entry["filters"] = column["filters"]
+            series.append(entry)
+        raw_blocks = item.get("blocks") or [{"label": "Bestand"}]
+        if not isinstance(raw_blocks, list) or len(raw_blocks) > MAX_BLOCKS:
+            raise QueryError(f"blocks muss eine Liste mit höchstens {MAX_BLOCKS} Blöcken sein.")
+        used_blocks: set[str] = set()
+        blocks = []
+        for block in raw_blocks:
+            if not isinstance(block, dict) or not _text(block.get("label")):
+                raise QueryError("Jeder Block braucht ein label.")
+            if block.get("source") not in (None, "query"):
+                raise QueryError("Blöcke gehen hier nur als Abfrage. Handeintrag und OERSI "
+                                 "ergänzt der Nutzer im Baukasten; nenne ihm das im Text.")
+            # dieselben Grenzen wie bei jeder Abfrage des Assistenten: Filter nur, wo er
+            # zählen darf
+            checked = await self._query({"filters": block.get("filters") or [],
+                                         "series": series})
+            blocks.append({"id": ident(_text(block["label"]), used_blocks),
+                           "label": _text(block["label"]), "source": "query",
+                           "filters": [f.model_dump(mode="json") for f in checked.filters]})
+        return {"id": sid, "type": "matrix", "title": title,
+                "rows": {"property": prop, "sections": sections,
+                         "missing": rows.get("missing") is not False},
+                "series": series, "blocks": blocks}
 
     async def _read_run(self, args: dict[str, Any]) -> Any:
         if self.run_id:

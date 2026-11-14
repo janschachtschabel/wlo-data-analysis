@@ -66,31 +66,33 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
               </details>
             }
             @for (proposal of turn.proposals; track $index; let pi = $index) {
-              <section class="card proposal" [class.dash]="proposal.kind === 'dashboard'">
+              <section class="card proposal" [class.dash]="proposal.kind === 'dashboard'" [class.doc]="proposal.kind === 'template'">
                 <div class="row">
-                  <strong class="grow">{{ proposal.kind === 'dashboard' ? 'Dashboard: ' : '' }}{{ proposal.name }}</strong>
+                  <strong class="grow">{{ words[proposal.kind].prefix }}{{ proposal.name }}</strong>
                   @if (proposal.kind === 'metric' && !proposal.spec.query?.topics) { <a class="btn" [routerLink]="['/explorer']" [queryParams]="{ q: explorerLink(proposal) }">Im Explorer öffnen</a> }
-                  @if (chat.target(); as target) {
+                  @if (proposal.kind !== 'template' && chat.target(); as target) {
                     <button type="button" class="primary" (click)="chat.adopt(proposal)" [title]="'Als Kacheln in die geöffnete Bearbeitung übernehmen'">In „{{ target.name }}“ übernehmen</button>
                   }
                   @if (!proposal.saved) {
                     <button type="button" class="primary" (click)="chat.keep(ti, pi)" [disabled]="proposal.saving">
-                      {{ proposal.kind === 'dashboard' ? 'Dashboard anlegen' : 'Als Kennzahl speichern' }}</button>
+                      {{ words[proposal.kind].save }}</button>
                   }
                 </div>
                 @if (proposal.saved; as made) {
-                  <p class="done" role="status">{{ proposal.kind === 'dashboard' ? 'Das Dashboard ist angelegt.' : 'Die Kennzahl ist gespeichert.' }}
-                    <a class="btn primary" [routerLink]="['/ansicht', made.id]">{{ proposal.kind === 'dashboard' ? 'Dashboard öffnen' : 'Kennzahl öffnen' }}</a>
+                  <p class="done" role="status">{{ words[proposal.kind].saved }}
+                    <a class="btn primary" [routerLink]="['/ansicht', made.id]">{{ words[proposal.kind].open }}</a>
                     <a [routerLink]="['/bearbeiten', made.id]">bearbeiten</a></p>
                 } @else if (proposal.kind === 'dashboard') {
                   <p class="muted hint">Vorschau, noch nicht angelegt. „Dashboard anlegen“ legt es in der Bibliothek ab.</p>
+                } @else if (proposal.kind === 'template') {
+                  <p class="muted hint">Vorschau, noch nicht angelegt. „Template anlegen“ legt den Bericht in der Bibliothek ab; Handeinträge und weitere Blöcke ergänzt du danach unter „bearbeiten“.</p>
                 }
                 @if (proposal.error) { <p class="error" role="alert">{{ proposal.error }}</p> }
                 @if (proposal.description) { <p class="muted">{{ proposal.description }}</p> }
                 @if (proposal.report; as report) {
                   <app-report-view [report]="report" [widths]="proposal.widths ?? null" />
                 } @else {
-                  <ul class="tiles">@for (tile of proposal.spec.tiles; track tile.id) { <li>{{ tile.title }}</li> }</ul>
+                  <ul class="tiles">@for (tile of proposal.spec.tiles ?? proposal.spec.sections; track tile.id) { <li>{{ tile.title ?? 'Text' }}</li> }</ul>
                 }
               </section>
             }
@@ -151,6 +153,7 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
     /* in der Vorschau eines Dashboards behalten die Kacheln Rahmen und Titel */
     :host ::ng-deep .proposal.dash app-report-view section.card { border: 1px solid var(--border); padding: 12px; background: var(--surface); }
     :host ::ng-deep .proposal.dash app-report-view section.card > h2 { display: block; font-size: 15px; margin: 0 0 8px; }
+    :host ::ng-deep .proposal.doc app-report-view section.card > h2 { display: block; font-size: 15px; margin: 8px 0; }
     .examples { display: flex; flex-wrap: wrap; gap: 8px; } .examples button { text-align: left; }
     .intro p { margin-top: 0; max-width: 80ch; }
     .ask { display: flex; gap: 8px; align-items: end; }
@@ -211,6 +214,12 @@ export class Assistant {
     this.draft = '';
     void this.chat.ask(text);
   }
+
+  protected readonly words: Record<Proposal['kind'], { prefix: string; save: string; saved: string; open: string }> = {
+    metric: { prefix: '', save: 'Als Kennzahl speichern', saved: 'Die Kennzahl ist gespeichert.', open: 'Kennzahl öffnen' },
+    dashboard: { prefix: 'Dashboard: ', save: 'Dashboard anlegen', saved: 'Das Dashboard ist angelegt.', open: 'Dashboard öffnen' },
+    template: { prefix: 'Bericht: ', save: 'Template anlegen', saved: 'Das Template ist angelegt.', open: 'Template öffnen' },
+  };
 
   protected explorerLink(proposal: Proposal): string {
     return encodeState({ spec: proposal.spec.query, view: proposal.spec.view?.type ?? 'table' });

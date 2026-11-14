@@ -141,6 +141,9 @@ export class Chat {
 function memo(proposals: Proposal[]): string {
   // bei Dashboards je Kachel Titel, Darstellung und Abfrage, damit „Zeig das als Grafik“ nicht raten muss
   return proposals.map((p) => `${p.name}: ${JSON.stringify(p.kind === 'metric' ? { view: p.spec.view?.type, query: p.spec.query }
+    : p.kind === 'template' ? p.spec.sections?.map((x: any) => (x.type === 'matrix'
+      ? { id: x.id, title: x.title, rows: x.rows?.property, groups: x.rows?.sections?.map((g: any) => g.label), columns: x.series?.map((c: any) => c.id), blocks: x.blocks?.map((b: any) => b.label) }
+      : x.type === 'text' ? { id: x.id, text: String(x.markdown ?? '').slice(0, 200) } : { id: x.id, title: x.title, view: x.view?.type, query: x.query }))
     : p.spec.tiles?.map((t: any) => ({ title: t.title, view: t.view?.type, query: t.query })))}`)
     .join(' | ').slice(0, MAX_MEMO);
 }

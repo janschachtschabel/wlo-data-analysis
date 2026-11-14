@@ -90,7 +90,7 @@ export interface AppSettings {
 }
 /** Vorschlag des Assistenten: eine geprüfte Definition, die erst der Admin speichert */
 export interface Proposal {
-  kind: 'metric' | 'dashboard'; name: string; description: string;
+  kind: 'metric' | 'dashboard' | 'template'; name: string; description: string;
   spec: any; report: Report | null;
 }
 export interface Schedule {

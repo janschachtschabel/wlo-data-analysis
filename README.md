@@ -278,6 +278,14 @@ Rechner mit mindestens fünf Materialien einzeln.
   das Sprachmodell und gilt dort als Material, nicht als Anweisung. Gescannte PDFs ohne
   Textebene werden abgewiesen.
 
+- **Berichte vorschlagen:** Neben Ansicht und Dashboard schlägt der Assistent ganze
+  Berichte vor (`propose_template`): Text mit Platzhaltern, Tabellen, Grafiken und
+  gegliederte Tabellen mit Zeilengruppen, Spalten und Abfrage-Blöcken, auch aus einer
+  angehängten Vorlage. Namen von Werten löst das Werkzeug auf, geprüft wird wie beim
+  Speichern, die Karte im Chat zeigt die gerechnete Vorschau. Angelegt wird erst mit
+  „Template anlegen“. Handeinträge und OERSI-Blöcke schlägt er nicht vor; die ergänzt man
+  im Baukasten. Je Frage höchstens zwei Vorschläge für Dashboards oder Templates.
+
 ## Berichte, Export und die OER-Statistik
 
 - `GET /api/runs/{id}/export?format=json|csv|md|html|pdf|xlsx` liefert einen gespeicherten Lauf
@@ -291,6 +299,17 @@ Rechner mit mindestens fünf Materialien einzeln.
 - Templates kennen neben Text, Tabelle und Grafik den Abschnitt `matrix`: Zeilen in Gruppen
   mit Zwischensummen, Spaltenblöcke je Quelle. Eine Quelle ist eine Abfrage an die Instanz
   (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen) oder ein Handeintrag (`manual`).
+- Ein Bericht wie die OER-Statistik lässt sich ganz in der Oberfläche bauen: Unter
+  „bearbeiten“ zeigt der Baukasten für jede gegliederte Tabelle die Zeilen (Feld, Gruppen,
+  Werte über die Wertesuche, Mitzähler ohne eigene Zeile, „ohne Wert“, Zwischensummen), die
+  Spalten (Zählung mit Filtern oder Formel, anzeigen oder nur als Hilfsspalte) und die
+  Blöcke (Abfrage mit Filtern, OERSI mit Zuordnung der Lizenzen, Handeintrag als Raster
+  zum Ausfüllen, dazu Stand und Anmerkung). Was der Baukasten nicht kennt, bleibt in der
+  Spezifikation unberührt. „Gegliederte Tabelle hinzufügen“ beginnt eine neue.
+- Im Text-Abschnitt fügt „Zahl einfügen“ Platzhalter an der Schreibmarke ein; Zahlen aus
+  Tabellen stehen nach einem Klick auf „Vorschau“ zur Wahl.
+- `POST /api/check` nennt neben Fehlern auch Hinweise (`hints`), etwa wenn für eine
+  gegliederte Tabelle keine Instanz feststeht.
 - Texte dürfen Platzhalter tragen: `{{run.date}}`, `{{run.instance}}`,
   `{{abschnitt.total.spalte}}`, `{{abschnitt.cell.zeile.spalte}}` (bei einer Matrix heißt
   die Spalte `block.spalte`). Auflösbar sind nur Spalten, die die Tabelle zeigt.

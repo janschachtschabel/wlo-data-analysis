@@ -64,6 +64,18 @@ def demo_model(request: httpx.Request) -> httpx.Response:
              "width": "half"},
             {"title": "Bildungsstufen", "spec": {"rows": {"property": "ccm:educationalcontext"}},
              "view": "pie", "width": "half"}]})
+    if last["role"] == "user" and "bericht" in last["content"].lower():
+        return _call("propose_template", {"name": "Bestandsbericht", "sections": [
+            {"type": "text", "markdown": "# Bestand\n\nStand {{run.date}}, gesamt "
+                                         "{{a2.total.bestand.gesamt}} Materialien."},
+            {"type": "matrix", "title": "Fächer nach Gruppen", "rows": {
+                "property": "ccm:taxonid", "groups": [
+                    {"label": "MINT", "values": ["Mathematik", "Physik", "Informatik"]},
+                    {"label": "Sprachen", "values": ["Deutsch"]}]},
+             "columns": [{"id": "gesamt", "label": "Gesamt"}],
+             "blocks": [{"label": "Bestand"}]},
+            {"type": "chart", "title": "Bildungsstufen", "view": "bar",
+             "spec": {"rows": {"property": "ccm:educationalcontext"}}}]})
     if last["role"] == "user":
         spec = {"rows": {"property": "ccm:taxonid"},
                 "columns": {"property": "ccm:educationalcontext"}}

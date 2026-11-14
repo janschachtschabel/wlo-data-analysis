@@ -275,7 +275,7 @@ def test_plain_answer(api, model):
     assert body["messages"][-1] == {"role": "user", "content": "Wie viele Materialien gibt es?"}
     names = [t["function"]["name"] for t in body["tools"]]
     assert names == ["list_fields", "field_values", "run_query", "propose_view",
-                     "propose_dashboard"]
+                     "propose_dashboard", "propose_template"]
 
 
 def test_counts_with_the_engine_and_answers(api, model, repo):
@@ -593,3 +593,104 @@ def test_a_step_that_overruns_the_time_is_stopped(api, model, monkeypatch):
     events = chat(api)
     assert events[-1] == {**events[-1], "type": "final", "text": "Soweit."}
     assert "zu lange" in model.bodies[1]["messages"][-2]["content"]
+
+
+# ---- Template-Vorschlag ----------------------------------------------------------------
+
+def _template_sections():
+    return [
+        {"type": "text",
+         "markdown": "# Bestand\n\nStand {{run.date}}, gesamt {{a2.total.alle.gesamt}}. "
+                     "<img src=x onerror=alert(1)>"},
+        {"type": "matrix", "title": "Fächer nach Gruppen", "rows": {"property": TAX, "groups": [
+            {"label": "MINT", "values": ["Mathematik", DISC + "460"]},
+            {"label": "Sprachen", "values": ["Deutsch"]}]},
+         "columns": [{"id": "gesamt", "label": "Gesamt"},
+                     {"id": "doppelt", "label": "Doppelt", "formula": "gesamt * 2"}],
+         "blocks": [{"label": "Alle"}, {"label": "Hochschule", "filters": [
+             {"property": LVL, "values": [EC + "hochschule"]}]}]},
+        {"type": "table", "title": "Stufen", "spec": {"rows": {"property": LVL}}},
+        {"type": "chart", "title": "Fächer", "spec": {"rows": {"property": TAX, "top": 5}},
+         "view": "bar"},
+    ]
+
+
+def test_proposed_template_carries_the_report_and_saves_nothing(api, model):
+    model.answers = [call(("propose_template", {
+        "name": "Bestandsbericht", "description": "Fächer und Stufen",
+        "sections": _template_sections()})), say("Als Vorschau, Knopf „Template anlegen“.")]
+    events = chat(api)
+    assert [e["type"] for e in events] == ["step", "proposal", "final"]
+    assert "Bestandsbericht" in events[0]["text"]
+    proposal = events[1]
+    assert proposal["kind"] == "template" and proposal["name"] == "Bestandsbericht"
+    spec = proposal["spec"]
+    assert spec["instance"] == "wlo-prod" and spec["title"] == "Bestandsbericht"
+    assert [(s["id"], s["type"]) for s in spec["sections"]] == [
+        ("a1", "text"), ("a2", "matrix"), ("a3", "table"), ("a4", "chart")]
+    matrix = spec["sections"][1]
+    assert [(g["id"], g["label"]) for g in matrix["rows"]["sections"]] == [
+        ("mint", "MINT"), ("sprachen", "Sprachen")]
+    # Namen sind aufgelöst: In der Definition stehen die Werte selbst
+    assert matrix["rows"]["sections"][0]["values"] == [
+        {"value": DISC + "380", "literal": True}, {"value": DISC + "460", "literal": True}]
+    assert [(b["id"], b["source"]) for b in matrix["blocks"]] == [
+        ("alle", "query"), ("hochschule", "query")]
+    assert spec["sections"][3]["view"] == {"type": "bar"}
+    blocks = proposal["report"]["blocks"]
+    assert [b["type"] for b in blocks] == ["text", "table", "table", "table"]
+    table = blocks[1]
+    assert [r["kind"] for r in table["rows"]][:3] == ["group", "value", "value"]
+    assert [c["id"] for c in table["columns"]] == [
+        "alle.gesamt", "alle.doppelt", "hochschule.gesamt", "hochschule.doppelt"]
+    total = next(r for r in table["rows"] if r["kind"] == "total")
+    assert total["values"][0] > 0 and total["values"][1] == 2 * total["values"][0]
+    # der Platzhalter im Text ist mit der gezählten Zahl gefüllt
+    assert "{{" not in blocks[0]["markdown"]
+    assert "<h2>Bestand</h2>" in blocks[0]["html"] and "<img" not in blocks[0]["html"]
+    told = json.loads(model.bodies[1]["messages"][-1]["content"])
+    assert told["abschnitte"] == 4 and "anlegen" in told["hinweis"]
+    assert "a2.total.alle.gesamt" in json.dumps(told["platzhalter"])
+    # nichts wurde angelegt; der Vorschlag lässt sich unverändert speichern
+    assert api.get("/api/definitions").json() == []
+    saved = api.post("/api/definitions", json={
+        "kind": "template", "name": proposal["name"], "spec": proposal["spec"]})
+    assert saved.status_code == 201, saved.text
+
+
+@pytest.mark.parametrize(("change", "expected"), [
+    (lambda s: s[1]["rows"]["groups"][0]["values"].append("Gibtsnichtkunde"), "Gibtsnichtkunde"),
+    (lambda s: s[1]["rows"].update(property="cclom:title"), "cclom:title"),
+    (lambda s: s[1]["blocks"][1].update(filters=[{"property": "cclom:title",
+                                                  "values": ["x"]}]), "cclom:title"),
+    (lambda s: s[1]["blocks"].append({"label": "Hand", "source": "manual"}), "Abfrage"),
+    (lambda s: s[1]["columns"][1].update(formula="__import__('os')"), "Abschnitt 2"),
+    (lambda s: s[1]["rows"]["groups"].append({"label": "Leer", "values": []}), "Leer"),
+    (lambda s: s.append({"type": "bild", "title": "x"}), "Abschnitt 5"),
+    (lambda s: s[2].update(spec={"rows": {"property": "cclom:title"}}), "Stufen"),
+    (lambda s: s.extend([{"type": "text", "markdown": "x"}] * 20), "Höchstens"),
+    (lambda s: s.clear(), "mindestens"),
+])
+def test_template_proposals_with_mistakes_come_back_as_text(api, model, change, expected):
+    sections = _template_sections()
+    change(sections)
+    model.answers = [call(("propose_template", {"name": "B", "sections": sections})),
+                     say("Geht so nicht.")]
+    events = chat(api)
+    assert [e["type"] for e in events] == ["step", "final"]
+    told = json.loads(model.bodies[1]["messages"][-1]["content"])
+    assert expected in told["fehler"], told
+    assert api.get("/api/definitions").json() == []
+
+
+def test_template_proposals_share_the_limit_and_the_guide_explains_them(api, model):
+    one = ("propose_template", {"name": "B", "sections": _template_sections()[2:3]})
+    model.answers = [call(one), call(one), call(one), say("Genug.")]
+    events = chat(api)
+    assert [e["type"] for e in events].count("proposal") == 2
+    assert "höchstens" in json.loads(model.bodies[3]["messages"][-1]["content"])["fehler"]
+    guide = model.bodies[0]["messages"][0]["content"]
+    assert "propose_template" in guide and "Template anlegen" in guide
+    assert "groups" in guide and "Handeintrag" in guide
+    names = [t["function"]["name"] for t in model.bodies[0]["tools"]]
+    assert "propose_template" in names

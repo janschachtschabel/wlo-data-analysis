@@ -439,6 +439,15 @@ await page.waitForSelector('.proposal.dash app-report-view section.card h2');
 await page.click('.proposal button:has-text("Dashboard anlegen")');
 await page.waitForSelector('.proposal.dash .done a:has-text("Dashboard öffnen")');
 assert.match(await page.getAttribute('.proposal.dash .done a.btn', 'href'), /\/ansicht\//);
+// Bericht als Vorschlag: Vorschau mit gegliederter Tabelle, angelegt erst durch den Klick
+await page.fill('#question', 'Baue einen Bericht mit Fächergruppen');
+await page.click('button:has-text("Fragen")');
+await page.waitForSelector('.proposal.doc button:has-text("Template anlegen")', { timeout: 30000 });
+await page.waitForSelector('.proposal.doc app-report-view :text("MINT")');
+await page.waitForSelector('.proposal.doc app-report-view h2:has-text("Bestand")');
+assert.ok(!(await page.locator('.proposal.doc app-report-view').innerText()).includes('{{'));
+await page.click('.proposal.doc button:has-text("Template anlegen")');
+await page.waitForSelector('.proposal.doc .done a:has-text("Template öffnen")');
 await page.setViewportSize({ width: 390, height: 800 });
 assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'Assistent läuft bei 390 px über');
 await page.setViewportSize({ width: 1280, height: 900 });
