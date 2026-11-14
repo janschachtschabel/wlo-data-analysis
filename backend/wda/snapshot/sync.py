@@ -46,7 +46,10 @@ def status(snapshot: Snapshot, running: bool) -> dict[str, Any]:
         return None if value is None else int(value)
 
     current = state.get("status", "none")
-    if current == "running" and not running:
+    if running:
+        # gerade gestartet: Der Abzug hat seinen Stand vielleicht noch nicht geschrieben
+        current = "running"
+    elif current == "running":
         current = "stopped"  # der Dienst wurde währenddessen beendet
     return {"status": current, "mode": state.get("mode"), "count": snapshot.count(),
             "total": whole("total"), "done": whole("done"), "skipped": whole("skipped") or 0,
