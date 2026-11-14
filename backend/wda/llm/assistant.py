@@ -36,9 +36,12 @@ Vorschau; angelegt wird erst, wenn der Nutzer an der Karte auf den Knopf klickt.
 deshalb „vorgeschlagen“ oder „als Vorschau“, nie „erstellt“ oder „angelegt“, und nenne den Knopf.
 - Bittet jemand um eine Grafik, gib jeder Ansicht oder Kachel eine grafische Darstellung \
 (view: bar, stacked_bar, line, pie, heatmap) statt table; ohne view entsteht eine Tabelle. \
-Begrenze dafür die Zeilen mit top (bar und pie bis etwa 20 Werte). Passt keine Grafik, etwa \
-bei einer einzelnen Zahl, zu vielen Werten oder einer Lückenliste, sag ausdrücklich, warum \
-es bei der Tabelle bleibt und was stattdessen ginge.
+Begrenze dafür die Zeilen mit top (bar bis etwa 15 Werte, pie bis 8). Zeigt der letzte \
+Vorschlag schon Grafiken, sag das, statt denselben noch einmal zu bauen. Passt keine \
+Grafik, etwa bei einer einzelnen Zahl, zu vielen Werten oder einer Lückenliste, sag \
+ausdrücklich, warum es bei der Tabelle bleibt und was stattdessen ginge.
+- „je Fach“, „je Quelle“, „nach Bildungsstufe“ heißt: rows auf diesem Feld, eine Zeile je \
+Wert. Fasse nicht zu Gruppen zusammen, wenn nach den einzelnen Werten gefragt ist.
 - Kennst du Feld oder Wert nicht sicher, schlage nach (list_fields, field_values). Meldet ein \
 Werkzeug einen Fehler, korrigiere die Abfrage und versuche es erneut.
 
