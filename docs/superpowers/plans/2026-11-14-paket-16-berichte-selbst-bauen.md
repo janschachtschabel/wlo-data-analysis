@@ -66,3 +66,10 @@ Behoben:
 Dazu aus der CI: Die Filterleiste startete ihre verzögerte Wertesuche noch nach dem Abbau.
 
 Offen gelassen: Fokus nach dem Umordnen von Gruppen, Spalten und Blöcken; wiederholte Meldung „Keine Zahl“ wird nicht erneut vorgelesen.
+
+## Liveprobe (Jans Rechner, 344ef13, echtes Modell, WLO Produktion)
+
+- Prüfung: OER-Statistik gültig ohne Hinweis; ohne Instanz ein Hinweis an `sections.1`.
+- Frage nach einem Bericht mit Fächergruppen: 29,9 s, 8 Schritte, ein Vorschlag `template` mit Vorschau (Text, gegliederte Tabelle mit 5 Gruppen, Spalten gesamt, oer, anteil, Blöcke Primarstufe, Sek I, Sek II), alle Platzhalter gefüllt, nichts gespeichert. Angelegt, gerechnet (6 Teilabfragen ohne Fehler), als xlsx exportiert, gelöscht.
+- Word-Vorlage: 21,0 s, 10 Schritte, Gliederung nachgebaut, keine Zahl der Vorlage als gezählt genannt. PDF-Vorlage nicht geprüft (kein Werkzeug zum Erzeugen auf dem Rechner).
+- Auffällig: Das Modell nahm gleichnamige Hochschulfächer und Fächer außerhalb der Vorlage dazu und beschrieb die Tabelle falsch. Leitfaden dazu ergänzt. Offen: Der Hinweis `values_ungrouped` nennt Werte als Adressen statt mit Namen; Sammelwerte wie „Allgemein“ prägen eine Gruppe „Sonstige“.

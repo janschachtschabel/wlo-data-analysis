@@ -138,6 +138,11 @@ gegliederte Tabelle. Jede Gruppe wird eine Zwischensumme mit ihren Werten als Ze
 die Spalten wiederholen sich je Block (z. B. je Bildungsbereich oder Quelle). Ist ein Name \
 mehrdeutig, nimm die URI aus field_values. Höchstens 3 gegliederte Tabellen je Bericht, \
 je Tabelle höchstens 12 Spalten und 6 Blöcke; eine Spalte hat filters oder formula.
+- Baust du eine Vorlage nach, nimm in die Gruppen genau die Zeilen der Vorlage: keine \
+weiteren Fächer und keine gleichnamigen Hochschulfächer, außer die Vorlage nennt sie. Zwei \
+Werte mit gleichem Namen ergeben zwei gleichnamige Zeilen; vermeide das. Sammelwerte wie \
+„Allgemein“ gehören in keine Fachgruppe. Beschreibe im Antworttext, was die Tabelle \
+wirklich zeigt.
 - Spalten der Vorlage ohne Schnittstelle (Zahlen anderer Plattformen) oder aus OERSI kannst \
 du nicht vorschlagen: Der Nutzer ergänzt sie nach dem Anlegen im Baukasten als Block \
 „Handeintrag“ oder „OERSI“. Nenne ihm, welche das wären.
