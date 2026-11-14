@@ -68,3 +68,25 @@ Offen, gering: G5 Die beiden Lückenkacheln wiederholen die Abfragen ihrer Matri
 gewöhnlichen Lauf kommen sie aus dem Zwischenspeicher, bei Zeitplänen (`refresh`) kosten
 sie die Aufrufe noch einmal. G7 `close()` wartet auf eine laufende Auswertung. In der
 Historie wechselt die Zeilenmenge der Lückenliste je Lauf.
+
+## Probe gegen WLO (Jans Rechner, Commit 49917e6) und Nachschärfen
+
+Dashboard „Abdeckung“: 17 Kacheln ohne Fehler, 592 Abfragen, 9,2 s. Befunde aus den
+echten Zahlen und was daraus wurde:
+
+- Die Lückenliste füllte bis `limit` auch mit Feldern nahe 100 % auf. Neu: `below`
+  (Standard 50): nur Felder unter so viel Prozent der Erwartung.
+- Schule: Sammelstufen („Informelles Lernen“, „Schule“, „Fernunterricht“) bestimmten die
+  Liste. Die Kachel nimmt jetzt nur Primarstufe, Sekundarstufe I und II, berufliche
+  Bildung und Förderschule als Spalten.
+- Hochschule: Fächergruppe gegen Bildungsstufe ergibt keine sinnvollen Lücken
+  (Hochschulfächer fehlen erwartbar in Schulstufen). Ersetzt durch Schulfach ×
+  Materialart (`luecken-schule-materialart`).
+- Sprachniveau: 12 statt 8 Spalten, damit alle Stufen erscheinen.
+- Echte Zahlen: Anteil offener Lizenzen über alle Schulfächer 28,9 %, bei
+  Fächergruppen der Hochschule 87 bis 99 %. Erschließungsstatus fehlt je nach Fach bei
+  61 % (Chemie) bis 96 % (Politik) der Materialien.
+
+Offen: Die Wurzel „Schulfächer“ steht in den Schulfach-Kacheln als eigene Zeile (284
+Materialien). `schule-erschliessung` kann Werte außerhalb des Vokabulars nicht
+ausschließen (profile verträgt `vocab` nicht).

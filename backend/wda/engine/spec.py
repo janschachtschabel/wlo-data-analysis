@@ -161,6 +161,7 @@ class Gaps(_Model):
 
     limit: int = Field(default=30, ge=1, le=200)
     min_expected: float = Field(default=20, ge=1, le=1_000_000)
+    below: float = Field(default=50, gt=0, le=100)  # nur Felder unter so viel % der Erwartung
 
 
 SNAPSHOT_ANALYSES = ("freitext", "beschreibung", "titel", "schlagwoerter", "duenn",

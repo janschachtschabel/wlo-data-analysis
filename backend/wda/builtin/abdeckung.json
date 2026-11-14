@@ -107,7 +107,7 @@
      },
      {
       "id": "luecken-schule",
-      "title": "Lückenliste Schule: Fach und Bildungsstufe mit dem wenigsten Angebot, gemessen am Erwarteten",
+      "title": "Lückenliste Schule: Fach und Schulstufe mit dem wenigsten Angebot, gemessen am Erwarteten",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
@@ -119,12 +119,18 @@
        },
        "columns": {
         "property": "ccm:educationalcontext",
-        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
-        "top": 14
+        "include": [
+         "http://w3id.org/openeduhub/vocabs/educationalContext/grundschule",
+         "http://w3id.org/openeduhub/vocabs/educationalContext/sekundarstufe_1",
+         "http://w3id.org/openeduhub/vocabs/educationalContext/sekundarstufe_2",
+         "http://w3id.org/openeduhub/vocabs/educationalContext/berufliche_bildung",
+         "http://w3id.org/openeduhub/vocabs/educationalContext/foerderschule"
+        ]
        },
        "gaps": {
         "limit": 25,
-        "min_expected": 20
+        "min_expected": 20,
+        "below": 50
        }
       },
       "view": {
@@ -138,24 +144,25 @@
       }
      },
      {
-      "id": "luecken-hochschule",
-      "title": "Lückenliste Hochschule: Fächergruppe und Bildungsstufe mit dem wenigsten Angebot",
+      "id": "luecken-schule-materialart",
+      "title": "Lückenliste Schule: Fach und Materialart mit dem wenigsten Angebot, gemessen am Erwarteten",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
        "rows": {
         "property": "ccm:taxonid",
-        "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
-        "rollup": "top"
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "vocab": "inside",
+        "sort": "label"
        },
        "columns": {
-        "property": "ccm:educationalcontext",
-        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
-        "top": 14
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 10
        },
        "gaps": {
         "limit": 25,
-        "min_expected": 20
+        "min_expected": 20,
+        "below": 50
        }
       },
       "view": {
@@ -740,7 +747,7 @@
        },
        "profile": {
         "property": "ccm:oeh_languageLevel",
-        "top": 8
+        "top": 12
        }
       },
       "view": {

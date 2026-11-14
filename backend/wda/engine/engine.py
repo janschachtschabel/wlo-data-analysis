@@ -127,7 +127,7 @@ def _gaps(result: dict[str, Any], spec: QuerySpec) -> dict[str, Any]:
         for k, (_, col) in enumerate(cols):
             value = cells[i][k]
             expected = row_sums[i] * col_sums[k] / whole if whole else 0
-            if value is None or expected < ask.min_expected or value >= expected:
+            if value is None or expected < ask.min_expected or value >= expected * ask.below / 100:
                 continue
             found.append((value / expected, -expected, {
                 "key": json.dumps([row["key"], col["id"]], ensure_ascii=False),
@@ -141,7 +141,8 @@ def _gaps(result: dict[str, Any], spec: QuerySpec) -> dict[str, Any]:
     shown = found[:ask.limit]
     text = (
         f"Lückenliste aus {len(rows)} Zeilen × {len(cols)} Spalten: {len(shown)} von "
-        f"{len(found)} Feldern unter der Erwartung, die mit dem kleinsten Anteil zuerst. "
+        f"{len(found)} Feldern unter {ask.below:g} % der Erwartung, die mit dem kleinsten "
+        "Anteil zuerst. "
         "Erwartet ist, was Zeilen- und Spaltensumme der gezeigten Matrix ergäben, wenn Zeile "
         "und Spalte unabhängig wären; Felder mit einer Erwartung unter "
         f"{ask.min_expected:g} bleiben weg. Materialien mit mehreren Werten zählen in den "

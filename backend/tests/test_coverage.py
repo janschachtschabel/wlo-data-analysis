@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from wda.engine.formula import QueryError
 from wda.engine.spec import QuerySpec
 
-from .esdata import DISC, EC, HSF, LEVELS, UNI_SUBJECTS, DataRepo
+from .esdata import DISC, EC, HSF, LEVELS, UNI_SUBJECTS, UNUSED_LEVELS, DataRepo
 from .test_engine import LIC, LVL, SRC, TAX, cells, query
 
 UNI = set(UNI_SUBJECTS.values())
@@ -57,7 +57,8 @@ def test_rows_outside_and_inside_the_vocabulary(repo, tmp_path):
     outside = cells(query(repo, tmp_path, rows={"property": LVL, "vocab": "outside"}))
     assert outside == {"political": repo.brute(repo.has(LVL, "political"))}
     inside = cells(query(repo, tmp_path, rows={"property": LVL, "vocab": "inside"}))
-    assert set(inside) == set(LEVELS.values())
+    assert set(inside) == set(LEVELS.values()) | set(UNUSED_LEVELS.values())
+    assert all(not inside[uri] for uri in UNUSED_LEVELS.values())
     both = cells(query(repo, tmp_path, rows={"property": TAX, "vocab": "outside", "match": HSF}))
     assert set(both) == {OFF}
 

@@ -180,16 +180,16 @@ was Zeilen- und Spaltensumme erwarten lassen:
 {"instance": "wlo-prod",
  "rows": {"property": "ccm:taxonid", "match": "http://w3id.org/openeduhub/vocabs/discipline/", "vocab": "inside"},
  "columns": {"property": "ccm:educationalcontext", "top": 14},
- "gaps": {"limit": 25, "min_expected": 20}}
+ "gaps": {"limit": 25, "min_expected": 20, "below": 50}}
 ```
 
 Je Feld stehen die gezählten Materialien, die Erwartung (Zeilensumme × Spaltensumme ÷
-Summe der gezeigten Matrix) und der Anteil am Erwarteten in Prozent; nur Felder unter der
-Erwartung, die kleinsten zuerst. Felder, die sich nicht bestimmen ließen, fehlen.
+Summe der gezeigten Matrix) und der Anteil am Erwarteten in Prozent; nur Felder unter
+`below` Prozent der Erwartung (Standard 50), die kleinsten zuerst. Felder, die sich nicht bestimmen ließen, fehlen.
 Felder mit einer Erwartung unter `min_expected` bleiben weg, damit seltene Fächer die
 Liste nicht füllen. Eine Lücke kann fachlich begründet sein (Philosophie in der
 Primarstufe); die Liste zeigt, wo sich das Nachsehen lohnt. Im Dashboard „Abdeckung“
-stehen zwei solche Listen, für Schulfächer und für Fächergruppen der Hochschule.
+stehen zwei solche Listen für Schulfächer: gegen die Schulstufen und gegen die Materialarten.
 
 ### Quellen
 

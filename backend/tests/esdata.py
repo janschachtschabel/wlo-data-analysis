@@ -30,6 +30,9 @@ LICENSE_GROUPS = {
     "CC_BY_RESTRICTED": {"CC_BY_NC", "CC_BY_NC_SA", "CC_BY_ND"},
     "COPYRIGHT_OTHERS": {"COPYRIGHT_FREE"},
 }
+UNUSED_LEVELS = {"Sekundarstufe II": EC + "sekundarstufe_2",
+                 "Berufliche Bildung": EC + "berufliche_bildung",
+                 "Förderschule": EC + "foerderschule"}
 SOURCES = ["oersi_spider", "youtube_spider", "bpb_spider"]
 KNOWN = {"ccm:taxonid", "ccm:educationalcontext", "ccm:commonlicense_key", "license",
          "ccm:replicationsource", "ngsearchword", "ccm:editorial_checklist",
@@ -72,7 +75,9 @@ MDS = {"id": "oeh", "widgets": [
                 for label, uri in {**SUBJECTS, **UNI_SUBJECTS}.items()]},
     {"id": "ccm:educationalcontext", "caption": "Bildungsstufe",
      "type": "multivalueFixedBadges",
-     "values": [{"id": uri, "caption": label} for label, uri in LEVELS.items()]},
+     "values": [{"id": uri, "caption": label} for label, uri in LEVELS.items()] + [
+         # in der Werteliste, aber an keinem Material des Testbestands
+         {"id": uri, "caption": label} for label, uri in UNUSED_LEVELS.items()]},
     {"id": "ccm:commonlicense_key", "caption": "Lizenz", "type": "text"},
     {"id": "ccm:replicationsource", "caption": "Quelle", "type": "text"},
     {"id": "cclom:title", "caption": "Titel", "type": "text"},

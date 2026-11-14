@@ -23,6 +23,7 @@ def matrix():
 
 
 def spec(**gaps):
+    gaps.setdefault("below", 100)
     return QuerySpec(instance="t", rows=ROWS, columns=COLS, gaps=gaps)
 
 
@@ -65,3 +66,10 @@ def test_gaps_needs_a_matrix():
         QuerySpec(instance="t", rows=ROWS, gaps={})
     with pytest.raises(ValidationError):
         QuerySpec(instance="t", rows=ROWS, columns=COLS, gaps={}, percent="row")
+
+
+def test_only_cells_far_below_the_expected_by_default():
+    out = _gaps(matrix(), QuerySpec(instance="t", rows=ROWS, columns=COLS,
+                                    gaps={"min_expected": 1}))
+    assert out["rows"] and all(r["values"][2] < 50 for r in out["rows"])
+    assert "unter 50 % der Erwartung" in note(out)
