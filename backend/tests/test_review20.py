@@ -220,3 +220,14 @@ def test_run_list_names_the_definition_version(api):  # noqa: F811
     api.post(f"/api/definitions/{m['id']}/run")
     [head] = api.get(f"/api/definitions/{m['id']}/runs?limit=5").json()
     assert head["definition_version"] == api.get(f"/api/definitions/{m['id']}").json()["version"]
+
+
+def test_reports_name_times_in_the_apps_zone_and_files_spell_umlauts():
+    from wda.api.export import file_name
+    from wda.report.build import format_time, set_display_zone
+    assert format_time("2026-11-14T23:09:00Z") == "14.11.2026 23:09 UTC"
+    set_display_zone("Europe/Berlin")
+    assert format_time("2026-11-14T23:09:00Z") == "15.11.2026 00:09 CET"
+    assert format_time("2026-07-01T10:00:00Z") == "01.07.2026 12:00 CEST"
+    assert file_name("Fächer & Größen", "2026-11-14T23:09:00Z", "pdf") == (
+        "Faecher-Groessen-2026-11-14.pdf")

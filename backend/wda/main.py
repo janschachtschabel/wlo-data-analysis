@@ -39,6 +39,7 @@ from .config import Settings, load_settings
 from .deps import AdminGate, require_admin
 from .instances import InstanceRegistry
 from .jobs import TooManyJobs
+from .report.build import set_display_zone
 from .scheduler import Scheduler, utc_now
 from .security import LoginThrottle, SessionSigner, session_signing_key, viewer_mark
 from .services import Services
@@ -70,6 +71,7 @@ def create_app(
     now: Callable[[], datetime] = utc_now,
 ) -> FastAPI:
     settings = settings or load_settings()
+    set_display_zone(settings.timezone)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

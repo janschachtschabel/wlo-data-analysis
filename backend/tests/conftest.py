@@ -53,3 +53,12 @@ def client(app):
 def admin(client):
     assert client.post("/api/auth/login", json={"password": ADMIN_PASSWORD}).status_code == 204
     return client
+
+
+@pytest.fixture(autouse=True)
+def _display_zone():
+    """Jeder Test beginnt mit UTC; eine App stellt beim Start ihre eigene Zeitzone ein."""
+    from wda.report.build import set_display_zone
+    set_display_zone(None)
+    yield
+    set_display_zone(None)

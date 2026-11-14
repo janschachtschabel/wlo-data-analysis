@@ -47,8 +47,14 @@ async def _render(report: Report, fmt: str) -> bytes:
         _pdf_waiting -= 1
 
 
+_UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "Ä": "Ae", "Ö": "Oe", "Ü": "Ue",
+                           "ß": "ss"})
+
+
 def file_name(title: str, started_at: str, extension: str) -> str:
-    plain = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
+    # Umlaute ausschreiben statt nur den Punkt zu verlieren (Fächer wird Faecher)
+    plain = unicodedata.normalize("NFKD", title.translate(_UMLAUTS)).encode(
+        "ascii", "ignore").decode()
     slug = re.sub(r"[^A-Za-z0-9]+", "-", plain).strip("-")[:60] or "bericht"
     day = started_at[:10] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", started_at[:10]) else "lauf"
     return f"{slug}-{day}.{extension}"
