@@ -347,7 +347,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                             and (not rows_spec.match or v.startswith(rows_spec.match))}
                            - grouped)
             if loose:
-                shown = ", ".join(f"'{v}'" if v else "(leer)" for v in loose[:5])
+                shown = ", ".join([f"„{await vocab.label(row_prop, v)}“" if v else "(leer)"
+                                   for v in loose[:5]])
                 notes.add("values_ungrouped", 
                     (f"{len(loose)} vorkommende Werte von '{row_prop}' stehen"
                      if len(loose) > 1 else f"Ein vorkommender Wert von '{row_prop}' steht")

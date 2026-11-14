@@ -83,6 +83,12 @@ TOOLS = [
                    "blocks": {"type": "array", "description": "nur matrix: [{label, filters}]",
                               "items": {"type": "object"}}},
                "required": ["type"]}}}, ["name", "sections"]),
+    _tool("ask_choice", "Stellt dem Nutzer eine Rückfrage mit zwei bis vier Antworten zum "
+          "Anklicken, wenn der Auftrag auf verschiedene Weise gemeint sein kann und die "
+          "Lesarten zu verschiedenen Ergebnissen führen.",
+          {"question": {"type": "string"},
+           "options": {"type": "array", "minItems": 2, "maxItems": 4,
+                       "items": {"type": "string"}}}, ["question", "options"]),
 ]
 RUN_TOOL = _tool("read_run", "Die Tabellen der Auswertung, die der Nutzer gerade ansieht.",
                  {}, [])
@@ -193,6 +199,8 @@ class Toolbox:
         self.definition_id = definition_id
         self._client, self._vocab = services.client(instance), services.vocab(instance)
         self.on_proposal = on_proposal or (lambda proposal: None)
+        self.on_question: Callable[[dict[str, Any]], None] = lambda question: None
+        self._asked = False
         self._dashboards = 0
 
     @property
@@ -219,6 +227,8 @@ class Toolbox:
             return f"Stellt ein Dashboard zusammen: {str(args.get('name'))[:80]}"
         if name == "propose_template":
             return f"Stellt einen Bericht zusammen: {str(args.get('name'))[:80]}"
+        if name == "ask_choice":
+            return "Fragt nach"
         if name == "read_run":
             return "Liest die Tabellen der Auswertung"
         return "Unbekannter Schritt"
@@ -230,7 +240,7 @@ class Toolbox:
             "list_fields": self._list_fields, "field_values": self._field_values,
             "run_query": self._run_query, "propose_view": self._propose_view,
             "propose_dashboard": self._propose_dashboard,
-            "propose_template": self._propose_template}
+            "propose_template": self._propose_template, "ask_choice": self._ask_choice}
         if self.has_context:
             handlers["read_run"] = self._read_run
         handler = handlers.get(name)
@@ -381,6 +391,21 @@ class Toolbox:
                 "darstellungen": [t["view"]["type"] for t in tiles],
                 "hinweis": "Der Nutzer sieht die Vorschau mit allen Kacheln. Angelegt ist das "
                            "Dashboard erst, wenn er selbst auf „Dashboard anlegen“ klickt."}
+
+    async def _ask_choice(self, args: dict[str, Any]) -> Any:
+        question = _text(args.get("question"), 300)
+        raw = args.get("options")
+        options = list(dict.fromkeys(
+            _text(o, 80) for o in (raw if isinstance(raw, list) else [])
+            if isinstance(o, str) and o.strip()))[:4]
+        if not question or len(options) < 2:
+            raise QueryError("ask_choice braucht eine Frage und zwei bis vier Antworten.")
+        if self._asked:
+            raise QueryError("Je Antwort nur eine Rückfrage.")
+        self._asked = True
+        self.on_question({"question": question, "options": options})
+        return {"gefragt": True, "hinweis": "Der Nutzer sieht die Frage mit den Antworten "
+                "als Knöpfe. Beende jetzt mit einem kurzen Satz und warte auf seine Wahl."}
 
     async def _propose_template(self, args: dict[str, Any]) -> Any:
         name = _text(args.get("name")) or "Bericht"

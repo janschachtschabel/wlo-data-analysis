@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 
 import httpx
@@ -10,7 +11,7 @@ from wda.edusharing.errors import EduSharingError
 from wda.edusharing.vocab import UnresolvedValue, VocabStore
 from wda.instances import Instance
 
-from .esfake import DISC, EC, MDS_PATH, FakeRepo
+from .esfake import DISC, EC, MDS, MDS_PATH, FakeRepo
 
 INSTANCE = Instance(id="t", name="T", base_url="https://repo.example")
 
@@ -256,3 +257,51 @@ def test_malformed_metadataset(tmp_path):
     with pytest.raises(EduSharingError) as info:
         run(make(repo, tmp_path).fields())
     assert info.value.kind == "bad_response"
+
+
+def test_same_named_values_of_two_vocabularies_get_told_apart(tmp_path):
+    hsf = "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/"
+    repo = FakeRepo()
+    mds = copy.deepcopy(MDS)
+    widget = next(w for w in mds["widgets"] if w["id"] == "ccm:taxonid" and w["values"])
+    widget["values"] += [
+        {"id": hsf + "n4", "caption": "Mathematik, Naturwissenschaften"},
+        {"id": hsf + "n37", "caption": "Mathematik", "parent": hsf + "n4"},
+        {"id": hsf + "n105", "caption": "Mathematik", "parent": hsf + "n37"},
+        {"id": hsf + "n128", "caption": "Physik", "parent": hsf + "n4"}]
+    repo.mds_error = httpx.Response(200, json=mds)
+    http = httpx.AsyncClient(transport=repo.transport())
+    inst = Instance(id="t", name="T", base_url="https://repo.example", vocab_names={
+        DISC: "Schule", hsf: "Hochschule"})
+    store = VocabStore(EduSharingClient(inst, http, TTLCache(ttl=900)), tmp_path, clock=Clock())
+
+    async def scenario():
+        assert await store.label("ccm:taxonid", DISC + "380") == "Mathematik (Schule)"
+        assert await store.label("ccm:taxonid", hsf + "n128") == "Physik (Hochschule)"
+        # zwei gleichnamige Hochschulfächer: dazu, worunter sie stehen
+        assert await store.label("ccm:taxonid", hsf + "n37") == (
+            "Mathematik (Hochschule, Mathematik, Naturwissenschaften)")
+        assert await store.label("ccm:taxonid", hsf + "n105") == "Mathematik (Hochschule, n105)"
+        # was nur einmal vorkommt, bleibt, wie es heißt
+        assert await store.label("ccm:taxonid", hsf + "n4") == "Mathematik, Naturwissenschaften"
+        # der neue Name trifft genau; der alte bleibt mehrdeutig und nennt die Auswahl
+        assert (await store.resolve("ccm:taxonid", "Mathematik (Schule)")).value == DISC + "380"
+        with pytest.raises(UnresolvedValue) as info:
+            await store.resolve("ccm:taxonid", "Mathematik")
+        assert info.value.ambiguous and {s["caption"] for s in info.value.suggestions} == {
+            "Mathematik (Schule)", "Mathematik (Hochschule, Mathematik, Naturwissenschaften)",
+            "Mathematik (Hochschule, n105)"}
+        # „Sport“ gibt es zweimal im selben Vokabular: dort hilft kein Zusatz der Herkunft
+        assert await store.label("ccm:taxonid", DISC + "900") in ("Sport (Schule)", "Sport")
+
+    run(scenario())
+
+
+def test_instances_name_their_vocabularies():
+    from wda.instances import PRESETS
+    names = PRESETS[0].vocab_names
+    assert names["http://w3id.org/openeduhub/vocabs/discipline/"] == "Schule"
+    assert "Hochschule" in names.values() and PRESETS[1].vocab_names == names
+    assert Instance(id="x", name="X", base_url="https://r.example").vocab_names == {}
+    with pytest.raises(ValueError):
+        Instance(id="x", name="X", base_url="https://r.example", vocab_names={"a": "b" * 60})

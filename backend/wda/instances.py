@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -46,6 +46,11 @@ class Instance(BaseModel):
     # Einwertige Felder, bei denen ein Kriterium als Präfix trifft und nur einen Wert
     # annimmt (gemessen: der Lizenzschlüssel, "CC_BY" zählt alle "CC_BY…").
     prefix_fields: tuple[str, ...] = ("ccm:commonlicense_key",)
+    # Ein Feld kann mehrere Vokabulare tragen (Fach: Schulfächer und Hochschulfächer). Der
+    # Anfang der Werte → Kurzname, der gleichnamige Werte unterscheidbar macht.
+    vocab_names: dict[Annotated[str, Field(min_length=1, max_length=300)],
+                      Annotated[str, Field(min_length=1, max_length=40)]] = Field(
+        default_factory=dict, max_length=20)
 
     @field_validator("name")
     @classmethod
@@ -100,17 +105,22 @@ class Instance(BaseModel):
         return data
 
 
+WLO_VOCABS = {"http://w3id.org/openeduhub/vocabs/discipline/": "Schule",
+              "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/": "Hochschule"}
+
 PRESETS: tuple[Instance, ...] = (
     Instance(
         id="wlo-prod",
         name="WLO Produktion",
         base_url="https://redaktion.openeduhub.net",
         search_url="https://suche.wirlernenonline.de",
+        vocab_names=WLO_VOCABS,
     ),
     Instance(
         id="wlo-staging",
         name="WLO Staging",
         base_url="https://repository.staging.openeduhub.net",
+        vocab_names=WLO_VOCABS,
     ),
 )
 

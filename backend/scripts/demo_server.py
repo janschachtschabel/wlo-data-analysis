@@ -55,8 +55,11 @@ def demo_model(request: httpx.Request) -> httpx.Response:
     die Ansicht vor und antwortet mit einem festen Satz."""
     body = json.loads(request.content)
     last = body["messages"][-1]
-    if "tools" not in body:
-        return _say("bereit")
+    if "tools" not in body:  # Verbindungstest oder Selbstprüfung nach einem Vorschlag
+        return _say("OK" if str(last.get("content", "")).startswith("Prüfe") else "bereit")
+    if last["role"] == "user" and "gesamtzahl" in last["content"].lower():
+        return _call("ask_choice", {"question": "Welche Gesamtzahl meinst du?",
+                                    "options": ["je Bildungsstufe", "ganzer Bestand"]})
     if last["role"] == "user" and "dashboard" in last["content"].lower():
         return _call("propose_dashboard", {"name": "Überblick", "description": "Bestand",
                                            "tiles": [

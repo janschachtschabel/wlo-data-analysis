@@ -229,17 +229,58 @@ class VocabStore:
         by_id: dict[str, dict[str, VocabValue]] = {}
         by_label: dict[str, dict[str, list[VocabValue]]] = {}
         for entry in entries:
-            values = tuple(VocabValue(v["id"], v["caption"], v.get("parent"))
-                           for v in entry["values"])
+            plain = tuple(VocabValue(v["id"], v["caption"], v.get("parent"))
+                          for v in entry["values"])
+            values = self._told_apart(plain)
             prop = entry["property"]
             fields[prop] = Field(prop, entry["caption"], entry["type"], values)
             by_id[prop] = {v.id: v for v in values}
             labels: dict[str, list[VocabValue]] = {}
-            for value in values:
+            for value, old in zip(values, plain, strict=True):
                 labels.setdefault(_norm(value.caption), []).append(value)
+                if old.caption != value.caption:  # der bisherige Name bleibt suchbar
+                    labels.setdefault(_norm(old.caption), []).append(value)
             by_label[prop] = labels
         self._fields, self._by_id, self._by_label = fields, by_id, by_label
         self._expires = expires
+
+    def _told_apart(self, values: tuple[VocabValue, ...]) -> tuple[VocabValue, ...]:
+        """Gleichnamige Werte aus verschiedenen Vokabularen eines Feldes bekommen den Namen
+        ihres Vokabulars dazu („Mathematik (Schule)“). Reicht das nicht, kommt dazu, worunter
+        der Wert steht, sonst das Ende seiner Kennung."""
+        names = self._client.instance.vocab_names
+        if not names:
+            return values
+
+        def origin(value: VocabValue) -> str | None:
+            return next((name for prefix, name in names.items()
+                         if value.id.startswith(prefix)), None)
+
+        same: dict[str, list[VocabValue]] = {}
+        for value in values:
+            same.setdefault(_norm(value.caption), []).append(value)
+        by_id = {v.id: v for v in values}
+        out: dict[str, str] = {}
+        for group in same.values():
+            if len({origin(v) for v in group}) < 2:
+                continue  # nur ein Vokabular: der Zusatz würde nichts unterscheiden
+            taken: set[str] = set()
+            for value in group:
+                name = origin(value)
+                if name is None:
+                    continue
+                caption = f"{value.caption} ({name})"
+                if sum(1 for v in group if origin(v) == name) > 1:
+                    parent = by_id.get(value.parent) if value.parent else None
+                    tail = value.id.rstrip("/").rsplit("/", 1)[-1]
+                    more = parent.caption if parent and _norm(parent.caption) != _norm(
+                        value.caption) else tail
+                    caption = f"{value.caption} ({name}, {more})"
+                    if caption in taken:
+                        caption = f"{value.caption} ({name}, {tail})"
+                taken.add(caption)
+                out[value.id] = caption
+        return tuple(VocabValue(v.id, out.get(v.id, v.caption), v.parent) for v in values)
 
     def _read_copy(self) -> tuple[list[dict[str, Any]], float] | None:
         inst = self._client.instance

@@ -97,6 +97,14 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
               </section>
             }
             @if (turn.html) { <div class="bubble prose" [innerHTML]="turn.html"></div> }
+            @if (turn.choices; as choices) {
+              <fieldset class="choices" [disabled]="busy() || ti !== turns().length - 1">
+                <legend>{{ choices.question }}</legend>
+                @for (option of choices.options; track option) {
+                  <button type="button" (click)="ask(option)">{{ option }}</button>
+                }
+              </fieldset>
+            }
             @else if (turn.text) { <div class="bubble">{{ turn.text }}</div> }
             @if (turn.pending) { <p class="muted thinking" role="status">{{ turn.steps.length ? 'Arbeitet weiter …' : 'Denkt nach …' }}</p> }
             @if (turn.error) { <p class="error" role="alert">{{ turn.error }}</p> }
@@ -154,6 +162,8 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
     :host ::ng-deep .proposal.dash app-report-view section.card { border: 1px solid var(--border); padding: 12px; background: var(--surface); }
     :host ::ng-deep .proposal.dash app-report-view section.card > h2 { display: block; font-size: 15px; margin: 0 0 8px; }
     :host ::ng-deep .proposal.doc app-report-view section.card > h2 { display: block; font-size: 15px; margin: 8px 0; }
+    .choices { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px; margin: 0; max-width: 80ch; }
+    .choices legend { font-weight: 600; padding: 0 4px; } .choices button { text-align: left; }
     .examples { display: flex; flex-wrap: wrap; gap: 8px; } .examples button { text-align: left; }
     .intro p { margin-top: 0; max-width: 80ch; }
     .ask { display: flex; gap: 8px; align-items: end; }

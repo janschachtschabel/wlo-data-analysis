@@ -26,12 +26,19 @@ class Model:
     def __init__(self, *answers):
         self.answers = list(answers)
         self.requests: list[httpx.Request] = []
+        self.checks: list[dict] = []
+        self.check_answers: list[httpx.Response] = []
 
     @property
     def bodies(self):
         return [json.loads(r.content) for r in self.requests]
 
     def handler(self, request: httpx.Request) -> httpx.Response:
+        last = json.loads(request.content)["messages"][-1]
+        if str(last.get("content") or "").startswith("Prüfe deinen Antworttext"):
+            # die Selbstprüfung nach einem Vorschlag: ohne Vorgabe ist der Text in Ordnung
+            self.checks.append(json.loads(request.content))
+            return self.check_answers.pop(0) if self.check_answers else say("OK")
         self.requests.append(request)
         answer = self.answers.pop(0) if self.answers else say("Fertig.")
         return answer(request) if callable(answer) else answer
@@ -275,7 +282,7 @@ def test_plain_answer(api, model):
     assert body["messages"][-1] == {"role": "user", "content": "Wie viele Materialien gibt es?"}
     names = [t["function"]["name"] for t in body["tools"]]
     assert names == ["list_fields", "field_values", "run_query", "propose_view",
-                     "propose_dashboard", "propose_template"]
+                     "propose_dashboard", "propose_template", "ask_choice"]
 
 
 def test_counts_with_the_engine_and_answers(api, model, repo):
@@ -722,3 +729,56 @@ def test_template_proposal_names_reserved_columns_and_unknown_placeholders(api, 
     assert "a2.total.gibts.nicht" in json.dumps(told["offene_platzhalter"], ensure_ascii=False)
     guide = model.bodies[0]["messages"][0]["content"]
     assert ".cell." in guide and '"other": true' not in guide
+
+
+# ---- Selbstprüfung und Rückfrage -------------------------------------------------------
+
+def test_answer_is_checked_against_the_proposal_and_corrected(api, model):
+    spec = {"rows": {"property": TAX, "match": DISC}}
+    model.answers = [call(("propose_view", {"title": "Fächer", "spec": spec})),
+                     say("Einzelne Fächer lassen sich nicht ausweisen.")]
+    model.check_answers = [say("Die Tabelle zeigt die Fächer einzeln.")]
+    events = chat(api)
+    assert [e["type"] for e in events] == ["step", "proposal", "final"]
+    assert events[-1]["text"] == "Die Tabelle zeigt die Fächer einzeln."
+    [check] = model.checks
+    assert "tools" not in check
+    asked = check["messages"][-1]["content"]
+    # die Prüfung bekommt, was der Vorschlag wirklich zeigt, und den eigenen Text
+    assert "Fächer" in asked and "Mathematik" in asked and "Zeilen" in asked
+    assert check["messages"][-2] == {
+        "role": "assistant", "content": "Einzelne Fächer lassen sich nicht ausweisen."}
+
+
+def test_check_keeps_the_text_when_it_fits_fails_or_nothing_was_proposed(api, model):
+    spec = {"rows": {"property": TAX, "match": DISC}}
+    model.answers = [call(("propose_view", {"title": "Fächer", "spec": spec})), say("Passt.")]
+    assert chat(api)[-1]["text"] == "Passt."
+    model.answers = [call(("propose_view", {"title": "Fächer", "spec": spec})), say("Passt.")]
+    model.check_answers = [httpx.Response(500, json={"error": {"message": "kaputt"}})]
+    assert chat(api)[-1]["text"] == "Passt."
+    model.answers = [call(("propose_view", {"title": "Fächer", "spec": spec})), say("Passt.")]
+    model.check_answers = [say("  ")]
+    assert chat(api)[-1]["text"] == "Passt."
+    before = len(model.checks)
+    model.answers = [call(("run_query", {"spec": {}})), say("Es sind 400.")]
+    assert chat(api)[-1]["text"] == "Es sind 400."
+    assert len(model.checks) == before  # ohne Vorschlag keine Prüfung
+
+
+def test_assistant_can_ask_with_choices_instead_of_guessing(api, model):
+    model.answers = [call(("ask_choice", {"question": "Welche Gesamtzahl?", "options": [
+        "je Bildungsstufe", "ganzer Bestand", "x" * 200, 7, "ganzer Bestand"]})),
+        say("Wähle bitte.")]
+    events = chat(api)
+    assert [e["type"] for e in events] == ["step", "choices", "final"]
+    assert events[1] == {"type": "choices", "question": "Welche Gesamtzahl?",
+                         "options": ["je Bildungsstufe", "ganzer Bestand", "x" * 80]}
+    told = json.loads(model.bodies[1]["messages"][-1]["content"])
+    assert told["gefragt"] is True
+    model.answers = [call(("ask_choice", {"question": "?", "options": ["nur eine"]})), say("x")]
+    events = chat(api)
+    assert [e["type"] for e in events] == ["step", "final"]
+    assert "fehler" in json.loads(model.bodies[-1]["messages"][-1]["content"])
+    guide = model.bodies[0]["messages"][0]["content"]
+    assert "ask_choice" in guide and "(Schule)" in guide

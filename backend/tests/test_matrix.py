@@ -131,6 +131,8 @@ def test_values_outside_all_groups_are_named_per_block(world):
     loose = [n["text"] for n in table.notes if n["code"] == "values_ungrouped"]
     assert len(loose) == 2 and loose[0].startswith("Sekundarstufe I: ")
     assert loose[1].startswith("Hochschule: ") and "stehen in keiner Gruppe" in loose[1]
+    # genannt mit Namen, nicht mit Adressen
+    assert "„" in loose[0] and "http" not in loose[0]
 
 
 def test_placeholders_reach_into_the_matrix(world):

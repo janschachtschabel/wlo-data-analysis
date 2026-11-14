@@ -13,6 +13,8 @@ export interface Turn {
   /** Name der Vorlage, die an dieser Frage hing */
   template?: string;
   steps: string[]; proposals: Shown[]; error?: string; pending?: boolean;
+  /** Rückfrage des Assistenten mit Antworten zum Anklicken */
+  choices?: { question: string; options: string[] };
 }
 export interface About { run_id?: string; definition_id?: string; label: string }
 
@@ -100,6 +102,7 @@ export class Chat {
         if (template && this.template() === template) this.template.set(null);
         if (event?.type === 'step') this.update((t) => ({ ...t, steps: [...t.steps, String(event.text ?? '')] }));
         else if (event?.type === 'proposal') this.update((t) => ({ ...t, proposals: [...t.proposals, { ...(event as Shown), widths: tileWidths(event as Shown) }] }));
+        else if (event?.type === 'choices' && Array.isArray(event.options)) this.update((t) => ({ ...t, choices: { question: String(event.question ?? ''), options: event.options.map(String).slice(0, 4) } }));
         else if (event?.type === 'final') { done = true; this.update((t) => ({ ...t, text: String(event.text ?? ''), html: event.html, pending: false })); }
         else if (event?.type === 'error') { done = true; this.update((t) => ({ ...t, error: String(event.detail ?? 'Fehler'), pending: false })); }
       }, controller.signal);

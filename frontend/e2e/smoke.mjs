@@ -442,6 +442,13 @@ await page.waitForSelector('.proposal.dash app-report-view section.card h2');
 await page.click('.proposal button:has-text("Dashboard anlegen")');
 await page.waitForSelector('.proposal.dash .done a:has-text("Dashboard öffnen")');
 assert.match(await page.getAttribute('.proposal.dash .done a.btn', 'href'), /\/ansicht\//);
+// Rückfrage mit Knöpfen: Ein Klick schickt die Wahl als nächste Frage
+await page.fill('#question', 'Nenne mir die Gesamtzahl');
+await page.click('button:has-text("Fragen")');
+await page.waitForSelector('.choices legend:has-text("Welche Gesamtzahl")');
+await page.click('.choices button:has-text("ganzer Bestand")');
+await page.waitForSelector('.mine:has-text("ganzer Bestand")');
+await page.waitForFunction(() => document.querySelectorAll('.choices').length === 1 && document.querySelector('.choices').disabled);
 // Bericht als Vorschlag: Vorschau mit gegliederter Tabelle, angelegt erst durch den Klick
 await page.fill('#question', 'Baue einen Bericht mit Fächergruppen');
 await page.click('button:has-text("Fragen")');

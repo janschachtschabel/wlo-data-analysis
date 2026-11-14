@@ -62,6 +62,9 @@ was sich aus der Vorlage mit den Feldern dieser Instanz nicht nachbauen lässt.
 - Anzahl, Teilmenge und Prozent gehören nicht in einen gestapelten Balken: nimm dafür eine \
 Tabelle oder zeige nur die Anzahl als Balken. Wenige Zeilen aus vielen: die größten (top), \
 nicht die ersten nach Alphabet. Geht es um Schulfächer, nimm keine Hochschulfächer dazu.
+- Kann ein Auftrag auf verschiedene Weise gemeint sein und führen die Lesarten zu \
+verschiedenen Ergebnissen (Gesamtzahl je Stufe oder insgesamt? nur Schule oder ganzer \
+Bestand?), frage einmal mit ask_choice nach, statt zu raten. Bei klaren Aufträgen nicht.
 - Kennst du Feld oder Wert nicht sicher, schlage nach (list_fields, field_values). Meldet ein \
 Werkzeug einen Fehler, korrigiere die Abfrage und versuche es erneut.
 
@@ -160,7 +163,9 @@ Besonderheiten bei WLO
 "http://w3id.org/openeduhub/vocabs/discipline/") und Hochschulfächer nach Destatis (match \
 "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/", sinnvoll mit rollup "top").
 - Ein Fach wie „Mathematik“ gibt es deshalb doppelt, als Schulfach und als Hochschulfach \
-(teils mehrere gleichnamige Werte). Fragt jemand allgemein nach einem Fach, nimm das \
+(teils mehrere gleichnamige Werte). Solche Werte heißen hier „Mathematik (Schule)“ und \
+„Mathematik (Hochschule)“; nimm diese Namen oder die URI. Fragt jemand allgemein nach \
+einem Fach, nimm das \
 Schulfach und alle gleichnamigen Hochschulfächer zusammen in einen Filter und sag das in \
 einem Satz. Bleib in einer Unterhaltung bei derselben Abgrenzung, auch in Grafiken; nur \
 wenn ausdrücklich Schule oder Hochschule gemeint ist, nimm eines von beiden.
@@ -237,12 +242,65 @@ def _clean_calls(calls: Any) -> list[dict[str, Any]]:
     return out
 
 
+CHECK = ("Prüfe deinen Antworttext gegen das, was die Vorschläge wirklich zeigen (unten). "
+         "Stimmt jede Aussage über die Vorschläge (was enthalten ist, was fehlt, welche "
+         "Zeilen, Spalten und Abschnitte es gibt), antworte nur mit OK. Sonst gib den "
+         "berichtigten Antworttext vollständig aus, ohne Vorbemerkung und ohne neue Zahlen.")
+MAX_FACTS = 6000
+
+
+def _facts(proposal: dict[str, Any]) -> str:
+    """Was ein Vorschlag zeigt, knapp und aus dem gerechneten Bericht: Grundlage der
+    Selbstprüfung. Nur Namen und Anzahlen, die das Modell ohnehin gesehen hat."""
+    kinds = {"metric": "Ansicht", "dashboard": "Dashboard", "template": "Bericht"}
+    lines = [f"{kinds.get(str(proposal.get('kind')), 'Vorschlag')} „{proposal.get('name')}“"]
+    blocks = (proposal.get("report") or {}).get("blocks") or []
+    for block in blocks:
+        if block.get("type") == "text":
+            lines.append("- Text-Abschnitt")
+        elif block.get("type") == "table":
+            rows = block.get("rows") or []
+            names = [str(r.get("label")) for r in rows[:15]]
+            columns = [str(c.get("label")) for c in (block.get("columns") or [])[:12]]
+            groups = [str(g[0]) for g in block.get("header_groups") or []]
+            lines.append(
+                f"- Tabelle „{block.get('title')}“ ({(block.get('view') or {}).get('type')}): "
+                f"{len(rows)} Zeilen ({', '.join(names)}{' …' if len(rows) > 15 else ''}); "
+                f"Spalten: {', '.join(columns)}"
+                + (f"; Blöcke: {', '.join(groups)}" if groups else ""))
+            lines += [f"  Hinweis: {str(n.get('text'))[:200]}"
+                      for n in (block.get("notes") or [])[:3]]
+        elif block.get("type") == "failure":
+            lines.append(f"- gescheitert: {block.get('title')}")
+    if not blocks:
+        spec = proposal.get("spec") or {}
+        lines += [f"- {item.get('title') or item.get('type')}"
+                  for item in spec.get("tiles") or spec.get("sections") or []]
+    return "\n".join(lines)[:MAX_FACTS]
+
+
+async def _checked(llm: LlmClient, messages: list[dict[str, Any]], text: str,
+                   facts: list[str]) -> str:
+    """Lässt das Modell seinen Text einmal gegen die Vorschläge prüfen. Scheitert das oder
+    kommt nichts Brauchbares, bleibt der Text."""
+    try:
+        answer = await llm.chat([*messages, {"role": "assistant", "content": text}, {
+            "role": "user", "content": CHECK + "\n\n" + "\n".join(facts)[:MAX_FACTS]}], None)
+    except LlmError:
+        return text
+    reply = (answer["content"] or "").strip()
+    return text if not reply or reply.strip(" .!\"„“").upper() == "OK" else reply
+
+
 async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
                    history: list[dict[str, str]]) -> AsyncIterator[dict[str, Any]]:
     """Ereignisse einer Antwort: ``step`` je Werkzeugaufruf, ``proposal`` je Vorschlag, am
     Ende ``final`` oder ``error``."""
     proposals: list[dict[str, Any]] = []
     toolbox.on_proposal = proposals.append
+    questions: list[dict[str, Any]] = []
+    toolbox.on_question = questions.append
+    facts: list[str] = []
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}, *history]
     used = 0
     said = ""  # letzter Text des Modells neben Werkzeugaufrufen
@@ -261,6 +319,8 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
             if not calls:
                 text = (answer["content"] or "").strip() or said or (
                     "Siehe die Vorschläge oben." if shown else "Dazu habe ich keine Antwort.")
+                if facts and not last and time.monotonic() - started < MAX_SECONDS:
+                    text = await _checked(llm, messages, text, facts)
                 if len(text) > MAX_ANSWER_CHARS:
                     text = text[:MAX_ANSWER_CHARS - 40].rstrip() + "\n\n(Antwort gekürzt)"
                 yield {"type": "final", "text": text, "html": markdown_to_html(text, 2)}
@@ -287,6 +347,9 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
                 messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
                 while proposals:
                     shown += 1
+                    facts.append(_facts(proposals[0]))
                     yield {"type": "proposal", **proposals.pop(0)}
+                while questions:
+                    yield {"type": "choices", **questions.pop(0)}
     except LlmError as exc:
         yield {"type": "error", "kind": exc.kind, "detail": exc.message}

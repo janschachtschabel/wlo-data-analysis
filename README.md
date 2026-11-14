@@ -278,6 +278,14 @@ Rechner mit mindestens fünf Materialien einzeln.
   das Sprachmodell und gilt dort als Material, nicht als Anweisung. Gescannte PDFs ohne
   Textebene werden abgewiesen.
 
+- **Selbstprüfung und Rückfrage:** Nach einer Antwort mit Vorschlag prüft das Modell seinen
+  Text einmal gegen das, was der Vorschlag wirklich zeigt, und berichtigt ihn. Ist ein
+  Auftrag mehrdeutig, fragt der Assistent mit zwei bis vier Antworten zum Anklicken nach
+  (`ask_choice`).
+- **Gleichnamige Werte:** Trägt ein Feld mehrere Vokabulare, bekommen gleichnamige Werte den
+  Namen ihres Vokabulars dazu, bei WLO „Mathematik (Schule)“ und „Mathematik
+  (Hochschule)“. Welche Vokabulare wie heißen, steht an der Instanz (`vocab_names`, auch
+  in `WDA_INSTANCES`).
 - **Berichte vorschlagen:** Neben Ansicht und Dashboard schlägt der Assistent ganze
   Berichte vor (`propose_template`): Text mit Platzhaltern, Tabellen, Grafiken und
   gegliederte Tabellen mit Zeilengruppen, Spalten und Abfrage-Blöcken, auch aus einer
