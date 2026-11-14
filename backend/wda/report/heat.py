@@ -8,11 +8,13 @@ import math
 from .model import Table
 
 STEPS = 6
+RATE_GAP = 50
 _PLAIN = {"total", "missing"}
 
 
 def scale_of(table: Table) -> str:
-    """``rate`` (Ampel für Anteile in Prozent) oder ``count`` (Skala über die Zählungen)."""
+    """``rate`` (Anteile in Prozent, gefärbt nach dem Wert selbst) oder ``count`` (Skala
+    über die Zählungen)."""
     wanted = (table.view.get("options") or {}).get("scale")
     if wanted in ("rate", "count"):
         return wanted
@@ -37,7 +39,7 @@ def classes(table: Table) -> list[list[str]]:
     """Klasse je Zelle: ``h1``…``h6`` nach der Wurzel des Anteils am größten Wert, ``gap``
     für 0, leer für unbekannt. Summen- und „ohne Wert“-Zeilen bleiben ungefärbt."""
     scale = scale_of(table)
-    # „Anzahl“ neben anderen Spalten bleibt ungefärbt; die Ampel färbt nur Prozent-Spalten
+    # „Anzahl“ neben anderen Spalten bleibt ungefärbt; bei Anteilen sind nur Prozent-Spalten gefärbt
     skip = [(len(table.columns) > 1 and c.id == "count")
             or (scale == "rate" and not c.label.rstrip().endswith("%")) for c in table.columns]
     numbers = [v for row in table.rows if row.kind not in _PLAIN
@@ -63,7 +65,9 @@ def classes(table: Table) -> list[list[str]]:
                     or isinstance(value, bool)):
                 line.append("")
             elif scale == "rate":
-                line.append("r-low" if value < 50 else "r-mid" if value < 80 else "r-high")
+                # dasselbe Schema wie bei Zählungen: unter 50 % rot, darüber Blau nach dem Wert
+                line.append("gap" if value < RATE_GAP
+                            else f"h{min(STEPS, max(1, math.ceil(value / 100 * STEPS)))}")
             elif value <= 0 or top <= 0:
                 line.append("gap" if zero == "gap" and value == 0 else "")
             else:
@@ -74,9 +78,9 @@ def classes(table: Table) -> list[list[str]]:
 
 def legend(table: Table) -> str:
     if scale_of(table) == "rate":
-        return ('<p class="legend"><span class="key r-low"></span> unter 50 % '
-                '<span class="key r-mid"></span> 50 bis unter 80 % '
-                '<span class="key r-high"></span> ab 80 %</p>')
+        return ('<p class="legend"><span class="key gap"></span> unter 50 % '
+                '<span class="key h3"></span> 50 % '
+                '<span class="key h6"></span> 100 %</p>')
     by_column = (table.view.get("options") or {}).get("scale_by") == "column"
     return ('<p class="legend">'
             + ('<span class="key gap"></span> 0 (Lücke) ' if zero_of(table) == "gap" else "")
@@ -91,13 +95,9 @@ tr td.h1 { background: #edf3fb; } tr td.h2 { background: #dbe7f7; }
 tr td.h3 { background: #c5d8f2; } tr td.h4 { background: #abc6ec; }
 tr td.h5 { background: #8fb3e5; } tr td.h6 { background: #729fdd; }
 tr td.gap { background: #f2c4c0; }
-tr td.r-low { background: #f2c4c0; }
-tr td.r-mid { background: #f8e7b0; } tr td.r-high { background: #c9e8d5; }
 .legend { font-size: 8pt; color: #444; margin: .2rem 0; }
 .key { display: inline-block; width: 10px; height: 10px; border: 1px solid #999;
        margin: 0 2px 0 8px; vertical-align: middle; }
 .key.h1 { background: #edf3fb; } .key.h3 { background: #c5d8f2; } .key.h6 { background: #729fdd; }
 .key.gap { background: #f2c4c0; }
-.key.r-low { background: #f2c4c0; } .key.r-mid { background: #f8e7b0; }
-.key.r-high { background: #c9e8d5; }
 """

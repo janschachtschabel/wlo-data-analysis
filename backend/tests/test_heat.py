@@ -25,12 +25,12 @@ def test_total_and_missing_rows_do_not_set_the_scale():
     assert heat.classes(t) == [["h6"], [""], [""]]
 
 
-def test_rates_are_a_traffic_light_and_the_count_stays_plain():
+def test_rates_use_the_same_colours_and_the_count_stays_plain():
     t = table([("count", "Anzahl", False), ("f", "Fach %", True)],
               [("value", [900, 12.5]), ("value", [5, 79.9]), ("value", [5, 80]),
                ("value", [0, None])])
     assert heat.scale_of(t) == "rate"
-    assert heat.classes(t) == [["", "r-low"], ["", "r-mid"], ["", "r-high"], ["", ""]]
+    assert heat.classes(t) == [["", "gap"], ["", "h5"], ["", "h5"], ["", ""]]
 
 
 def test_scale_follows_the_columns_unless_given():
@@ -63,4 +63,12 @@ def test_count_column_beside_others_is_never_shaded_and_fill_tables_shade_the_ra
     per_field = table([("filled", "mit Wert", False), ("missing", "ohne Wert", True),
                        ("rate", "Füllgrad %", True)], [("value", [10, 90, 10.0])])
     assert heat.scale_of(per_field) == "rate"
-    assert heat.classes(per_field) == [["", "", "r-low"]]
+    assert heat.classes(per_field) == [["", "", "gap"]]
+
+
+def test_rates_are_shaded_by_their_own_value_and_have_no_other_colours():
+    t = table([("count", "Anzahl", False), ("f", "Fach %", True)],
+              [("value", [1, 0]), ("value", [1, 49.9]), ("value", [1, 50]), ("value", [1, 100])])
+    assert heat.classes(t) == [["", "gap"], ["", "gap"], ["", "h3"], ["", "h6"]]
+    assert "unter 50 %" in heat.legend(t)
+    assert "r-low" not in heat.CSS and "r-mid" not in heat.CSS and "r-high" not in heat.CSS

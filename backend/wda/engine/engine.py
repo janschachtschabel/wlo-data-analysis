@@ -729,7 +729,7 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
     def shown(value: int | None, total: int | None) -> Number | None:
         return _share(value, total) if share else value
 
-    # „(%)“ statt „%“: Anteile eines Merkmals sind kein Füllgrad, die Ampel passt nicht
+    # „(%)“ statt „%“: Anteile eines Merkmals sind kein Füllgrad, dessen Färbung passt nicht
     suffix = " (%)" if share else ""
     columns: list[dict[str, Any]] = [
         {"id": "count", "label": "Anzahl", "derived": False, "total": main.total}]

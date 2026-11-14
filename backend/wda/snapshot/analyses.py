@@ -40,7 +40,7 @@ class Analysis:
     id: str
     title: str
     measures: tuple[Measure, ...]
-    rate: bool = False   # Anteile sind Füllgrade (hoch ist gut): Ampel
+    rate: bool = False   # Anteile sind Füllgrade (hoch ist gut): gefärbt nach dem Wert
     note: str = ""
 
 

@@ -15,11 +15,17 @@ describe('Eingefärbte Tabelle', () => {
     expect(out).toEqual([['h6'], [''], ['']]);
   });
 
-  it('zeigt Anteile als Ampel und lässt die Anzahl ungefärbt', () => {
+  it('zeigt Anteile im selben Schema: unter 50 % rot, darüber blau nach dem Wert und lässt die Anzahl ungefärbt', () => {
     const columns = [col('count', 'Anzahl'), col('f', 'Fach %', true)];
     expect(heatScale(columns)).toBe('rate');
     expect(heatClasses(columns, [row('value', [900, 12.5]), row('value', [5, 79.9]), row('value', [5, 80]), row('value', [0, null])],
-      'rate')).toEqual([['', 'r-low'], ['', 'r-mid'], ['', 'r-high'], ['', '']]);
+      'rate')).toEqual([['', 'gap'], ['', 'h5'], ['', 'h5'], ['', '']]);
+  });
+
+  it('stuft Anteile nach dem Wert selbst ab', () => {
+    const columns = [col('count', 'Anzahl'), col('f', 'Fach %', true)];
+    expect(heatClasses(columns, [row('value', [1, 0]), row('value', [1, 49.9]), row('value', [1, 50]), row('value', [1, 100])], 'rate'))
+      .toEqual([['', 'gap'], ['', 'gap'], ['', 'h3'], ['', 'h6']]);
   });
 
   it('erkennt die Skala an den Spalten, außer sie ist vorgegeben', () => {
@@ -34,7 +40,7 @@ describe('Eingefärbte Tabelle', () => {
       'count')).toEqual([['', 'h6'], ['', 'gap']]);
     const perField = [col('filled', 'mit Wert'), col('missing', 'ohne Wert', true), col('rate', 'Füllgrad %', true)];
     expect(heatScale(perField)).toBe('rate');
-    expect(heatClasses(perField, [row('value', [10, 90, 10])], 'rate')).toEqual([['', '', 'r-low']]);
+    expect(heatClasses(perField, [row('value', [10, 90, 10])], 'rate')).toEqual([['', '', 'gap']]);
   });
 
   it('lässt 0 ungefärbt, wo 0 der gute Fall ist, und rechnet auf Wunsch je Spalte', () => {

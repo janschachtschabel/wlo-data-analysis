@@ -49,7 +49,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     @if (heat(); as scale) {
       <p class="legend muted">
         @if (scale === 'rate') {
-          <span class="key r-low"></span> unter 50 % <span class="key r-mid"></span> 50 bis unter 80 % <span class="key r-high"></span> ab 80 %
+          <span class="key gap"></span> unter 50 % <span class="key h3"></span> 50 % <span class="key h6"></span> 100 %
         } @else {
           @if (heatOptions().zero !== 'plain') { <span class="key gap"></span> 0 (Lücke) }
           <span class="key h1"></span> wenig <span class="key h3"></span> <span class="key h6"></span> viel
@@ -68,20 +68,14 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     table.data tr td.h4 { background: color-mix(in srgb, var(--accent) calc(34% * var(--heat-strength, 1)), transparent); }
     table.data tr td.h5 { background: color-mix(in srgb, var(--accent) calc(45% * var(--heat-strength, 1)), transparent); }
     table.data tr td.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
-    /* Lücke und „unter 50 %“ tragen auf allen Seiten dasselbe Rot, ohne Rahmen und Striche */
+    /* ein Schema für alle Tabellen: Blau für Menge oder Anteil, Rot für Lücke (0 oder unter 50 %) */
     table.data tr td.gap { background: color-mix(in srgb, var(--danger) 22%, transparent); }
-    table.data tr td.r-low { background: color-mix(in srgb, var(--danger) 22%, transparent); }
-    table.data tr td.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
-    table.data tr td.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
     /* in gefärbten Zellen bleibt auch der Zusatz (Anteil, Veränderung) in Textfarbe lesbar */
     td[class]:not([class=""]) .pct, td[class]:not([class=""]) .delta { color: inherit; }
     .key.h1 { background: color-mix(in srgb, var(--accent) 7%, transparent); }
     .key.h3 { background: color-mix(in srgb, var(--accent) 24%, transparent); }
     .key.h6 { background: color-mix(in srgb, var(--accent) calc(57% * var(--heat-strength, 1)), transparent); }
     .key.gap { background: color-mix(in srgb, var(--danger) 22%, transparent); }
-    .key.r-low { background: color-mix(in srgb, var(--danger) 22%, transparent); }
-    .key.r-mid { background: color-mix(in srgb, #e0a800 28%, transparent); }
-    .key.r-high { background: color-mix(in srgb, var(--ok) 24%, transparent); }
     .legend { font-size: 12px; margin: 6px 0 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .key { display: inline-block; width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 3px; margin-left: 8px; }
     th.block { text-align: center; border-left: 1px solid var(--border); }
@@ -95,7 +89,7 @@ export class ResultTable {
   readonly rows = input.required<ResultRow[]>();
   readonly rowTitle = input('');
   readonly headerGroups = input<[string, number][] | null | undefined>(null);
-  /** Zellen einfärben: nach Zählung oder als Ampel für Anteile */
+  /** Zellen einfärben: nach Zählung oder nach Anteil, im selben Farbschema */
   readonly heat = input<HeatScale | null>(null);
   readonly heatOptions = input<HeatOptions>({});
   protected readonly shades = computed(() => {

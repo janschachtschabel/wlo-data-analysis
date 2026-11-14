@@ -48,3 +48,13 @@ Behoben:
 - Die Breiten der Kacheln werden einmal je Vorschlag berechnet statt bei jeder Prüfung der Ansicht.
 
 Offen, gering: Lücken heben sich im Graustufendruck nur schwach ab (gewollt, ohne Rahmen).
+
+## Nachtrag: ein Farbschema für alle Tabellen
+
+**Anlass:** Jan (2026-11-14, 12:39 Berlin): „bei den füllgraden bitte das farbschematas ebenfalls anpassen auf das einheitliche schemata das du auch bei abdeckung usw nutzt. bitte prüfe dann nochmal ob die farbschematas überall einheitlich sind“
+
+- Die Ampel (rot, gelb, grün) für Anteile entfällt. Anteile in Prozent nutzen dieselben Klassen wie Zählungen: unter 50 % `gap` (rot wie eine Lücke), darüber `h3` bis `h6` nach dem Wert selbst (50 % = Stufe 3, 100 % = Stufe 6). Legende: „unter 50 %, 50 %, 100 %“. Gleich in Oberfläche (`shared/heat.ts`) und Export (`report/heat.py`); die Klassen `r-low`, `r-mid`, `r-high` gibt es nicht mehr.
+- Reiter „Füllgrade“: Die drei Tabellen sind jetzt eingefärbt (`datenqualitaet.json`, vorher schlichte Tabellen).
+- Grafiken: Die Reihe „ohne Wert“ trägt dasselbe Rot wie die Lücke (`--gap-fill`), „mit Wert“ bleibt blau.
+- Geprüft: Eingefärbte Zellen entstehen nur in `shared/result-table.ts` und `report/heat.py`; im Durchlauf über „Füllgrade“, „Datenprobleme“ und „Quellen“ kommen nur `gap` und `h1` bis `h6` vor. Die acht Reihenfarben der Grafiken bleiben für Kategorien (anderer Zweck).
+- Offen: In Tabellen „ohne Wert“ (Anzahl fehlender Angaben) heißt dunkles Blau „viel fehlt“.

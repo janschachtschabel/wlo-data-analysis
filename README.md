@@ -167,7 +167,7 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
   Unterwerten (Fächergruppen der Hochschulsystematik statt 259 einzelner Fächer). Im Explorer
   die Schalter „Vokabular“ und „oberste Ebene“.
 - Darstellung `heatmap`: die Tabelle mit eingefärbten Zellen, 0 als rötlich hinterlegte Lücke; für
-  Prozent-Spalten eine Ampel (unter 50 rot, unter 80 gelb). Auch im HTML- und PDF-Export.
+  Prozent-Spalten dasselbe Schema nach dem Wert selbst (unter 50 rot, darüber blau, je dunkler desto höher). Auch im HTML- und PDF-Export.
 - Der Menüpunkt „Qualität“ zeigt die mitgelieferten Dashboards „Abdeckung“ (Fach ×
   Bildungsstufe, Materialart, Lizenz, Quelle), „Füllgrade“ und „Datenprobleme“ als Reiter.
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie

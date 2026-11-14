@@ -3,12 +3,14 @@ import { ResultRow } from '../core/types';
 export type HeatScale = 'count' | 'rate';
 export const HEAT_STEPS = 6;
 
-/** Ampel für Anteile in Prozent: unter 50 niedrig, unter 80 mittel, sonst hoch. */
+/** Anteile in Prozent im selben Schema wie Zählungen: unter 50 rot wie eine Lücke, darüber
+ *  die blaue Skala nach dem Wert selbst (50 % = Stufe 3, 100 % = Stufe 6). */
+export const RATE_GAP = 50;
 export function rateClass(value: number): string {
-  return value < 50 ? 'r-low' : value < 80 ? 'r-mid' : 'r-high';
+  return value < RATE_GAP ? 'gap' : 'h' + Math.min(HEAT_STEPS, Math.max(1, Math.ceil((value / 100) * HEAT_STEPS)));
 }
 
-/** Prozent-Spalten (Füllgrad)? Dann taugt die Ampel, sonst die Skala über die Zählungen. */
+/** Prozent-Spalten (Füllgrad)? Dann zählt der Wert selbst, sonst das Verhältnis zum größten Wert. */
 export function heatScale(columns: { id: string; label: string; derived: boolean }[], wanted?: unknown): HeatScale {
   if (wanted === 'rate' || wanted === 'count') return wanted;
   if (columns.map((c) => c.id).join() === 'filled,missing,rate') return 'rate'; // Füllgrade je Feld
@@ -20,7 +22,7 @@ export function heatScale(columns: { id: string; label: string; derived: boolean
  * Klasse je Zelle einer eingefärbten Tabelle (dieselbe Regel wie im HTML-Export,
  * backend/wda/report/formats.py): `h1`…`h6` nach der Wurzel des Anteils am größten Wert,
  * `gap` für 0, nichts für unbekannt. Summen- und „ohne Wert“-Zeilen bleiben ungefärbt.
- * Die Ampel färbt nur Prozent-Spalten; die Spalte „Anzahl“ (`count`) neben anderen Spalten
+ * Bei Anteilen sind nur Prozent-Spalten gefärbt; die Spalte „Anzahl“ (`count`) neben anderen Spalten
  * bleibt immer ungefärbt und bestimmt die Skala nicht.
  */
 export interface HeatOptions { zero?: 'gap' | 'plain'; by?: 'table' | 'column' }

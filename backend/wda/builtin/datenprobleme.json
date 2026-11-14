@@ -4,7 +4,7 @@
  "builtin": {
   "id": "datenprobleme",
   "title": "Datenprobleme",
-  "description": "Wo stimmen die Metadaten nicht? Fehlende Angaben mit Ampel, Lücken je Quelle, Werte außerhalb der Vokabulare, gemischte Schreibweisen, unklare Lizenzangaben."
+  "description": "Wo stimmen die Metadaten nicht? Fehlende Angaben farbig markiert, Lücken je Quelle, Werte außerhalb der Vokabulare, gemischte Schreibweisen, unklare Lizenzangaben."
  },
  "groups": [
   {
@@ -17,7 +17,7 @@
    "id": "builtin-datenprobleme",
    "kind": "dashboard",
    "name": "Datenprobleme",
-   "description": "Hinweise auf Datenprobleme, allein aus Zählungen. Ampel: unter 50 % rot, unter 80 % gelb. Werte außerhalb des Vokabulars sind Feldwerte mit ihrer Häufigkeit, keine einzelnen Materialien. Gemessen an WLO Produktion.",
+   "description": "Hinweise auf Datenprobleme, allein aus Zählungen. Füllgrade unter 50 % sind rot, darüber blau (je dunkler, desto vollständiger). Werte außerhalb des Vokabulars sind Feldwerte mit ihrer Häufigkeit, keine einzelnen Materialien. Gemessen an WLO Produktion.",
    "group_id": "builtin-berichte",
    "spec": {
     "instance": "wlo-prod",

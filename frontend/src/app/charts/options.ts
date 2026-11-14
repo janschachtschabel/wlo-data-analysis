@@ -7,7 +7,7 @@ export interface ChartInput {
   /** Füllgrade: sagt, welche Spalten in eine Grafik dürfen */
   fill?: FillInfo | null;
 }
-export interface Palette { series: string[]; surface: string; text: string; muted: string; grid: string }
+export interface Palette { series: string[]; surface: string; text: string; muted: string; grid: string; gap?: string }
 
 export const MAX_BARS = 25;
 export const MAX_SERIES = 8; // so viele Farben sind unterscheidbar; mehr wird nicht gezeichnet
@@ -131,13 +131,18 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
       series: columns.map((c, position) => ({
         name: c.label, type: 'bar', stack: stacked ? 'gesamt' : undefined, barMaxWidth: 24,
         itemStyle: stacked
-          ? { borderColor: palette.surface, borderWidth: 1,
+          ? { borderColor: palette.surface, borderWidth: 1, ...gapColor(c, palette),
               borderRadius: position === columns.length - 1 ? [0, 4, 4, 0] : 0 }
-          : { borderRadius: [0, 4, 4, 0] },
+          : { borderRadius: [0, 4, 4, 0], ...gapColor(c, palette) },
         data: rows.map((r) => r.values[c.index]),
       })),
     },
   };
+}
+
+/** „ohne Wert“ trägt in Grafiken dasselbe Rot wie die Lücke in den Tabellen. */
+function gapColor(column: { id?: string }, palette: Palette): { color?: string } {
+  return (column.id === 'missing' || column.id === '__missing__') && palette.gap ? { color: palette.gap } : {};
 }
 
 export interface HistoryInput {

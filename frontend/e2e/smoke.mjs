@@ -314,7 +314,7 @@ await page.click(".tabs >> text=Abdeckung");
 await page.waitForSelector('app-report-view td.h6', { timeout: 60000 });
 assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, 'Heatmap ist eingefärbt');
 await page.click('.tabs >> text=Datenprobleme');
-await page.waitForSelector('app-report-view td.r-mid, app-report-view td.r-low, app-report-view td.r-high', { timeout: 60000 });
+await page.waitForSelector('app-report-view td.gap, app-report-view td.h3, app-report-view td.h4, app-report-view td.h5, app-report-view td.h6', { timeout: 60000 });
 await page.waitForSelector('app-report-view td:has-text("political")');
 // Kontext: dieselbe Auswertung nur für eine Quelle; gespeichert wird so nichts
 await page.selectOption('select[name="context"]', 'ccm:replicationsource');
@@ -350,7 +350,7 @@ await page.click('app-snapshot-panel button:has-text("Abzug starten")');
 await page.waitForSelector('app-snapshot-panel >> text=400 Materialien, Stand', { timeout: 60000 });
 await page.waitForSelector('app-report-view :text("Verdacht auf Dubletten")', { timeout: 60000 });
 await page.screenshot({ path: process.env.SHOT_TIEFE ?? '/dev/null', fullPage: true }).catch(() => undefined);
-await page.waitForSelector('app-report-view td.r-high, app-report-view td.r-mid, app-report-view td.r-low');
+await page.waitForSelector('app-report-view td.gap, app-report-view td.h3, app-report-view td.h4, app-report-view td.h5, app-report-view td.h6');
 assert.ok(!(await page.content()).includes('Material Nummer'), 'Titel aus dem Repositorium stehen in der Seite');
 await page.screenshot({ path: process.env.SHOT_TIEFE ?? '/dev/null', fullPage: true }).catch(() => undefined);
 await page.goto(base + '/bibliothek');

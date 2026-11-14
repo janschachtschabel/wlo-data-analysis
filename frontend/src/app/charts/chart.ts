@@ -15,7 +15,7 @@ function readPalette(element: HTMLElement): Palette {
   const read = (name: string) => style.getPropertyValue(name).trim();
   return {
     series: [1, 2, 3, 4, 5, 6, 7, 8].map((n) => read('--series-' + n)),
-    surface: read('--surface'), text: read('--text'), muted: read('--muted'), grid: read('--border'),
+    surface: read('--surface'), text: read('--text'), muted: read('--muted'), grid: read('--border'), gap: read('--gap-fill'),
   };
 }
 
@@ -31,14 +31,14 @@ function readPalette(element: HTMLElement): Palette {
   styles: `
     :host { display: block;
       --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
-      --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948; }
+      --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948; --gap-fill: #e7aeaa; }
     :host-context([data-theme="dark"]) {
       --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
-      --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; }
+      --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; --gap-fill: #8a4f52; }
     @media (prefers-color-scheme: dark) {
       :host-context(html:not([data-theme="light"])) {
         --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
-        --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; }
+        --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; --gap-fill: #8a4f52; }
     }
     .plot { width: 100%; }
     .small { font-size: 12px; margin: 4px 0 0; }
