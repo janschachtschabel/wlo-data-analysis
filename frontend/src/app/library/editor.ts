@@ -128,7 +128,12 @@ export class Editor {
       const def = this.definition();
       const usable = def && (def.kind === 'dashboard' || def.kind === 'template');
       untracked(() => this.chat.target.set(usable ? {
-        name: def.name, add: (tiles) => { this.form()?.addItems(tiles); this.message.set('Übernommen, noch nicht gespeichert.'); } } : null));
+        name: def.name, add: (tiles) => {
+          const form = this.form();
+          if (!form) { this.message.set('Nicht übernommen: Die Spezifikation ist gerade kein gültiges JSON.'); return; }
+          form.addItems(tiles);
+          this.message.set('Übernommen, noch nicht gespeichert.');
+        } } : null));
     });
     inject(DestroyRef).onDestroy(() => this.chat.target.set(null));
     inject(DestroyRef).onDestroy(inject(Leave).register(() => {

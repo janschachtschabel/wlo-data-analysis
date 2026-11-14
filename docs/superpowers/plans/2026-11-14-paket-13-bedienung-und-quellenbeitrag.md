@@ -27,3 +27,21 @@
 3. `facet`, Schnellansichten, Route `/explorer`, Menü.
 4. Baukasten: Hilfe, Quellen-Dashboards, Übergabe an den Assistenten und zurück; Durchstich.
 5. Review, Befunde, Probe auf Jans Rechner.
+
+## Stand nach Review
+
+Frischer Reviewer, 36 Fälle zum Kontext gegen die Daten, Probe der Oberfläche mit Playwright. Kein kritischer Befund; kein neuer Weg zu Rohdaten.
+
+Behoben (Tests in `backend/tests/test_review_p13.py`):
+
+- Ein Merkmalsprofil mit Zeilen auf dem Feld des Kontexts zeigte in der Gesamtzeile den Gesamtbestand (sechs Kacheln „je Bezugsquelle“ unter „Quellen“). Der Filter bleibt jetzt, die Zeilen werden zur festen Auswahl, und das Profil rechnet Summen mit dem Filter. Eine eigene Auswahl der Kachel bleibt bestehen (Schnittmenge).
+- Entfallene Kacheln tragen die Fehlerart `not_applicable` und machen den Lauf nicht mehr „teilweise“ (Befund der Probe gegen WLO).
+- Es entfallen jetzt auch: Spalten auf dem Feld des Kontexts mit Anteilen je Zeile oder Lückenliste, Zeilen mit Gruppen oder `rollup`. „Übrige“ und „ohne Wert“ fallen nur bei genau einem Wert weg.
+- „Übernehmen“ aus dem Chat meldete Erfolg, obwohl die Spezifikation kein gültiges JSON war: jetzt mit klarer Meldung.
+- Lücken: Legende und Zelle haben dieselbe Farbe und einen feinen Rahmen (auch im Graustufendruck erkennbar), der Text im Export ist dunkler.
+
+Offen, gering:
+
+- Übernommene Kacheln nehmen gespeicherte Filter und Instanz des Quell-Dashboards nicht mit.
+- Der Knopf im Chat nennt den gespeicherten Namen; Grenzen (40 Kacheln, 60 Abschnitte) fallen erst beim Speichern auf; gleichnamige Dashboards sind in der Quellenliste nicht zu unterscheiden.
+- Kreuztabellen nach Quelle haben keine Spalte „übrige Quellen“.

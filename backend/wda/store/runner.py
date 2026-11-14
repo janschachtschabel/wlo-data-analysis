@@ -87,16 +87,23 @@ def _narrow(query: QuerySpec, scope: list[FilterIn]) -> tuple[QuerySpec, list[Fi
                 raise QueryError(_DROPPED.format(prop))
             query = query.model_copy(update={"vocab_check": query.vocab_check.model_copy(
                 update={"fields": fields})})
+        if rows is not None and rows.property == prop and (rows.groups or rows.rollup):
+            raise QueryError(_DROPPED.format(prop))
         if values and rows is not None and rows.property == prop and query.profile is not None:
-            # je Zeilenwert eine eigene Abfrage: die Auswahl ersetzt den Filter
+            # Die Zeilen werden zur festen Auswahl (eine eigene Auswahl der Kachel bleibt,
+            # gezeigt wird die Schnittmenge); der Filter bleibt, damit die Summen stimmen.
             query = query.model_copy(update={"rows": Rows(
-                property=prop, include=values, sort=rows.sort)})
+                property=prop, include=rows.include or values, sort=rows.sort)})
+            rest.append(flt)
             continue
         if values and columns is not None and columns.property == prop:
+            if query.percent == "row" or query.gaps is not None or len(values) > MAX_SERIES:
+                raise QueryError(_DROPPED.format(prop))
             query = query.model_copy(update={"columns": Columns(
-                property=prop, include=values[:MAX_SERIES])})
+                property=prop, include=values)})
             continue
-        if rows is not None and rows.property == prop and (rows.missing or rows.other):
+        if (rows is not None and rows.property == prop and len(values) == 1
+                and (rows.missing or rows.other)):
             # der Filter bleibt (die Summen stimmen); „ohne Wert“ und „Übrige“ gibt es
             # unter einem einzelnen Wert nicht
             query = query.model_copy(update={"rows": rows.model_copy(update={

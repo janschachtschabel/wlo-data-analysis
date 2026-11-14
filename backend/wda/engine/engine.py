@@ -644,8 +644,11 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
     row_prop, prop = rows_spec.property, profile.property
     if row_prop == prop:
         raise QueryError("Zeilen und Merkmal brauchen verschiedene Felder.")
+    # Mit einer festen Auswahl der Zeilen darf deren Feld auch gefiltert sein: Gezeigt wird
+    # die Schnittmenge, und die Summen gelten für den gefilterten Bestand.
+    narrowed = row_prop in base_props and bool(rows_spec.include)
     for name in (row_prop, prop):
-        if name in base_props:
+        if name in base_props and not (narrowed and name == row_prop):
             raise QueryError(
                 f"'{name}' steht auch in den Filtern; die Facette ignoriert den Filter auf "
                 "dem eigenen Feld. Bitte eines von beiden weglassen.")
@@ -671,6 +674,15 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
                   f"Die Werteliste von '{row_prop}' wurde vom Repositorium gekürzt; "
                   "seltene Werte fehlen.")
     keys = [i["value"] for i in include] if include else [k for k in counts if k.strip()]
+    per_row_base = base
+    if narrowed:
+        allowed = {v for c in base if c.property == row_prop for v in c.values}
+        keys = [k for k in keys if k in allowed]
+        # ein Material mit dem Wert der Zeile erfüllt den Filter bereits
+        per_row_base = tuple(c for c in base if c.property != row_prop)
+        notes.add("rows_filtered",
+                  f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern: Die Zeilen zeigen "
+                  "nur die gefilterten Werte.")
     rows = [_Row(k, await vocab.label(row_prop, k), "value") for k in keys]
     if rows_spec.match:
         rows = await _select_rows(rows, rows_spec, vocab, notes)
@@ -704,7 +716,7 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
         if not counts.get(row.key):
             return None
         try:
-            return await run.call(base + (Criterion(row_prop, (row.key,)),), prop)
+            return await run.call(per_row_base + (Criterion(row_prop, (row.key,)),), prop)
         except EduSharingError as exc:
             if not _refused(exc):
                 raise
