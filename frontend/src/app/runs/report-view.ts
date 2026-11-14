@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { Chart } from '../charts/chart';
 import { formatTime } from '../core/format';
 import { Report, ReportBlock } from '../core/types';
+import { heatScale } from '../shared/heat';
 import { ResultTable } from '../shared/result-table';
 
 /** Zeigt einen Bericht: Texte, Tabellen mit Grafik, Fehlerblöcke. Dashboards als Raster. */
@@ -28,7 +29,10 @@ import { ResultTable } from '../shared/result-table';
               @if (block.view.type === 'number') {
                 <div class="big">{{ headline(block) }}</div>
               } @else {
-                @if (block.view.type !== 'table') {
+                @if (block.view.type === 'heatmap') {
+                  <app-result-table [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups"
+                                    [heat]="scale(block)" />
+                } @else if (block.view.type !== 'table') {
                   <app-chart [data]="block" [view]="block.view.type" [label]="'Grafik: ' + block.title" />
                   <details><summary class="muted">Tabelle</summary>
                     <app-result-table [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" />
@@ -72,6 +76,9 @@ export class ReportView {
     if (!this.grid()) return null;
     const width = this.widths()?.[block.key] ?? 6;
     return `span ${Math.min(12, Math.max(3, width))}`;
+  }
+  protected scale(block: Extract<ReportBlock, { type: 'table' }>) {
+    return heatScale(block.columns, block.view.options?.['scale']);
   }
   protected headline(block: Extract<ReportBlock, { type: 'table' }>): string {
     const total = block.rows.find((r) => r.kind === 'total')?.values[0];

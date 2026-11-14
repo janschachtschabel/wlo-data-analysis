@@ -32,7 +32,8 @@ class _Model(BaseModel):
 
 
 class View(_Model):
-    type: Literal["table", "number", "bar", "stacked_bar", "line", "pie"] = "table"
+    type: Literal["table", "number", "bar", "stacked_bar", "line", "pie",
+                  "heatmap"] = "table"
     options: dict[Annotated[StrictStr, Field(max_length=60)], Scalar] = Field(
         default_factory=dict, max_length=40)
 

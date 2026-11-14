@@ -6,7 +6,7 @@ export interface ExplorerState { spec: QuerySpec; view: ViewType }
 export const MAX_STATE_LENGTH = 8000;
 export const MAX_FILL_FIELDS = 30;
 /** Darstellungen, die für Füllgrade taugen */
-export const FILL_VIEWS: ViewType[] = ['table', 'bar', 'stacked_bar'];
+export const FILL_VIEWS: ViewType[] = ['table', 'heatmap', 'bar', 'stacked_bar'];
 /** Felder, mit denen die Füllgrade beginnen, soweit die Instanz sie kennt */
 export const FILL_DEFAULTS = ['ccm:taxonid', 'ccm:educationalcontext', 'ccm:oeh_lrt_aggregated', 'ccm:commonlicense_key',
   'ccm:replicationsource', 'cclom:general_language', 'ccm:educationalintendedenduserrole'];
@@ -19,7 +19,7 @@ export function fillDefaults(fields: FieldInfo[], skip = ''): { property: string
     : fields.map((f) => f.property).filter((p) => p !== skip && !p.startsWith('virtual:')).slice(0, 6);
   return chosen.map((property) => ({ property }));
 }
-const VIEWS: ViewType[] = ['table', 'number', 'bar', 'stacked_bar', 'line', 'pie'];
+const VIEWS: ViewType[] = ['table', 'number', 'bar', 'stacked_bar', 'line', 'pie', 'heatmap'];
 
 export function valueOf(value: Value): string {
   return typeof value === 'string' ? value : value.value;
@@ -102,7 +102,7 @@ export function decodeState(text: string | null): { state: ExplorerState | null;
         clean.fill = { ...clean.fill, fields: clean.fill.fields.filter((f) => f.property !== clean.rows!.property) };
         if (!clean.fill.fields.length) return broken;
       }
-      if (!FILL_VIEWS.includes(view) || (clean.rows && view === 'stacked_bar')) view = 'table';
+      if (!FILL_VIEWS.includes(view) || (clean.rows && view === 'stacked_bar') || (!clean.rows && view === 'heatmap')) view = 'table';
     } else if (!clean.rows) { clean.fill = null; clean.rows = null; clean.columns = null; clean.percent = 'none'; view = 'table'; }
     else if (clean.columns?.property === clean.rows.property) clean.columns = null;
     if (view === 'number') view = 'table';

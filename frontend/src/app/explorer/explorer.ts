@@ -9,10 +9,11 @@ import { Instances } from '../core/instances';
 import { Definition, FieldInfo, FillShow, Filter, QueryResult, QuerySpec, ViewType } from '../core/types';
 import { FilterBar } from '../filters/filter-bar';
 import { ExplorerState, FILL_VIEWS, MAX_FILL_FIELDS, decodeState, emptyState, encodeState, fieldChoices, fillDefaults, replaceValue } from '../filters/state';
+import { heatScale } from '../shared/heat';
 import { ResultTable } from '../shared/result-table';
 
 const VIEWS: { id: ViewType; label: string }[] = [
-  { id: 'table', label: 'Tabelle' }, { id: 'bar', label: 'Balken' }, { id: 'stacked_bar', label: 'Gestapelt' },
+  { id: 'table', label: 'Tabelle' }, { id: 'heatmap', label: 'Heatmap' }, { id: 'bar', label: 'Balken' }, { id: 'stacked_bar', label: 'Gestapelt' },
   { id: 'line', label: 'Linie' }, { id: 'pie', label: 'Kreis' },
 ];
 
@@ -147,8 +148,9 @@ const VIEWS: { id: ViewType; label: string }[] = [
           }
         </div>
         @if (spec().rows || spec().fill) {
-          @if (view() !== 'table') { <app-chart [data]="data" [view]="view()" [label]="'Grafik: ' + (rowTitle() || 'Füllgrade')" /> }
-          <app-result-table [columns]="data.columns" [rows]="tableRows()" [rowTitle]="rowTitle() || (spec().fill ? 'Feld' : '')" />
+          @if (view() !== 'table' && view() !== 'heatmap') { <app-chart [data]="data" [view]="view()" [label]="'Grafik: ' + (rowTitle() || 'Füllgrade')" /> }
+          <app-result-table [columns]="data.columns" [rows]="tableRows()" [rowTitle]="rowTitle() || (spec().fill ? 'Feld' : '')"
+                            [heat]="view() === 'heatmap' ? heatScale(data.columns) : null" />
         }
         <details class="origin" [open]="data.provenance.notes.length > 0">
           <summary>Herkunft: abgerufen {{ time(data.provenance.fetched_at) }}{{ data.provenance.cached ? ' (aus dem Zwischenspeicher)' : '' }},
@@ -236,9 +238,11 @@ export class Explorer {
   protected readonly maxFill = MAX_FILL_FIELDS;
   protected readonly shownViews = computed(() => {
     if (!this.spec().fill) return VIEWS;
-    // gestapelt (mit Wert / ohne Wert) gibt es nur ohne Zeilenfeld
-    return VIEWS.filter((v) => FILL_VIEWS.includes(v.id) && (v.id !== 'stacked_bar' || !this.spec().rows));
+    // gestapelt (mit Wert / ohne Wert) gibt es nur ohne Zeilenfeld, die Heatmap nur mit
+    return VIEWS.filter((v) => FILL_VIEWS.includes(v.id) && (v.id !== 'stacked_bar' || !this.spec().rows)
+      && (v.id !== 'heatmap' || !!this.spec().rows));
   });
+  protected readonly heatScale = heatScale;
   protected readonly hasFill = (property: string) => !!this.spec().fill?.fields.some((f) => f.property === property);
   protected readonly suggestions = computed<{ id: string; label: string }[]>(() =>
     ((this.result.error()?.extra['suggestions'] ?? []) as any[]).slice(0, 6)

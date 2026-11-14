@@ -42,7 +42,7 @@ export interface Instance {
 export interface FieldInfo { property: string; caption: string; type: string; value_count: number }
 export interface VocabValue { id: string; caption: string; parent?: string | null }
 export interface VocabPage { property: string; caption: string; total: number; values: VocabValue[] }
-export type ViewType = 'table' | 'number' | 'bar' | 'stacked_bar' | 'line' | 'pie';
+export type ViewType = 'table' | 'number' | 'bar' | 'stacked_bar' | 'line' | 'pie' | 'heatmap';
 export interface View { type: ViewType; options?: Record<string, string | number | boolean | null> }
 export type Kind = 'filter' | 'metric' | 'dashboard' | 'template';
 export interface Definition {

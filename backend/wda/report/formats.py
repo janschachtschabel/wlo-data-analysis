@@ -10,6 +10,7 @@ import re
 from html import escape
 from typing import Any
 
+from . import heat
 from .build import format_number, format_time
 from .charts import chart_for
 from .compare import delta_text
@@ -237,7 +238,7 @@ table.many th { overflow-wrap: break-word; hyphens: auto; }
 thead { display: table-header-group; }
 tr { page-break-inside: avoid; }
 svg { max-width: 100%; height: auto; }
-"""
+""" + heat.CSS
 
 
 MAX_COLUMNS_PER_PART = 12
@@ -261,6 +262,9 @@ def _parts(table: Table) -> list[tuple[int, int, list[tuple[str, int]] | None]]:
 
 def _table_html(table: Table) -> str:
     out = []
+    heated = table.view.get("type") == "heatmap"
+    shades: list[list[str] | None] = (list(heat.classes(table)) if heated
+                                      else [None] * len(table.rows))
     for start, end, groups in _parts(table):
         out += ['<table class="many">' if end - start > 8 else "<table>", "<thead>"]
         if groups:
@@ -270,11 +274,16 @@ def _table_html(table: Table) -> str:
         out.append('<tr><th class="label"></th>' + "".join(
             f'<th class="{"derived" if c.derived else ""}">{escape(c.label)}</th>'
             for c in table.columns[start:end]) + "</tr></thead><tbody>")
-        for row in table.rows:
-            cells = "".join(f"<td>{escape(_cell(row, pos))}</td>" for pos in range(start, end))
+        for row, shade in zip(table.rows, shades, strict=True):
+            cells = "".join(
+                f'<td class="{shade[pos]}">{escape(_cell(row, pos))}</td>'
+                if shade and pos < len(shade) and shade[pos]
+                else f"<td>{escape(_cell(row, pos))}</td>" for pos in range(start, end))
             out.append(f'<tr class="{escape(row.kind)}"><td class="label l{row.level}">'
                        f"{escape(row.label)}</td>{cells}</tr>")
         out.append("</tbody></table>")
+    if heated:
+        out.append(heat.legend(table))
     items = [f"<li>{escape(n['text'])}</li>" for n in table.notes]
     items += [f"<li>Quelle: {escape(s)}</li>" for s in source_lines(table)]
     if any(c.derived for c in table.columns):

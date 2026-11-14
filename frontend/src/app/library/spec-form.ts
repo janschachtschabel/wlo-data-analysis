@@ -5,7 +5,7 @@ import { SectionSpec, TileSpec, WIDTHS, flowLayout, freeId, move } from './spec-
 
 const VIEW_LABELS: [string, string][] = [
   ['', 'wie die Kennzahl'], ['table', 'Tabelle'], ['number', 'Zahl'], ['bar', 'Balken'],
-  ['stacked_bar', 'Gestapelt'], ['line', 'Linie'], ['pie', 'Kreis'],
+  ['stacked_bar', 'Gestapelt'], ['line', 'Linie'], ['pie', 'Kreis'], ['heatmap', 'Heatmap'],
 ];
 const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle', chart: 'Grafik', matrix: 'Gegliederte Tabelle' };
 
