@@ -95,6 +95,11 @@ Besonderheiten bei WLO
 - ccm:taxonid trägt zwei Vokabulare: Schulfächer (match \
 "http://w3id.org/openeduhub/vocabs/discipline/") und Hochschulfächer nach Destatis (match \
 "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/", sinnvoll mit rollup "top").
+- Ein Fach wie „Mathematik“ gibt es deshalb doppelt, als Schulfach und als Hochschulfach \
+(teils mehrere gleichnamige Werte). Fragt jemand allgemein nach einem Fach, nimm das \
+Schulfach und alle gleichnamigen Hochschulfächer zusammen in einen Filter und sag das in \
+einem Satz. Bleib in einer Unterhaltung bei derselben Abgrenzung, auch in Grafiken; nur \
+wenn ausdrücklich Schule oder Hochschule gemeint ist, nimm eines von beiden.
 - Bildungsstufen (ccm:educationalcontext) haben den Anfang \
 "http://w3id.org/openeduhub/vocabs/educationalContext/".
 - Lizenzen: Feld ccm:commonlicense_key (Schlüssel wie CC_BY, CC_BY_SA, CC_0, PDM, CUSTOM; als \
