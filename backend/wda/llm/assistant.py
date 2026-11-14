@@ -12,8 +12,8 @@ from ..report.text import markdown_to_html
 from .client import LlmClient, LlmError
 from .tools import Toolbox
 
-MAX_ROUNDS = 8
-MAX_TOOL_CALLS = 16
+MAX_ROUNDS = 16
+MAX_TOOL_CALLS = 32
 
 GUIDE = """Du bist der Assistent eines Daten-Dashboards für ein edu-sharing-Repositorium mit \
 Bildungsmaterialien (Instanz: {instance}). Du hilfst, Bestand, Abdeckung und Datenqualität zu \
@@ -123,7 +123,7 @@ ccm:oeh_publisher_combined. Materialart: ccm:oeh_lrt_aggregated.
 
 _PROPERTY = re.compile(r"[\w:.\-]{1,120}")
 MAX_ANSWER_CHARS = 20000
-MAX_SECONDS = 240  # Zeitbudget einer Frage; danach wird mit dem Vorhandenen geantwortet
+MAX_SECONDS = 480  # Zeitbudget einer Frage; danach wird mit dem Vorhandenen geantwortet
 
 
 def _one_line(text: str) -> str:

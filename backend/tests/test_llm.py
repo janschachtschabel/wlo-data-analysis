@@ -405,11 +405,11 @@ def test_proposed_dashboard_gets_a_layout_and_failing_tiles_are_reported(api, mo
 
 def test_rounds_and_tool_calls_are_limited(api, model):
     loop = call(("list_fields", {}), ("list_fields", {}), ("list_fields", {}))
-    model.answers = [loop] * 20
+    model.answers = [loop] * 40
     events = chat(api)
     assert events[-1]["type"] == "final"
-    assert sum(1 for e in events if e["type"] == "step") == 16
-    assert len(model.requests) <= 9
+    assert sum(1 for e in events if e["type"] == "step") == 32
+    assert len(model.requests) <= 17
     last = model.bodies[-1]
     assert "tools" not in last and last["messages"][-1]["role"] == "user"
 

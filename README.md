@@ -253,7 +253,7 @@ Rechner mit mindestens fünf Materialien einzeln.
   exportiert werden darf. Es gibt kein Werkzeug, das Datensätze liefert, und keines, das
   speichert; Vorschläge legt erst der Admin an. Zahlen in den Karten stammen aus der
   Zählung, nicht vom Modell.
-- Grenzen je Frage: 8 Runden, 16 Werkzeugaufrufe, 30 Nachrichten Verlauf.
+- Grenzen je Frage: 16 Runden, 32 Werkzeugaufrufe, 8 Minuten, 30 Nachrichten Verlauf.
 
 ## Verwaltung und Läufe
 
