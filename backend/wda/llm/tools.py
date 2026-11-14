@@ -296,6 +296,10 @@ def _about(spec: Any) -> str:
         parts.append("Füllgrade")
     if isinstance(spec.get("vocab_check"), dict):
         parts.append("Werte außerhalb der Wertelisten")
+    if isinstance(spec.get("profile"), dict):
+        parts.append(f"Merkmal {str(spec['profile'].get('property'))[:60]} je Zeile")
+    if isinstance(spec.get("sizes"), dict):
+        parts.append(f"Größenklassen von {str(spec['sizes'].get('property'))[:60]}")
     if isinstance(rows, dict) and rows.get("property"):
         parts.append(f"nach {str(rows['property'])[:60]}")
     if isinstance(cols, dict) and cols.get("property"):

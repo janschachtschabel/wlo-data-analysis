@@ -49,6 +49,11 @@ oft Felder ausgefüllt sind; mit rows je Zeile (z. B. je Quelle). Nicht zusammen
 columns/series.
 - vocab_check: {{"fields": [{{"property": Feld}}, …]}} zählt je Feld Werte außerhalb der \
 Werteliste. Ohne rows.
+- profile: {{"property": Merkmal, "top": n, "show": "share"|"count"}} zusammen mit rows (mit \
+top bis 60): Ausprägungen eines Merkmals je Zeile, z. B. Kosten oder Werbung je Bezugsquelle. \
+Geht auch bei Feldern, die als Filter nicht zählbar sind. Darstellung heatmap.
+- sizes: {{"property": Feld}} ohne rows: Größenklassen, z. B. wie viele Bezugsquellen nur \
+ein Material haben.
 - match trennt Vokabulare in einem Feld. rollup "top" fasst einen Vokabularbaum auf der \
 obersten Ebene zusammen. vocab "outside" zeigt Werte, die die Werteliste nicht kennt \
 (Datenprobleme).

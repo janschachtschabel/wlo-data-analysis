@@ -292,6 +292,11 @@ assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, '
 await page.click('.tabs >> text=Datenprobleme');
 await page.waitForSelector('app-report-view td.r-mid, app-report-view td.r-low, app-report-view td.r-high', { timeout: 60000 });
 await page.waitForSelector('app-report-view td:has-text("political")');
+await page.click('.tabs >> text=Quellen');
+await page.waitForSelector('app-report-view :text("Kosten je Bezugsquelle")', { timeout: 60000 });
+await page.waitForSelector('app-report-view td:has-text("2 bis 4")');
+assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, 'Merkmale je Bezugsquelle sind eingefärbt');
+await page.screenshot({ path: process.env.SHOT_QUELLEN ?? '/dev/null', fullPage: true }).catch(() => undefined);
 await page.goto(base + '/bibliothek');
 await page.waitForSelector('section a:has-text("Abdeckung")');
 

@@ -104,6 +104,10 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         return await _execute_fill(spec, client, vocab, run)
     if spec.vocab_check is not None:
         return await _execute_vocab_check(spec, client, vocab, run)
+    if spec.profile is not None:
+        return await _execute_profile(spec, client, vocab, run)
+    if spec.sizes is not None:
+        return await _execute_sizes(spec, client, vocab, run)
     notes = Notes()
     prefix_fields = set(client.instance.prefix_fields)
     base_list, base_described = await resolve_filters(vocab, spec.filters)
@@ -531,6 +535,222 @@ async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab:
             "columns": [{"id": c["id"], "filters": [], "formula": None} for c in columns],
         },
     }
+
+
+def _result(spec: QuerySpec, client: EduSharingClient, run: _Run, notes: Notes,
+            columns: list[dict[str, Any]], rows: list[dict[str, Any]],
+            base_described: list, provenance_rows: dict[str, Any] | None) -> dict[str, Any]:
+    fetched = [r.fetched_at for r in run.results]
+    inst = client.instance
+    return {
+        "schema_version": SCHEMA_VERSION, "instance": spec.instance,
+        "columns": columns, "rows": rows,
+        "provenance": {
+            "fetched_at": max(fetched) if fetched else None,
+            "oldest_fetched_at": min(fetched) if fetched else None,
+            "cached": bool(run.results) and all(r.cached for r in run.results),
+            "queries": len(run.results), "notes": list(notes),
+            "instance": {"id": inst.id, "base_url": inst.base_url, "repository": inst.repository,
+                         "metadataset": inst.metadataset, "query": inst.query},
+            "spec": spec.model_dump(mode="json", exclude={"refresh"}),
+            "rows": provenance_rows, "filters": base_described,
+            "columns": [{"id": c["id"], "filters": [], "formula": None} for c in columns],
+        },
+    }
+
+
+async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
+                           run: _Run) -> dict[str, Any]:
+    """Ausprägungen eines Merkmals je Zeile. Je Zeilenwert eine Abfrage: der Wert als
+    Kriterium, das Merkmal als Facette. Zählt das Kriterium etwas anderes als die Facette
+    des Zeilenfelds (Präfix, andere Schreibweise), bleibt die Zeile unbekannt."""
+    profile, rows_spec = spec.profile, spec.rows
+    assert profile is not None and rows_spec is not None
+    notes = Notes()
+    prefix_fields = set(client.instance.prefix_fields)
+    base_list, base_described = await resolve_filters(vocab, spec.filters)
+    base = tuple(base_list)
+    base_props = {c.property for c in base}
+    row_prop, prop = rows_spec.property, profile.property
+    if row_prop == prop:
+        raise QueryError("Zeilen und Merkmal brauchen verschiedene Felder.")
+    for name in (row_prop, prop):
+        if name in base_props:
+            raise QueryError(
+                f"'{name}' steht auch in den Filtern; die Facette ignoriert den Filter auf "
+                "dem eigenen Feld. Bitte eines von beiden weglassen.")
+        if _helper(name):
+            raise QueryError(f"'{name}' ist eine Suchhilfe des Repositoriums, kein "
+                             "gespeichertes Feld.")
+    await vocab.check_facet(row_prop)
+    await vocab.check_facet(prop)
+    include = None
+    if rows_spec.include:
+        include = await resolve_values(vocab, row_prop, rows_spec.include)
+    check_prefix_shape(base, prefix_fields)
+
+    async def occurring(name: str):
+        return (await run.call((), name)).facets[name]
+
+    await check_prefix_values(occurring, list(base), prefix_fields, notes)
+    main, overall = await asyncio.gather(run.call(base, row_prop), run.call(base, prop))
+    row_facet, facet = main.facets[row_prop], overall.facets[prop]
+    counts = {v.value: v.count for v in row_facet.values}
+    if row_facet.truncated:
+        notes.add("facet_truncated",
+                  f"Die Werteliste von '{row_prop}' wurde vom Repositorium gekürzt; "
+                  "seltene Werte fehlen.")
+    keys = [i["value"] for i in include] if include else [k for k in counts if k.strip()]
+    rows = [_Row(k, await vocab.label(row_prop, k), "value") for k in keys]
+    if rows_spec.match:
+        rows = await _select_rows(rows, rows_spec, vocab, notes)
+    count_column = _Column("count", "Anzahl")
+    for row in rows:
+        count_column.cells[row.key] = counts.get(row.key, None if row_facet.truncated else 0)
+    rows = _sort_rows(rows, [count_column], rows_spec, include, False)
+    if rows_spec.top is not None and len(rows) > rows_spec.top:
+        notes.add("rows_top",
+                  f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
+        rows = rows[: rows_spec.top]
+
+    offered = sorted((v for v in facet.values if v.value.strip()),
+                     key=lambda v: (-v.count, v.value))
+    chosen = offered[: profile.top]
+    if len(offered) > len(chosen) or facet.truncated:
+        notes.add("columns_top",
+                  f"Spalten: die {len(chosen)} häufigsten Werte von '{prop}'; weitere Werte "
+                  "sind nicht dargestellt.")
+    field = await vocab.field(prop)
+    one_valued = prop in prefix_fields or (field is not None and field.type in SINGLE_TYPES)
+    with_missing = profile.missing and one_valued
+    if profile.missing and not one_valued:
+        notes.add("profile_multi",
+                  f"Ein Material kann mehrere Werte von '{prop}' tragen: Die Spalten "
+                  "überschneiden sich, und „ohne Angabe“ ist so nicht bestimmbar.")
+
+    async def one(row: _Row) -> Aggregate | None:
+        if not counts.get(row.key):
+            return None
+        try:
+            return await run.call(base + (Criterion(row_prop, (row.key,)),), prop)
+        except EduSharingError as exc:
+            if not _refused(exc):
+                raise
+            return None
+
+    per_row = await asyncio.gather(*[one(row) for row in rows])
+    share = profile.show == "share"
+
+    def shown(value: int | None, total: int | None) -> Number | None:
+        return _share(value, total) if share else value
+
+    suffix = " %" if share else ""
+    columns: list[dict[str, Any]] = [
+        {"id": "count", "label": "Anzahl", "derived": False, "total": main.total}]
+    for v in chosen:
+        columns.append({"id": v.value, "label": await vocab.label(prop, v.value) + suffix,
+                        "derived": share, "total": shown(v.count, main.total)})
+    if with_missing:
+        filled = sum(v.count for v in offered)
+        columns.append({"id": "__missing__", "label": "ohne Angabe" + suffix, "derived": True,
+                        "total": shown(main.total - filled, main.total)
+                        if 0 <= filled <= main.total and not facet.truncated else None})
+    out_rows, inexact = [], []
+    for row, agg in zip(rows, per_row, strict=True):
+        total = count_column.cells[row.key]
+        values: list[Number | None] = [total]
+        if total == 0:
+            values += [None if share else 0] * (len(columns) - 1)
+        elif agg is None or agg.total != total:
+            # das Kriterium zählt nicht dieselben Materialien wie die Facette der Zeile
+            inexact.append(row.label)
+            values += [None] * (len(columns) - 1)
+        else:
+            got = agg.facets[prop]
+            found = {v.value: v.count for v in got.values}
+            values += [shown(found.get(v.value, None if got.truncated else 0), total)
+                       for v in chosen]
+            if with_missing:
+                filled = sum(n for value, n in found.items() if value.strip())
+                values.append(shown(total - filled, total)
+                              if filled <= total and not got.truncated else None)
+        out_rows.append({"key": row.key, "label": row.label, "kind": "value", "values": values})
+    if inexact:
+        shown_rows = ", ".join(inexact[:5]) + (" …" if len(inexact) > 5 else "")
+        notes.add("profile_inexact",
+                  f"Nicht bestimmbar: {shown_rows}. Das Repositorium zählt den Wert als "
+                  "Filter anders als in der Werteliste (etwa als Wortanfang).")
+    notes.add("profile",
+              ("Anteile beziehen sich auf die Materialien der Zeile. " if share else "")
+              + "Je Zeile eine eigene Abfrage; „ohne Angabe“ ist die Anzahl der Zeile minus "
+              "der Summe der Werte." if with_missing else
+              ("Anteile beziehen sich auf die Materialien der Zeile. " if share else "")
+              + "Je Zeile eine eigene Abfrage.")
+    return _result(spec, client, run, notes, columns, out_rows, base_described,
+                   {"property": row_prop, "mode": "facet",
+                    "include": [i["value"] for i in include] if include else None,
+                    "groups": []})
+
+
+def _thousands(n: int) -> str:
+    return f"{n:,}".replace(",", ".")
+
+
+async def _execute_sizes(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
+                         run: _Run) -> dict[str, Any]:
+    """Größenklassen eines Feldes: eine Abfrage, die Werteliste wird nach der Zahl der
+    Materialien je Wert in Klassen gezählt. Einzelne Werte erscheinen nicht."""
+    sizes = spec.sizes
+    assert sizes is not None
+    notes = Notes()
+    prefix_fields = set(client.instance.prefix_fields)
+    base_list, base_described = await resolve_filters(vocab, spec.filters)
+    base = tuple(base_list)
+    prop = sizes.property
+    if prop in {c.property for c in base}:
+        raise QueryError(
+            f"'{prop}' steht auch in den Filtern; die Facette ignoriert den Filter auf dem "
+            "eigenen Feld. Bitte eines von beiden weglassen.")
+    await vocab.check_facet(prop)
+    check_prefix_shape(base, prefix_fields)
+
+    async def occurring(name: str):
+        return (await run.call((), name)).facets[name]
+
+    await check_prefix_values(occurring, list(base), prefix_fields, notes)
+    facet = (await run.call(base, prop)).facets[prop]
+    counted = [v.count for v in facet.values if v.value.strip() and v.count > 0]
+    n_values, n_uses = len(counted), sum(counted)
+    bounds = sizes.bounds
+    out_rows = []
+    for pos, low in enumerate(bounds):
+        high = bounds[pos + 1] - 1 if pos + 1 < len(bounds) else None
+        inside = [n for n in counted if n >= low and (high is None or n <= high)]
+        if high is None:
+            key, label = f"{low}+", f"ab {_thousands(low)}"
+        elif high == low:
+            key, label = str(low), _thousands(low)
+        else:
+            key, label = f"{low}-{high}", f"{_thousands(low)} bis {_thousands(high)}"
+        out_rows.append({"key": key, "label": label, "kind": "value",
+                         "values": [len(inside), _share(len(inside), n_values),
+                                    sum(inside), _share(sum(inside), n_uses)]})
+    columns = [
+        {"id": "values", "label": "verschiedene Werte", "derived": False, "total": n_values},
+        {"id": "values_share", "label": "Anteil der Werte %", "derived": True, "total": None},
+        {"id": "uses", "label": "Materialien", "derived": False, "total": n_uses},
+        {"id": "uses_share", "label": "Anteil der Materialien %", "derived": True,
+         "total": None}]
+    field = await vocab.field(prop)
+    caption = field.caption if field and field.caption else prop
+    notes.add("sizes",
+              f"Jede Zeile ist eine Größenklasse: Werte von „{caption}“ mit so vielen "
+              "Materialien. Ein Material mit mehreren Werten zählt bei jedem davon.")
+    if facet.truncated:
+        notes.add("facet_truncated",
+                  f"Die Werteliste von '{prop}' wurde vom Repositorium gekürzt; seltene "
+                  "Werte fehlen, die kleinen Klassen sind zu niedrig.")
+    return _result(spec, client, run, notes, columns, out_rows, base_described, None)
 
 
 # Ablehnungen des Repositoriums, die nur das eine Feld betreffen

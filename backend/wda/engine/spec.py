@@ -125,6 +125,36 @@ class VocabCheck(_Model):
         return self
 
 
+MAX_PROFILE_ROWS = 60
+
+
+class Profile(_Model):
+    """Ausprägungen eines Merkmals je Zeile, etwa Kosten je Quelle: je Zeilenwert eine
+    Abfrage mit der Facette des Merkmals. Geht deshalb auch bei Feldern, die das
+    Repositorium nicht als Filter zählt."""
+
+    property: Name
+    top: int = Field(default=8, ge=1, le=MAX_SERIES)
+    show: Literal["share", "count"] = "share"
+    missing: bool = True  # Spalte „ohne Angabe“ (nur bei einwertigen Feldern bestimmbar)
+
+
+class Sizes(_Model):
+    """Größenklassen: wie viele Werte eines Feldes (etwa Bezugsquellen) tragen 1, 2 bis 4,
+    5 bis 19 … Materialien, und wie viele Materialien liegen in jeder Klasse."""
+
+    property: Name
+    bounds: list[Annotated[int, Field(ge=1, le=10_000_000)]] = Field(
+        default=[1, 2, 5, 20, 100, 1000], min_length=1, max_length=12)
+
+    @model_validator(mode="after")
+    def _ascending(self) -> Sizes:
+        if self.bounds[0] != 1 or any(a >= b for a, b in zip(self.bounds, self.bounds[1:],
+                                                             strict=False)):
+            raise ValueError("bounds beginnt bei 1 und steigt streng an")
+        return self
+
+
 class QuerySpec(_Model):
     instance: Annotated[StrictStr, Field(min_length=1, max_length=64)]
     content_type: StrictStr = "FILES"
@@ -134,6 +164,8 @@ class QuerySpec(_Model):
     columns: Columns | None = None
     fill: Fill | None = None
     vocab_check: VocabCheck | None = None
+    profile: Profile | None = None
+    sizes: Sizes | None = None
     percent: Literal["none", "column", "row"] = "none"
     refresh: bool = False
 
@@ -150,6 +182,24 @@ class QuerySpec(_Model):
                                  or self.percent != "none"):
             raise ValueError("vocab_check geht nicht zusammen mit rows, series, columns, "
                              "fill oder percent")
+        other = (self.series or self.columns or self.fill or self.vocab_check
+                 or self.percent != "none")
+        if self.sizes and (other or self.rows or self.profile):
+            raise ValueError("sizes geht nicht zusammen mit rows, series, columns, fill, "
+                             "vocab_check, profile oder percent")
+        if self.profile:
+            rows = self.rows
+            if other:
+                raise ValueError("profile geht nicht zusammen mit series, columns, fill, "
+                                 "vocab_check oder percent")
+            if rows is None or (rows.top is None and not rows.include):
+                raise ValueError("profile braucht rows mit top oder include (je Zeile eine "
+                                 "Abfrage)")
+            if rows.groups or rows.other or rows.missing or rows.rollup or rows.vocab:
+                raise ValueError("profile geht nicht zusammen mit Gruppen, „Übrige“, „ohne "
+                                 "Wert“, rollup oder vocab der Zeilen")
+            if (rows.top or 0) > MAX_PROFILE_ROWS or len(rows.include or []) > MAX_PROFILE_ROWS:
+                raise ValueError(f"profile: höchstens {MAX_PROFILE_ROWS} Zeilen")
         ids = [s.id for s in self.series]
         if len(ids) != len(set(ids)):
             raise ValueError("Spalten-IDs müssen eindeutig sein")

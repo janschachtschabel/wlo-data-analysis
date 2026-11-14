@@ -169,6 +169,10 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 
+### Quellen
+
+Der Reiter „Quellen“ unter „Qualität“ folgt dem Quellenpanel, zeigt aber nur Zählungen: Bezugsquellen und Crawler nach Größe (wie viele haben nur ein Material), Bindung zwischen Crawler und Bezugsquelle, dünne Metadaten und Offenheit je Bezugsquelle, Kosten, Werbung, Zugang, Datenschutz, Altersfreigabe, Erschließungsstatus, Materialart und Sprache je Bezugsquelle in Prozent, dazu die Vollständigkeit der Quelldatensätze. Dafür gibt es zwei Abfrageformen: `profile` (ein Merkmal je Zeile, je Zeilenwert eine Abfrage) und `sizes` (Größenklassen eines Feldes).
+
 ## KI: Assistent und Einstellungen
 
 - **Einstellungen** (Menü): Basis-URL, Modell, Schlüssel und Denkaufwand des Sprachmodells.

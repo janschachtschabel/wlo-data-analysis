@@ -1,0 +1,764 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "quellen",
+  "title": "Quellen",
+  "description": "Datenprobleme und Merkmale mit Bezug zu den Quellen, nach dem Vorbild des Quellenpanels: Größe und Bindung der Quellen, dünne Metadaten, Kosten, Werbung, Zugang, Datenschutz und Erschließung je Bezugsquelle, Vollständigkeit der Quelldatensätze."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-quellen",
+   "kind": "dashboard",
+   "name": "Quellen",
+   "description": "Quellen im Blick, allein aus Zählungen. „Quelle“ ist der Crawler (ccm:replicationsource), „Bezugsquelle“ der Anbieter (ccm:oeh_publisher_combined). Anteile je Bezugsquelle beziehen sich auf deren Materialien. Einzelne Materialien oder Quelldatensätze werden nicht gezeigt.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "groessen-bezugsquellen",
+      "title": "Bezugsquellen nach Größe: wie viele haben nur ein Material, wie viele unter 5?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "sizes": {
+        "property": "ccm:oeh_publisher_combined"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 6,
+       "h": 7
+      }
+     },
+     {
+      "id": "groessen-quellen",
+      "title": "Quellen (Crawler) nach Größe",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "sizes": {
+        "property": "ccm:replicationsource"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 6,
+       "y": 0,
+       "w": 6,
+       "h": 7
+      }
+     },
+     {
+      "id": "bindung",
+      "title": "Bindung: Wie viele Materialien haben eine Quelle (Crawler) und eine Bezugsquelle?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:replicationsource",
+          "label": "Quelle (Crawler)"
+         },
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "rate"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 7,
+       "w": 12,
+       "h": 4
+      }
+     },
+     {
+      "id": "quelle-bezugsquelle",
+      "title": "Welche Quelle liefert welche Bezugsquelle? Mehrere Zellen in einer Spalte: dieselbe Bezugsquelle kommt über mehrere Wege (Verdacht auf Dubletten)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 20
+       },
+       "columns": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 12
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 11,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "ohne-bezugsquelle",
+      "title": "Materialien ohne Bezugsquelle je Quelle (30 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 30
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ],
+        "show": "missing"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 21,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
+      "id": "duenn-je-bezugsquelle",
+      "title": "Dünne Metadaten: Füllgrad je Bezugsquelle in Prozent (40 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 40
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         }
+        ],
+        "show": "rate"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 32,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "offenheit-je-bezugsquelle",
+      "title": "Offenheit je Bezugsquelle (30 größte): Anteil offener Lizenzen und Materialien ohne Lizenzangabe",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 30
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Gesamt"
+        },
+        {
+         "id": "offen",
+         "label": "offen (PD, CC0, CC BY, CC BY-SA)",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "OPEN",
+            "CC_BY_OPEN"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "anteil",
+         "label": "Anteil offen %",
+         "formula": "round(offen / gesamt * 100, 1)"
+        },
+        {
+         "id": "mit",
+         "label": "mit Lizenzangabe",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "ohne",
+         "label": "ohne Lizenzangabe",
+         "formula": "gesamt - mit"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 46,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
+      "id": "kosten-je-bezugsquelle",
+      "title": "Kosten je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:price",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 57,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "werbung-je-bezugsquelle",
+      "title": "Werbung je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:containsAdvertisement",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 57,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "zugang-je-bezugsquelle",
+      "title": "Zugang (Anmeldung) je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:conditionsOfAccess",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 67,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "dsgvo-je-bezugsquelle",
+      "title": "Datenschutz (DSGVO) je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:dataProtectionConformity",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 67,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "altersfreigabe-je-bezugsquelle",
+      "title": "Altersfreigabe je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:fskRating",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 77,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "erschliessung-je-bezugsquelle",
+      "title": "Erschließungsstatus der Redaktion je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:editorial_checklist",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 77,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "materialart-je-bezugsquelle",
+      "title": "Materialart je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 87,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "sprache-je-bezugsquelle",
+      "title": "Sprache je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "cclom:general_language",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 87,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "quelldatensaetze",
+      "title": "Quelldatensätze (Materialart „Quelle“): wie vollständig sind die Quellen selbst beschrieben?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         },
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "ccm:editorial_checklist",
+          "label": "Erschließungsstatus"
+         },
+         {
+          "property": "ccm:price",
+          "label": "Kosten"
+         },
+         {
+          "property": "ccm:containsAdvertisement",
+          "label": "Werbung"
+         },
+         {
+          "property": "ccm:conditionsOfAccess",
+          "label": "Zugang (Anmeldung)"
+         },
+         {
+          "property": "ccm:dataProtectionConformity",
+          "label": "DSGVO"
+         },
+         {
+          "property": "ccm:accessibilitySummary",
+          "label": "Barrierefreiheit"
+         },
+         {
+          "property": "ccm:oeh_quality_protection_of_minors",
+          "label": "Jugendschutz"
+         },
+         {
+          "property": "ccm:oeh_quality_personal_law",
+          "label": "Persönlichkeitsrechte"
+         },
+         {
+          "property": "ccm:oeh_quality_criminal_law",
+          "label": "Strafrecht"
+         },
+         {
+          "property": "ccm:oeh_quality_copyright_law",
+          "label": "Urheberrecht"
+         },
+         {
+          "property": "ccm:oeh_quality_data_privacy",
+          "label": "Datenschutz (rechtlich)"
+         },
+         {
+          "property": "ccm:oeh_quality_relevancy_for_education",
+          "label": "Für Bildung geeignet"
+         },
+         {
+          "property": "ccm:oeh_quality_currentness",
+          "label": "Aktualität"
+         },
+         {
+          "property": "ccm:oeh_quality_correctness",
+          "label": "Sachrichtigkeit"
+         },
+         {
+          "property": "ccm:oeh_quality_neutralness",
+          "label": "Neutralität"
+         },
+         {
+          "property": "ccm:oeh_quality_transparentness",
+          "label": "Transparenz"
+         },
+         {
+          "property": "ccm:oeh_quality_didactics",
+          "label": "Didaktik und Methodik"
+         },
+         {
+          "property": "ccm:oeh_quality_medial",
+          "label": "Medial passend"
+         },
+         {
+          "property": "ccm:oeh_quality_language",
+          "label": "Sprachliche Angemessenheit"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "rate"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 97,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "quelldatensaetze-status",
+      "title": "Quelldatensätze: Erschließungsstatus, mit „ohne Wert“",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:editorial_checklist",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 111,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-kosten",
+      "title": "Quelldatensätze: Kosten, mit „ohne Wert“",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:price",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 111,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-werbung",
+      "title": "Quelldatensätze: Werbung, mit „ohne Wert“",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:containsAdvertisement",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 119,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-zugang",
+      "title": "Quelldatensätze: Zugang (Anmeldung), mit „ohne Wert“",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:conditionsOfAccess",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 119,
+       "w": 6,
+       "h": 8
+      }
+     }
+    ]
+   }
+  }
+ ]
+}
