@@ -22,7 +22,8 @@ def role_of(request: Request) -> str | None:
 
 # Was der Lesezugang darf: diese Routen, nur lesend. Alles andere bleibt dem Admin.
 VIEWER_MAY = frozenset({
-    "/api/settings", "/api/instances", "/api/definitions/{def_id}", "/api/highlights", "/api/runs", "/api/runs/{run_id}",
+    "/api/settings", "/api/instances", "/api/definitions/{def_id}", "/api/highlights",
+    "/api/runs", "/api/runs/{run_id}",
     "/api/runs/{run_id}/report", "/api/runs/{run_id}/export",
     "/api/definitions/{def_id}/runs", "/api/definitions/{def_id}/history",
     "/api/definitions/{def_id}/history/keys", "/api/definitions/{def_id}/trends"})

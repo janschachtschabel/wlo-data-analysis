@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Literal
@@ -99,9 +100,28 @@ class Settings(BaseSettings):
         return value.rstrip("/")
 
 
+def _from_environment() -> dict[str, str]:
+    """Was die Umgebung vorgibt, über die Felder hinaus: Leere Variablen gelten als nicht
+    gesetzt (die mitgelieferte ``.env`` hat leere Felder), und das Admin-Passwort kann aus
+    einer Datei kommen (``WDA_ADMIN_PASSWORD_FILE``), solange keines gesetzt ist."""
+    for key, value in list(os.environ.items()):
+        if key.startswith("WDA_") and not value.strip() and key != "WDA_ADMIN_PASSWORD":
+            del os.environ[key]
+    given: dict[str, str] = {}
+    source = os.environ.get("WDA_ADMIN_PASSWORD_FILE", "").strip()
+    if source and not os.environ.get("WDA_ADMIN_PASSWORD", "").strip():
+        try:
+            secret = Path(source).read_text(encoding="utf-8").strip()
+        except OSError:
+            secret = ""
+        if secret:
+            given["admin_password"] = secret
+    return given
+
+
 def load_settings() -> Settings:
     try:
-        return Settings()
+        return Settings(**_from_environment())  # type: ignore[arg-type]
     except ValidationError as exc:
         fields = sorted({"WDA_" + str(err["loc"][0]).upper() for err in exc.errors()})
         hint = ""

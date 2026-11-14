@@ -14,24 +14,49 @@ Stand: Paket 3 von 10 (Grundgerüst, edu-sharing-Client, Abfrage-Engine). Design
 
 ## Start mit Docker
 
+Lokal bauen und starten, ohne weitere Angaben:
+
 ```bash
-cp .env.example .env        # WDA_ADMIN_PASSWORD setzen
-docker compose up --build   # http://localhost:8080
+docker compose -f docker-compose.build.yml up --build   # http://localhost:8080
+docker compose -f docker-compose.build.yml exec app cat /data/admin.password
 ```
 
-Für den Aufruf über `http://localhost` muss `WDA_COOKIE_SECURE=false` gesetzt sein,
-sonst nimmt der Browser das Anmelde-Cookie nicht an. Hinter HTTPS bleibt es bei `true`.
+Der erste Start erzeugt ein zufälliges Admin-Passwort im Datenvolume; die zweite Zeile
+zeigt es an. Ein eigenes Passwort setzt `WDA_ADMIN_PASSWORD` in der `.env`.
+
+### Auf einem Server (Hostinger Docker Manager, Traefik)
+
+`docker-compose.yml` im Hauptordner ist der Produktiv-Stack: Er zieht das fertige Image aus
+der GitHub Container Registry (`ghcr.io/janschachtschabel/wlo-data-analysis`, veröffentlicht
+von `.github/workflows/image.yml` bei jedem Stand auf `main`), baut nichts und belegt keine
+Ports. Traefik erreicht die App über das Netz `wlo-data-analysis-web` und die Labels am Dienst.
+
+1. Im Docker Manager „Compose from URL“ mit der Adresse des Repositorys wählen. Der erste
+   Start gelingt ohne jede Variable; `.env.example` (lauter leere Felder) wird zur `.env`.
+2. Danach `DOMAIN` (nur der Hostname, etwa `daten.example.org`) und nach Bedarf die übrigen
+   Werte eintragen und neu bereitstellen. Das erzeugte Admin-Passwort bleibt dabei gleich.
+3. Das Admin-Passwort anzeigen: `docker compose exec app cat /data/admin.password`.
+
+Der Dienst `init` läuft vor jedem Start einmal durch: Er legt das Passwort an, falls keines
+gesetzt ist, und bricht mit einer klaren Meldung ab, wenn `DOMAIN` mit `https://`, Pfad oder
+Port geschrieben ist. Das Image muss in der Registry öffentlich sein (einmalig unter
+„Packages“ des Repositorys einstellen), sonst kann der Server es nicht ziehen.
 
 Läuft die App hinter einem Reverse-Proxy in einem anderen Container, muss
-`FORWARDED_ALLOW_IPS` auf dessen Adresse gesetzt werden. Sonst sieht die Anmelde-Sperre
-alle Aufrufe unter der Adresse des Proxys, und fünf fremde Fehlversuche sperren für eine
-Minute auch die richtige Anmeldung.
+`FORWARDED_ALLOW_IPS` dessen Adresse nennen (der Produktiv-Stack setzt `*`, weil nur Traefik
+den Container erreicht). Sonst sieht die Anmelde-Sperre alle Aufrufe unter der Adresse des
+Proxys, und fünf fremde Fehlversuche sperren für eine Minute auch die richtige Anmeldung.
 
 ## Konfiguration
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `WDA_ADMIN_PASSWORD` | – (Pflicht) | Passwort des Admin-Zugangs; ohne startet die App nicht. Ein neues Passwort beendet alle bestehenden Anmeldungen |
+| `WDA_ADMIN_PASSWORD` | – | Passwort des Admin-Zugangs. Ein neues Passwort beendet alle bestehenden Anmeldungen. Leere Variablen gelten überall als nicht gesetzt |
+| `WDA_ADMIN_PASSWORD_FILE` | – | Datei mit dem Admin-Passwort, gelesen, solange `WDA_ADMIN_PASSWORD` leer ist (im Container `/data/admin.password`, angelegt von `python -m wda.init`). Ohne Passwort aus einer der beiden Quellen startet die App nicht |
+| `WDA_VIEWER_PASSWORD` | – | optionaler Lesezugang: Wer sich damit anmeldet, sieht „Auffällig“, abgelegte Läufe, Berichte, Verläufe und Exporte, kann aber nichts ändern, nichts ausführen, keine Einstellungen sehen und den Assistenten nicht nutzen. Muss sich vom Admin-Passwort unterscheiden |
+| `WDA_PUBLIC_URL` | – | Adresse der App von außen (`https://…`) für den Link in verschickten Berichten |
+| `WDA_SMTP_HOST`, `WDA_SMTP_PORT`, `WDA_SMTP_USER`, `WDA_SMTP_PASSWORD`, `WDA_SMTP_FROM`, `WDA_SMTP_SECURITY` | –, `587`, –, –, –, `starttls` | Mailserver für den Versand von Berichten nach Zeitplan; ohne Host und Absender gibt es keine E-Mails. Sicherheit: `starttls`, `ssl` oder `none` |
+| `WDA_PRECOMPUTE` | `builtin-themen` | Auswertungen (IDs, durch Komma getrennt), die zur Uhrzeit von `WDA_SNAPSHOT_NIGHTLY` neu gezählt und als Lauf abgelegt werden; die Wissenslandkarte zeigt dann den abgelegten Stand |
 | `WDA_COOKIE_SECURE` | `true` | Anmelde-Cookie nur über HTTPS senden |
 | `WDA_SESSION_MAX_AGE` | `43200` | Gültigkeit einer Anmeldung in Sekunden |
 | `WDA_SESSION_SECRET` | automatisch | Signatur-Geheimnis; sonst in `WDA_DATA_DIR/session.secret` |
@@ -358,6 +383,27 @@ Rechner mit mindestens fünf Materialien einzeln.
   Lizenzkategorien A bis D. Die Zuordnungen (Fach → Fächergruppe, Bildungsstufe → Bereich,
   Lizenz → Kategorie) stehen in der Definition und sind dort änderbar; erzeugt wird die
   Datei mit `backend/scripts/build_oer_template.py`.
+
+### Weitergabe: Word, Versand, Kommentar
+
+- **Word:** Jeder Lauf lässt sich neben PDF, Excel, HTML, Markdown, CSV und JSON als
+  `.docx` herunterladen (Diagramme erscheinen als ihre Tabelle).
+- **Versand nach Zeitplan:** Ein Zeitplan kann den Bericht nach dem Lauf per E-Mail
+  verschicken (Anhang PDF, Word, Excel oder HTML) und eine kurze Nachricht an einen Webhook
+  senden (`title`, `status`, `started_at`, `url`, `missed_targets`, `changes`; keine
+  Tabellen). „Nur bei Auffälligkeit“ verschickt nur, wenn ein Zielwert verfehlt ist oder
+  sich eine Zahl seit dem vorigen Lauf auffällig geändert hat. Was beim Versand geschah,
+  steht am Zeitplan; ein gescheiterter Versand lässt den Lauf gültig.
+- **Verfehlte Zielwerte** des jüngsten Laufs stehen auf der Seite „Auffällig“.
+- **Kommentar des Assistenten:** In der Laufansicht schreibt das Sprachmodell auf Knopfdruck
+  einen kurzen Kommentar zu den Zahlen des Berichts (`POST /api/assistant/comment`). Es
+  bekommt nur die Tabellen des Berichts und kein Werkzeug; der Text wird nicht gespeichert.
+- **Unterhaltungen** mit dem Assistenten bleiben im Browser über das Neuladen erhalten
+  (ohne die Texte angehängter Vorlagen); „Neu beginnen“ und das Abmelden löschen sie. Auf
+  dem Server liegt davon nichts.
+- **Zeilen ausblenden:** `rows.exclude` nimmt Werte (Bezeichnung oder Kennung) aus einer
+  Tabelle; die Wissenslandkarte blendet so den Sammelwert „Allgemein“ aus. Gesamtzahlen
+  bleiben die des Bestands, ein Hinweis nennt, was fehlt.
 
 ## Entwicklung
 
