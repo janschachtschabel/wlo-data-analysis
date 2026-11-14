@@ -559,3 +559,18 @@ def test_without_the_switch_only_the_environment_counts(tmp_path):
         assert second.app.state.services.llm.api_key == "aus-der-umgebung"
     finally:
         second.__exit__(None, None, None)
+
+
+def test_a_dashboard_preview_too_large_for_the_chat_falls_back_to_titles(api, model, monkeypatch):
+    from wda.llm import tools
+    monkeypatch.setattr(tools, "MAX_PREVIEW_CHARS", 200)
+    model.answers = [
+        call(("propose_dashboard", {"name": "Groß", "tiles": [
+            {"title": "Fächer", "spec": {"rows": {"property": TAX}}, "view": "bar"}]})),
+        say("Die Vorschau ist zu groß."),
+    ]
+    events = chat(api)
+    proposal = next(e for e in events if e["type"] == "proposal")
+    assert proposal["report"] is None and proposal["spec"]["tiles"]
+    told = json.loads(model.bodies[1]["messages"][-1]["content"])
+    assert "zu groß" in told["hinweis"]

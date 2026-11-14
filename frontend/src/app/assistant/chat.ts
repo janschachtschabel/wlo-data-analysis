@@ -3,7 +3,7 @@ import { Api, ApiError, isAbort } from '../core/api';
 import { Instances } from '../core/instances';
 import { AppSettings, Definition, Proposal } from '../core/types';
 
-export interface Shown extends Proposal { saved?: Definition; saving?: boolean; error?: string }
+export interface Shown extends Proposal { saved?: Definition; saving?: boolean; error?: string; widths?: Record<string, number> | null }
 export interface Turn {
   role: 'user' | 'assistant'; text: string; html?: string;
   steps: string[]; proposals: Shown[]; error?: string; pending?: boolean;
@@ -14,7 +14,7 @@ export interface Tile { title: string; query?: unknown; metric_id?: string; view
 export interface Target { name: string; add(tiles: Tile[]): void }
 
 export const MAX_TEXT = 4000;
-const MAX_MEMO = 3000, MAX_TURNS = 24;
+const MAX_MEMO = 8000, MAX_TURNS = 24;
 
 /**
  * Die Unterhaltung mit dem Assistenten. Sie lebt außerhalb der Ansicht: Das Chatfenster am
@@ -68,7 +68,7 @@ export class Chat {
         ...(about?.run_id ? { run_id: about.run_id } : {}), ...(about?.definition_id ? { definition_id: about.definition_id } : {}),
       }, (event) => {
         if (event?.type === 'step') this.update((t) => ({ ...t, steps: [...t.steps, String(event.text ?? '')] }));
-        else if (event?.type === 'proposal') this.update((t) => ({ ...t, proposals: [...t.proposals, event as Shown] }));
+        else if (event?.type === 'proposal') this.update((t) => ({ ...t, proposals: [...t.proposals, { ...(event as Shown), widths: tileWidths(event as Shown) }] }));
         else if (event?.type === 'final') { done = true; this.update((t) => ({ ...t, text: String(event.text ?? ''), html: event.html, pending: false })); }
         else if (event?.type === 'error') { done = true; this.update((t) => ({ ...t, error: String(event.detail ?? 'Fehler'), pending: false })); }
       }, controller.signal);
@@ -108,6 +108,14 @@ export class Chat {
 }
 
 function memo(proposals: Proposal[]): string {
-  return proposals.map((p) => `${p.name}: ${JSON.stringify(p.kind === 'metric' ? p.spec.query : p.spec.tiles?.map((t: any) => t.title))}`)
+  // bei Dashboards je Kachel Titel, Darstellung und Abfrage, damit „Zeig das als Grafik“ nicht raten muss
+  return proposals.map((p) => `${p.name}: ${JSON.stringify(p.kind === 'metric' ? { view: p.spec.view?.type, query: p.spec.query }
+    : p.spec.tiles?.map((t: any) => ({ title: t.title, view: t.view?.type, query: t.query })))}`)
     .join(' | ').slice(0, MAX_MEMO);
+}
+
+/** Breiten der Kacheln eines vorgeschlagenen Dashboards (Schlüssel → Spalten von 12) */
+function tileWidths(proposal: Proposal): Record<string, number> | null {
+  if (proposal.kind !== 'dashboard') return null;
+  return Object.fromEntries((proposal.spec.tiles ?? []).map((t: any) => [t.id, t.layout?.w ?? 6]));
 }

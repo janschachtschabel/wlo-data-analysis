@@ -22,7 +22,7 @@ from ..llm.tools import Toolbox
 
 router = APIRouter(prefix="/assistant")
 log = logging.getLogger(__name__)
-MAX_MESSAGES, MAX_CHARS, MAX_MEMO = 30, 4000, 3000
+MAX_MESSAGES, MAX_CHARS, MAX_MEMO = 30, 4000, 8000
 
 
 class Message(BaseModel):

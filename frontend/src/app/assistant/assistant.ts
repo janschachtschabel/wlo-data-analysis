@@ -86,7 +86,7 @@ const FOLLOW_UPS = ['Zeig das als Grafik.', 'Schlüssele das nach Quellen auf.',
                 @if (proposal.error) { <p class="error" role="alert">{{ proposal.error }}</p> }
                 @if (proposal.description) { <p class="muted">{{ proposal.description }}</p> }
                 @if (proposal.report; as report) {
-                  <app-report-view [report]="report" [widths]="widths(proposal)" />
+                  <app-report-view [report]="report" [widths]="proposal.widths ?? null" />
                 } @else {
                   <ul class="tiles">@for (tile of proposal.spec.tiles; track tile.id) { <li>{{ tile.title }}</li> }</ul>
                 }
@@ -189,11 +189,6 @@ export class Assistant {
     if (!text.trim() || this.busy()) return;
     this.draft = '';
     void this.chat.ask(text);
-  }
-
-  protected widths(proposal: Proposal): Record<string, number> | null {
-    if (proposal.kind !== 'dashboard') return null;
-    return Object.fromEntries((proposal.spec.tiles ?? []).map((t: any) => [t.id, t.layout?.w ?? 6]));
   }
 
   protected explorerLink(proposal: Proposal): string {

@@ -29,3 +29,22 @@
 2. `assistant/assistant.ts` (Vorschau als Raster, Meldung und Link nach dem Anlegen), Durchstich.
 3. `shared/result-table.ts`, `report/heat.py` (ein Rot, keine Rahmen und Striche).
 4. Review, Befunde, Probe mit echtem Modell auf Jans Rechner.
+
+## Probe mit echtem Modell (Jans Rechner, Stand c63e39a)
+
+- „Baue mir ein Dashboard zum Bestand der Grundschule.“: 10,9 s, Vorschau mit fünf Blöcken (bar, bar, bar, pie, bar). Der Text sagt „als Vorschau vorgeschlagen“ und nennt den Knopf. Nichts gespeichert.
+- „Zeig das als Grafik.“ danach: wieder fünf Grafiken, aber ein fast gleiches zweites Dashboard; Kreis mit 11 bis 15 Segmenten.
+- „Wie offen ist das Material je Fach? Zeig es als Grafik.“: gestapelte Balken, aber nur nach Schule und Hochschule gruppiert statt je Fach.
+- Folge: Leitfaden nachgeschärft („je Fach“ heißt eine Zeile je Wert; bar bis 15, pie bis 8 Werte; vorhandene Grafiken nicht noch einmal bauen).
+
+## Stand nach Review
+
+Frischer Reviewer: kein kritischer, kein wichtiger Befund. Der Bericht am Vorschlag enthält nur Zählungen, ans Modell geht davon nichts; der Assistent speichert nichts; die Links nach dem Anlegen führen auf funktionierende Seiten. Kontrast der Zahl auf dem neuen Rot: 10,9:1 hell, 9,1:1 dunkel, 11,1:1 im Export.
+
+Behoben:
+
+- Die Vorschau eines Dashboards war nach oben nicht begrenzt: über 400.000 Zeichen zeigt die Karte nur die Titel, und das Modell erfährt es (Test in `tests/test_llm.py`).
+- Für Folgefragen kannte das Modell von einem Dashboard nur die Titel: Der Verlauf nennt jetzt je Kachel Darstellung und Abfrage (Grenze 8.000 Zeichen).
+- Die Breiten der Kacheln werden einmal je Vorschlag berechnet statt bei jeder Prüfung der Ansicht.
+
+Offen, gering: Lücken heben sich im Graustufendruck nur schwach ab (gewollt, ohne Rahmen).

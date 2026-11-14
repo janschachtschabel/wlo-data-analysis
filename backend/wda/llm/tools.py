@@ -77,6 +77,9 @@ def _dump(value: Any) -> str:
     return text
 
 
+MAX_PREVIEW_CHARS = 400_000  # Vorschau eines Dashboards im Chat
+
+
 def _size(value: Any) -> int:
     return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 
@@ -300,9 +303,16 @@ class Toolbox:
         run = await self._preview("dashboard", name, spec)
         description = " ".join(str(args.get("description") or "").split())[:1000]
         # die Vorschau ist schon gerechnet: Der Nutzer sieht die Kacheln mit ihren Grafiken
+        report: dict[str, Any] | None = report_data(build_report(run), with_html=False)
+        if _size(report) > MAX_PREVIEW_CHARS:  # dann zeigt die Karte nur die Titel
+            report = None
         self.on_proposal({"kind": "dashboard", "name": name, "description": description,
-                           "spec": spec,
-                           "report": report_data(build_report(run), with_html=False)})
+                           "spec": spec, "report": report})
+        if report is None:
+            return {"gezeigt": name, "kacheln": len(tiles),
+                    "hinweis": "Die Vorschau ist zu groß für den Chat; der Nutzer sieht nur "
+                               "die Titel der Kacheln. Sag ihm das und biete an, die Zeilen "
+                               "mit top zu begrenzen."}
         return {"gezeigt": name, "kacheln": len(tiles),
                 "darstellungen": [t["view"]["type"] for t in tiles],
                 "hinweis": "Der Nutzer sieht die Vorschau mit allen Kacheln. Angelegt ist das "
