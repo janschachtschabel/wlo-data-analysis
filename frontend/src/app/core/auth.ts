@@ -32,6 +32,8 @@ export class Auth {
     try {
       const status = await this.api.get<{ authenticated: boolean; role?: 'admin' | 'viewer' }>('/auth/status');
       this.role.set(status.authenticated ? status.role ?? 'admin' : null);
+      // die Unterhaltung mit dem Assistenten gehört dem Admin, nicht dem Lesezugang
+      if (status.authenticated && status.role === 'viewer') forgetChat();
       this.authenticated.set(status.authenticated);
     } catch {
       this.authenticated.set(false);
@@ -55,6 +57,10 @@ export class Auth {
     this.role.set(null);
     this.expired.set(false);
   }
+}
+
+function forgetChat(): void {
+  try { localStorage.removeItem('wda.chat.v1'); } catch { /* gesperrter Speicher: dann liegt dort auch nichts */ }
 }
 
 /** Nur innere Pfade der Anwendung als Rücksprungziel; nie eine fremde Adresse. */

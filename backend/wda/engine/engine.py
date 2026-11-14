@@ -1639,6 +1639,7 @@ def _drop_excluded(rows: list[_Row], rows_spec: Any, notes: Notes) -> list[_Row]
     """Nimmt die Zeilen heraus, die die Abfrage ausblendet (``rows.exclude``), nach Kennung
     oder Bezeichnung, mit oder ohne Zusatz in Klammern. Gesamtzahlen bleiben die des Bestands."""
     asked = {str(e).strip().casefold() for e in (getattr(rows_spec, "exclude", None) or [])}
+    asked.discard("")
     if not asked:
         return rows
 
@@ -1646,7 +1647,7 @@ def _drop_excluded(rows: list[_Row], rows_spec: Any, notes: Notes) -> list[_Row]
         label = row.label.casefold()
         return row.kind == "value" and (
             row.key.casefold() in asked or label in asked
-            or label.rpartition(" (")[0] in asked)
+            or (" (" in label and label.rpartition(" (")[0] in asked))
 
     gone = [row for row in rows if hit(row)]
     if gone:

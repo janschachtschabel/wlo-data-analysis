@@ -25,12 +25,17 @@ _SECRET_FILE = "session.secret"  # noqa: S105 - Dateiname, kein Geheimnis
 class SessionSigner:
     """Stellt signierte, zeitlich begrenzte Session-Tokens aus und prüft sie."""
 
-    def __init__(self, secret: str, max_age: int) -> None:
+    def __init__(self, secret: str, max_age: int, viewer: str | None = None) -> None:
         self._serializer = URLSafeTimedSerializer(secret, salt="wda-admin-session")
         self._max_age = max_age
+        # Kennung des Lesezugangs: ohne ihn oder mit neuem Passwort gilt keine alte Sitzung
+        self._viewer = viewer
 
     def issue(self, role: str = "admin") -> str:
-        return self._serializer.dumps({"role": role, "n": secrets.token_hex(8)})
+        data = {"role": role, "n": secrets.token_hex(8)}
+        if role == "viewer":
+            data["v"] = self._viewer
+        return self._serializer.dumps(data)
 
     def role(self, token: str | None) -> str | None:
         """``admin``, ``viewer`` (Lesezugang) oder ``None`` ohne gültige Sitzung."""
@@ -41,7 +46,12 @@ class SessionSigner:
         except BadData:
             return None
         role = data.get("role") if isinstance(data, dict) else None
-        return role if role in ("admin", "viewer") else None
+        if role == "viewer":
+            mark = data.get("v")
+            known = (self._viewer is not None and isinstance(mark, str)
+                     and hmac.compare_digest(mark, self._viewer))
+            return "viewer" if known else None
+        return role if role == "admin" else None
 
     def valid(self, token: str | None) -> bool:
         return self.role(token) == "admin"
@@ -83,6 +93,15 @@ def session_signing_key(settings: Settings) -> str:
     password = settings.admin_password.get_secret_value().encode("utf-8", "surrogatepass")
     secret = resolve_session_secret(settings).encode("utf-8")
     return hmac.new(secret, b"wda-session-v1:" + password, hashlib.sha256).hexdigest()
+
+
+def viewer_mark(settings: Settings) -> str | None:
+    """Kennung des Lesezugangs für die Sitzung; ``None`` ohne Lesezugang."""
+    if settings.viewer_password is None:
+        return None
+    password = settings.viewer_password.get_secret_value().encode("utf-8", "surrogatepass")
+    secret = resolve_session_secret(settings).encode("utf-8")
+    return hmac.new(secret, b"wda-viewer-v1:" + password, hashlib.sha256).hexdigest()[:32]
 
 
 def verify_password(given: str, expected: str) -> bool:

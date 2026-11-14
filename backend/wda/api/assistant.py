@@ -212,6 +212,10 @@ async def comment(body: CommentIn, request: Request) -> Any:
     tables = [_compact_table(b) for b in data.get("blocks", []) if b.get("type") == "table"]
     facts = {"titel": data.get("title"), "stand": data.get("started_at"),
              "tabellen": tables[:MAX_COMMENT_TABLES]}
+    failed = [b.get("title") for b in data.get("blocks", []) if b.get("error")]
+    if data.get("status") not in (None, "ok") or failed:
+        facts["unvollständig"] = ("Der Lauf ist nur teilweise gelungen; gescheitert: "
+                                  + (", ".join(str(t) for t in failed[:8]) or "einzelne Abfragen"))
     if len(tables) > MAX_COMMENT_TABLES:
         facts["weitere_tabellen"] = len(tables) - MAX_COMMENT_TABLES
     text = json.dumps(facts, ensure_ascii=False)
@@ -219,6 +223,17 @@ async def comment(body: CommentIn, request: Request) -> Any:
         facts["tabellen"] = facts["tabellen"][:-1]
         facts["weitere_tabellen"] = len(tables) - len(facts["tabellen"])
         text = json.dumps(facts, ensure_ascii=False)
+    while len(text) > MAX_COMMENT_CHARS and len(facts["tabellen"][0].get("zeilen", [])) > 1:
+        only = dict(facts["tabellen"][0])  # eine einzige, zu lange Tabelle: Zeilen halbieren
+        cut = len(only["zeilen"]) // 2
+        only["weitere_zeilen"] = only.get("weitere_zeilen", 0) + len(only["zeilen"]) - cut
+        only["zeilen"] = only["zeilen"][:cut]
+        only.pop("themen", None)
+        facts["tabellen"] = [only]
+        text = json.dumps(facts, ensure_ascii=False)
+    # dem Leser sagen, wenn der Kommentar nicht den ganzen Bericht kennt
+    truncated = bool(facts.get("weitere_tabellen")) or any(
+        t.get("weitere_zeilen") or t.get("weitere_spalten") for t in facts["tabellen"])
     try:
         answer = await services.llm_client(config).chat([
             {"role": "system", "content": COMMENT_PROMPT},
@@ -230,4 +245,4 @@ async def comment(body: CommentIn, request: Request) -> Any:
         return JSONResponse(error_body(
             "llm_bad_answer", "Das Sprachmodell hat keinen Kommentar geliefert."),
             status_code=502)
-    return {"text": said[:6000]}
+    return {"text": said[:6000], "truncated": truncated}

@@ -216,6 +216,110 @@ class History:
 
         return await self._db.read(fn)
 
+    def _moved(self, con: sqlite3.Connection, definition: sqlite3.Row, head: sqlite3.Row,
+               prev: sqlite3.Row) -> list[tuple[float, dict[str, Any]]]:
+        """Die auffälligen Veränderungen von ``prev`` zu ``head``, die größte zuerst."""
+
+        def full(run: sqlite3.Row) -> sqlite3.Row:
+            return con.execute("SELECT * FROM runs WHERE id=?", (run["id"],)).fetchone()
+
+        now, before = ({(r["key"], r["row_key"], r["column_id"]): r["value"]
+                        for r in con.execute(
+                            "SELECT key, row_key, column_id, value FROM points"
+                            " WHERE run_id=?", (head["id"],))} for head in (head, prev))
+        # Zeilen, die es nur in einem der Läufe gibt, zählen dort als 0; nur in Blöcken,
+        # die beide Läufe haben (sonst wäre ein gescheiterter Block lauter Verlust)
+        both = {k for k, _, _ in now} & {k for k, _, _ in before}
+        moved = []
+        for where_ in {*now, *before}:
+            if where_[0] not in both:
+                continue
+            after, old = now.get(where_), before.get(where_)
+            if where_ in now and where_ in before and (after is None or old is None):
+                continue  # nicht bestimmbar ist keine Null
+            after, old = after or 0, old or 0
+            if after != old:
+                moved.append((where_, old, after))
+        if not moved:
+            return []
+        blocks = {b["key"]: b for b in self._blocks_of(con, full(head))["blocks"]}
+        earlier: dict[str, Any] | None = None
+        found = []
+        for (key, row, column), old, after in sorted(moved, key=lambda m: m[0]):
+            block = blocks.get(key)
+            if block is None:
+                continue
+            rows = [r for r in block["rows"] if r["kind"] != "total"]
+            if rows and all(_MONTH.fullmatch(r["key"]) for r in rows):
+                continue  # Zuwachs je Monat: Der laufende Monat wächst immer
+            row_label = next((r["label"] for r in block["rows"] if r["key"] == row),
+                             None)
+            if row_label is None:  # die Zeile gibt es nur im früheren Lauf
+                if earlier is None:
+                    earlier = {b["key"]: b
+                               for b in self._blocks_of(con, full(prev))["blocks"]}
+                row_label = next((r["label"] for r in (earlier.get(key) or {"rows": []})
+                                  ["rows"] if r["key"] == row), None)
+            column_label = next((c["label"] for c in block["columns"]
+                                 if c["id"] == column), None)
+            if row_label is None or column_label is None:
+                continue
+            delta = after - old
+            if column_label.rstrip().endswith("%"):
+                if abs(delta) < MIN_PP:
+                    continue
+                percent, score, unit = None, abs(delta) * 2, "pp"
+            else:
+                if abs(delta) < MIN_DELTA:
+                    continue
+                percent = round(100 * delta / old, 1) if old else None
+                if percent is not None and abs(percent) < MIN_PERCENT:
+                    continue
+                score, unit = (abs(percent) if percent is not None else 100.0), "count"
+
+            def tidy(value: float) -> float | int:
+                return int(value) if float(value).is_integer() else round(value, 1)
+
+            found.append((score, {
+                "definition_id": definition["id"], "name": definition["name"],
+                "kind": definition["kind"], "run_id": head["id"],
+                "previous_run_id": prev["id"],
+                "started_at": head["started_at"],
+                "previous_started_at": prev["started_at"],
+                "block": block["title"], "row": row_label, "column": column_label,
+                "before": tidy(old), "after": tidy(after), "delta": tidy(delta),
+                "percent": percent, "unit": unit}))
+        found.sort(key=lambda item: -item[0])
+        return found
+
+    async def changes_since(self, run_id: str, previous_id: str | None = None
+                            ) -> list[dict[str, Any]]:
+        """Auffällige Veränderungen eines Laufs gegenüber einem früheren derselben Reihe
+        (Definition und Instanz): gegenüber ``previous_id``, wenn der sich vergleichen lässt,
+        sonst gegenüber dem brauchbaren Lauf davor. Leer, wenn die Abfrage sich geändert hat."""
+
+        def fn(con: sqlite3.Connection) -> list[dict[str, Any]]:
+            head = con.execute(_HEAD + "WHERE id=?" + _USABLE, (run_id,)).fetchone()
+            if head is None:
+                return []
+            definition = con.execute("SELECT id, name, kind, spec FROM definitions WHERE id=?",
+                                     (head["definition_id"],)).fetchone()
+            if definition is None:
+                return []
+            where, args = _scope(head["definition_id"], head["instance"])
+            series = f"WHERE {where} AND seq < ?{_USABLE}"
+            prev = con.execute(_HEAD + series + " AND id=?",  # noqa: S608
+                               [*args, head["seq"], previous_id]).fetchone()
+            if prev is None:
+                prev = con.execute(_HEAD + series + " ORDER BY seq DESC LIMIT 1",  # noqa: S608
+                                   [*args, head["seq"]]).fetchone()
+            if prev is None or changed(prev, head):
+                return []
+            return [item for _, item in
+                    self._moved(con, definition, head, prev)[:PER_DEFINITION]]
+
+        return await self._db.read(fn)
+
     async def highlights(self, limit: int = 20, definition_id: str | None = None
                          ) -> dict[str, Any]:
         """Die größten Veränderungen zwischen den beiden jüngsten brauchbaren Läufen jeder
@@ -238,82 +342,15 @@ class History:
                     args).fetchall()
                 if not heads:
                     continue
-                runs = [con.execute("SELECT * FROM runs WHERE id=?", (h["id"],)).fetchone()
-                        for h in heads]
                 watched += 1
-                if '"target"' in (definition["spec"] or ""):  # Zielwerte des jüngsten Laufs
+                # Zielwerte des jüngsten Laufs; eine Kachel kann sie von ihrer Kennzahl erben
+                if any(mark in (definition["spec"] or "")
+                       for mark in ('"target"', '"metric_id"')):
                     targets += self._missed(con, definition, heads[0])
                 if len(heads) < 2 or changed(heads[1], heads[0]):
                     continue
                 compared += 1
-                now, before = ({(r["key"], r["row_key"], r["column_id"]): r["value"]
-                                for r in con.execute(
-                                    "SELECT key, row_key, column_id, value FROM points"
-                                    " WHERE run_id=?", (head["id"],))} for head in heads)
-                # Zeilen, die es nur in einem der Läufe gibt, zählen dort als 0; nur in Blöcken,
-                # die beide Läufe haben (sonst wäre ein gescheiterter Block lauter Verlust)
-                both = {k for k, _, _ in now} & {k for k, _, _ in before}
-                moved = []
-                for where_ in {*now, *before}:
-                    if where_[0] not in both:
-                        continue
-                    after, old = now.get(where_), before.get(where_)
-                    if where_ in now and where_ in before and (after is None or old is None):
-                        continue  # nicht bestimmbar ist keine Null
-                    after, old = after or 0, old or 0
-                    if after != old:
-                        moved.append((where_, old, after))
-                if not moved:
-                    continue
-                blocks = {b["key"]: b for b in self._blocks_of(con, runs[0])["blocks"]}
-                earlier: dict[str, Any] | None = None
-                found = []
-                for (key, row, column), old, after in sorted(moved, key=lambda m: m[0]):
-                    block = blocks.get(key)
-                    if block is None:
-                        continue
-                    rows = [r for r in block["rows"] if r["kind"] != "total"]
-                    if rows and all(_MONTH.fullmatch(r["key"]) for r in rows):
-                        continue  # Zuwachs je Monat: Der laufende Monat wächst immer
-                    row_label = next((r["label"] for r in block["rows"] if r["key"] == row),
-                                     None)
-                    if row_label is None:  # die Zeile gibt es nur im früheren Lauf
-                        if earlier is None:
-                            earlier = {b["key"]: b
-                                       for b in self._blocks_of(con, runs[1])["blocks"]}
-                        row_label = next((r["label"] for r in (earlier.get(key) or {"rows": []})
-                                          ["rows"] if r["key"] == row), None)
-                    column_label = next((c["label"] for c in block["columns"]
-                                         if c["id"] == column), None)
-                    if row_label is None or column_label is None:
-                        continue
-                    delta = after - old
-                    if column_label.rstrip().endswith("%"):
-                        if abs(delta) < MIN_PP:
-                            continue
-                        percent, score, unit = None, abs(delta) * 2, "pp"
-                    else:
-                        if abs(delta) < MIN_DELTA:
-                            continue
-                        percent = round(100 * delta / old, 1) if old else None
-                        if percent is not None and abs(percent) < MIN_PERCENT:
-                            continue
-                        score, unit = (abs(percent) if percent is not None else 100.0), "count"
-
-                    def tidy(value: float) -> float | int:
-                        return int(value) if float(value).is_integer() else round(value, 1)
-
-                    found.append((score, {
-                        "definition_id": definition["id"], "name": definition["name"],
-                        "kind": definition["kind"], "run_id": heads[0]["id"],
-                        "previous_run_id": heads[1]["id"],
-                        "started_at": heads[0]["started_at"],
-                        "previous_started_at": heads[1]["started_at"],
-                        "block": block["title"], "row": row_label, "column": column_label,
-                        "before": tidy(old), "after": tidy(after), "delta": tidy(delta),
-                        "percent": percent, "unit": unit}))
-                found.sort(key=lambda item: -item[0])
-                items += found[:PER_DEFINITION]
+                items += self._moved(con, definition, heads[0], heads[1])[:PER_DEFINITION]
             items.sort(key=lambda item: -item[0])
             return {"items": [item for _, item in items[:limit]], "watched": watched,
                     "compared": compared, "targets": targets[:50]}

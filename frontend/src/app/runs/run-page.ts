@@ -103,7 +103,8 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
           <button type="button" class="link" (click)="copyComment()">{{ copied() ? 'Kopiert' : 'Kopieren' }}</button>
           <button type="button" class="link" (click)="commentText.set('')">Schließen</button></div>
         <p class="said">{{ commentText() }}</p>
-        <p class="muted small">Vom Sprachmodell aus den Zahlen dieses Berichts geschrieben; bitte gegenlesen. Der Text ist nicht gespeichert.</p>
+        <p class="muted small">Vom Sprachmodell aus den Zahlen dieses Berichts geschrieben; bitte gegenlesen. Der Text ist nicht gespeichert.
+          @if (commentCut()) { Der Bericht ist groß: Der Kommentar kennt nur einen Teil der Tabellen und Zeilen. }</p>
       </section>
     }
     @if (report.value(); as data) {
@@ -149,6 +150,7 @@ export class RunPage {
   /** Gesamtzahl je Kachel über die gespeicherten Läufe (nur für den Gesamtbestand) */
   protected readonly commenting = signal(false);
   protected readonly commentText = signal('');
+  protected readonly commentCut = signal(false);
   protected readonly commentError = signal('');
   protected readonly copied = signal(false);
   protected readonly trends = signal<Trends | null>(null);
@@ -238,8 +240,8 @@ export class RunPage {
     this.commentError.set('');
     this.copied.set(false);
     try {
-      const { text } = await this.api.post<{ text: string }>('/assistant/comment', { run_id: runId });
-      if (this.runId() === runId) this.commentText.set(text);
+      const { text, truncated } = await this.api.post<{ text: string; truncated?: boolean }>('/assistant/comment', { run_id: runId });
+      if (this.runId() === runId) { this.commentText.set(text); this.commentCut.set(!!truncated); }
     } catch (error) {
       if (this.runId() === runId) this.commentError.set(error instanceof ApiError ? error.message : 'Der Kommentar ließ sich nicht schreiben.');
     } finally {

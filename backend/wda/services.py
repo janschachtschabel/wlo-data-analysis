@@ -48,7 +48,10 @@ class Services:
     ) -> None:
         self._settings = settings
         self._instances = instances
-        self.precompute = [p.strip() for p in settings.precompute.split(",") if p.strip()][:20]
+        # „off“ oder „aus“ schaltet ab (eine leere Variable gilt als nicht gesetzt)
+        self.precompute = ([] if settings.precompute.strip().casefold() in ("off", "aus")
+                           else [p.strip() for p in settings.precompute.split(",")
+                                 if p.strip()][:20])
         self._precompute_tried: dict[str, float] = {}
         self._notifier: Notifier | None = None
         self._transport = transport

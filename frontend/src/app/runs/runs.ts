@@ -50,8 +50,7 @@ const PAGE = 50;
       }
       @if (more()) { <p><button type="button" (click)="load()" [disabled]="loading()">Weitere laden</button></p> }
     </div>
-    <h2 class="top">Zeitpläne</h2>
-    @if (!viewer()) { <div class="card"><app-schedules (ran)="refresh()" /></div> }`,
+    @if (!viewer()) { <h2 class="top">Zeitpläne</h2><div class="card"><app-schedules (ran)="refresh()" /></div> }`,
   styles: `.top { margin-top: 24px; }`,
 })
 export class Runs {

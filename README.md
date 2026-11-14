@@ -56,7 +56,7 @@ Proxys, und fünf fremde Fehlversuche sperren für eine Minute auch die richtige
 | `WDA_VIEWER_PASSWORD` | – | optionaler Lesezugang: Wer sich damit anmeldet, sieht „Auffällig“, abgelegte Läufe, Berichte, Verläufe und Exporte, kann aber nichts ändern, nichts ausführen, keine Einstellungen sehen und den Assistenten nicht nutzen. Muss sich vom Admin-Passwort unterscheiden |
 | `WDA_PUBLIC_URL` | – | Adresse der App von außen (`https://…`) für den Link in verschickten Berichten |
 | `WDA_SMTP_HOST`, `WDA_SMTP_PORT`, `WDA_SMTP_USER`, `WDA_SMTP_PASSWORD`, `WDA_SMTP_FROM`, `WDA_SMTP_SECURITY` | –, `587`, –, –, –, `starttls` | Mailserver für den Versand von Berichten nach Zeitplan; ohne Host und Absender gibt es keine E-Mails. Sicherheit: `starttls`, `ssl` oder `none` |
-| `WDA_PRECOMPUTE` | `builtin-themen` | Auswertungen (IDs, durch Komma getrennt), die zur Uhrzeit von `WDA_SNAPSHOT_NIGHTLY` neu gezählt und als Lauf abgelegt werden; die Wissenslandkarte zeigt dann den abgelegten Stand |
+| `WDA_PRECOMPUTE` | `builtin-themen` | Auswertungen (IDs, durch Komma getrennt), die zur Uhrzeit von `WDA_SNAPSHOT_NIGHTLY` neu gezählt und als Lauf abgelegt werden; die Wissenslandkarte zeigt dann den abgelegten Stand; `off` schaltet das Vorrechnen ab |
 | `WDA_COOKIE_SECURE` | `true` | Anmelde-Cookie nur über HTTPS senden |
 | `WDA_SESSION_MAX_AGE` | `43200` | Gültigkeit einer Anmeldung in Sekunden |
 | `WDA_SESSION_SECRET` | automatisch | Signatur-Geheimnis; sonst in `WDA_DATA_DIR/session.secret` |
@@ -391,9 +391,12 @@ Rechner mit mindestens fünf Materialien einzeln.
 - **Versand nach Zeitplan:** Ein Zeitplan kann den Bericht nach dem Lauf per E-Mail
   verschicken (Anhang PDF, Word, Excel oder HTML) und eine kurze Nachricht an einen Webhook
   senden (`title`, `status`, `started_at`, `url`, `missed_targets`, `changes`; keine
-  Tabellen). „Nur bei Auffälligkeit“ verschickt nur, wenn ein Zielwert verfehlt ist oder
-  sich eine Zahl seit dem vorigen Lauf auffällig geändert hat. Was beim Versand geschah,
-  steht am Zeitplan; ein gescheiterter Versand lässt den Lauf gültig.
+  Tabellen). „Nur bei Auffälligkeit“ verschickt nur, wenn ein Zielwert verfehlt ist, der
+  Lauf nur teilweise gelang oder sich eine Zahl seit dem letzten Lauf dieses Zeitplans
+  auffällig geändert hat (Läufe von Hand oder über Nacht dazwischen ändern daran nichts).
+  Der Webhook muss eine Adresse im Internet sein; interne Adressen werden abgelehnt.
+  „Jetzt ausführen“ am Zeitplan verschickt ebenfalls. Was beim Versand geschah, steht am
+  Zeitplan; ein gescheiterter Versand lässt den Lauf gültig.
 - **Verfehlte Zielwerte** des jüngsten Laufs stehen auf der Seite „Auffällig“.
 - **Kommentar des Assistenten:** In der Laufansicht schreibt das Sprachmodell auf Knopfdruck
   einen kurzen Kommentar zu den Zahlen des Berichts (`POST /api/assistant/comment`). Es

@@ -56,4 +56,37 @@ Jeder Schritt: erst der Test, dann die Umsetzung, danach `ruff`, `pytest`, `ng t
 
 ## Stand nach Review
 
-(folgt)
+Review durch einen unabhängigen Prüfer: kein kritischer, vier wichtige, dreizehn kleine Befunde.
+Behoben, jeweils mit Test (`backend/tests/test_review20.py`, `chat.spec.ts`):
+
+- **Versand „nur bei Auffälligkeit“** vergleicht mit dem letzten Lauf desselben Zeitplans
+  (`History.changes_since`), nicht mit einem Lauf, der dazwischen von Hand oder über Nacht
+  entstand; das gilt auch für Zeitpläne gegen eine andere Instanz. Ein nur teilweise
+  gelungener Lauf gilt als auffällig.
+- **Lesezugang:** Die Sitzung trägt eine Kennung des Lesezugang-Passworts; ohne Lesezugang
+  oder nach einem neuen Passwort gilt sie nicht mehr. Der Lesezugang bekommt keine Links in
+  den Explorer und keine leere Überschrift „Zeitpläne“; die Unterhaltung mit dem Assistenten
+  wird bei seiner Anmeldung aus dem Browser entfernt.
+- **Zielwerte auf „Auffällig“** auch dann, wenn die Kachel sie von ihrer Kennzahl erbt.
+- **`rows.exclude`** lehnt leere Einträge ab.
+- E-Mails tragen `Date` und `Message-ID`. `PUT /api/schedules/{id}` ohne `send` lässt den
+  Versand unverändert, nur `null` löscht ihn. Der Webhook nimmt keine internen Adressen an.
+- Der Kommentar des Assistenten erfährt, wenn der Lauf lückenhaft ist, und die Oberfläche
+  sagt, wenn er nur einen Teil des Berichts kannte (`truncated`).
+- Die Wissenslandkarte zeigt nur einen abgelegten Lauf der jetzigen Fassung.
+- Das nächtliche Vorrechnen läuft neben dem Planer; `WDA_PRECOMPUTE=off` schaltet es ab.
+- Word: gekürzter Text ist als gekürzt bezeichnet, nummerierte Punkte und Tabellenzeilen im
+  Text bleiben eigene Zeilen. `init` nimmt Punycode-Endungen an.
+- Wiederhergestellte Unterhaltungen verwerfen Vorschläge, die nicht nach Vorschlag aussehen.
+
+Abweichungen vom Plan, bewusst so belassen:
+
+- Schritt 1: Formelzeichen werden in Word nicht entschärft; Word rechnet Zelltext nicht aus.
+- Schritt 2: Ein Wert in `exclude`, den es nicht gibt, bleibt ohne Meldung. Die mitgelieferte
+  Wissenslandkarte blendet „Allgemein“ aus und trüge sonst auf jeder Instanz ohne diesen
+  Wert einen Dauerhinweis.
+- Schritt 7: Die Bibliothek gehört nicht zum Lesezugang (sie führt zum Bearbeiten und
+  Ausführen); er sieht Läufe, Berichte, Exporte und „Auffällig“.
+- Schritt 8: Das Sitzungsgeheimnis legt die App selbst im Datenverzeichnis an, nicht `init`.
+
+Offen: Wohin ein öffentlicher Webhook-Name auflöst, prüft die App nicht.

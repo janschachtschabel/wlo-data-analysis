@@ -41,7 +41,8 @@ const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise
                 } @else { <span class="muted">noch keiner</span> }
               </td>
               <td class="actions">
-                <button type="button" class="link" (click)="runNow(item)" [disabled]="busy().has(item.id)" [attr.aria-label]="'Jetzt ausführen: ' + item.definition_name">{{ busy().has(item.id) ? 'läuft …' : 'Jetzt ausführen' }}</button>
+                <button type="button" class="link" (click)="runNow(item)" [disabled]="busy().has(item.id)" [attr.aria-label]="'Jetzt ausführen: ' + item.definition_name"
+                        [title]="item.send ? 'Führt die Auswertung jetzt aus und verschickt den Bericht wie eingestellt' : 'Führt die Auswertung jetzt aus'">{{ busy().has(item.id) ? 'läuft …' : 'Jetzt ausführen' }}</button>
                 <button type="button" class="link" (click)="edit(item)" [attr.aria-label]="'Zeitplan ändern: ' + item.definition_name">Ändern</button>
                 <button type="button" class="link" (click)="remove(item)" [attr.aria-label]="'Zeitplan löschen: ' + item.definition_name">Löschen</button>
               </td>

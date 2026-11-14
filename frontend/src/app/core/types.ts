@@ -65,7 +65,7 @@ export interface Group { id: string; name: string }
 export interface RunHead {
   id: string | null; seq?: number; definition_id: string | null; kind: Kind; name: string;
   status: 'ok' | 'partial' | 'failed'; started_at: string; finished_at: string;
-  origin?: 'manual' | 'schedule' | 'nightly'; instance?: string | null;
+  origin?: 'manual' | 'schedule' | 'nightly'; instance?: string | null; definition_version?: number;
 }
 export interface ReportTable {
   type: 'table'; key: string; title: string; fill?: FillInfo | null;

@@ -77,6 +77,9 @@ _SELECT = ("SELECT s.*, d.name AS definition_name, d.kind AS definition_kind"
            " FROM schedules s JOIN definitions d ON d.id = s.definition_id")
 
 
+KEEP = object()  # „dieses Feld nicht anfassen“
+
+
 def _out(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": row["id"], "definition_id": row["definition_id"],
@@ -147,11 +150,15 @@ class ScheduleStore:
 
     async def update(self, schedule_id: str, *, every: str, at: str, weekday: int | None,
                      day: int | None, enabled: bool, now: datetime,
-                     send: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Ändert Rhythmus, Schalter und Versand; der nächste Termin wird neu gerechnet."""
+                     send: dict[str, Any] | None | object = None) -> dict[str, Any]:
+        """Ändert Rhythmus, Schalter und Versand; der nächste Termin wird neu gerechnet.
+        ``send=KEEP`` lässt den Versand, wie er ist."""
         weekday, day = check_rhythm(every, at, weekday, day)
 
         def fn(con: sqlite3.Connection) -> dict[str, Any]:
+            nonlocal send
+            if send is KEEP:
+                send = _get(con, schedule_id)["send"]
             _get(con, schedule_id)
             con.execute(
                 "UPDATE schedules SET every=?, at=?, weekday=?, day=?, enabled=?, next_due=?,"

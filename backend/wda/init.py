@@ -14,7 +14,9 @@ import sys
 from pathlib import Path
 
 PASSWORD_FILE = "admin.password"  # noqa: S105 - Dateiname, kein Geheimnis
-_HOST = re.compile(r"(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}")
+_LABEL = r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+# die Endung beginnt mit einem Buchstaben und darf Punycode sein (xn--…)
+_HOST = re.compile(rf"(?=.{{1,253}}$)({_LABEL}\.)+[A-Za-z]([A-Za-z0-9-]{{0,61}}[A-Za-z0-9])")
 
 
 def main() -> int:

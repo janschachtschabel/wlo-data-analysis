@@ -100,7 +100,7 @@ def test_only_when_something_is_notable(api, repo):
     repo.docs.extend([dict(d) for d in repo.docs[:200]])
     third = execute(api, item)
     assert third["last_send"] == "Verschickt an 1 Empfänger."
-    assert "Auffällige Veränderungen seit dem vorigen Lauf" in api.mails[0].get_body(
+    assert "Auffällige Veränderungen seit dem Lauf vom" in api.mails[0].get_body(
         ("plain",)).get_content()
 
 

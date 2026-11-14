@@ -59,6 +59,8 @@ class Rows(_Model):
                 self.groups or self.include or self.other or self.missing):
             raise ValueError("match und vocab wählen unter den vorkommenden Werten aus und "
                              "gehen nicht zusammen mit include, groups, other oder missing")
+        if self.exclude and any(not str(entry).strip() for entry in self.exclude):
+            raise ValueError("exclude nennt Bezeichnungen oder Kennungen, keine leeren Einträge")
         if self.exclude and (self.groups or self.include or self.other or self.rollup):
             raise ValueError("exclude blendet vorkommende Werte aus und geht nicht zusammen "
                              "mit include, groups, other oder rollup")

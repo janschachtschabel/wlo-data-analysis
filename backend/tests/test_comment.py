@@ -12,7 +12,7 @@ def test_assistant_comments_on_a_stored_run(api, model):  # noqa: F811
     model.answers = [say("Mathematik ist das größte Fach.")]
     out = api.post("/api/assistant/comment", json={"run_id": run["id"]})
     assert out.status_code == 200, out.text
-    assert out.json() == {"text": "Mathematik ist das größte Fach."}
+    assert out.json() == {"text": "Mathematik ist das größte Fach.", "truncated": False}
     [body] = model.bodies
     assert "tools" not in body  # er schreibt nur, er zählt und speichert nichts
     sent = json.dumps(body["messages"], ensure_ascii=False)

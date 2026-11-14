@@ -182,7 +182,10 @@ export function restoreTurns(text: string | null): Turn[] {
     if (!Array.isArray(found)) return [];
     return found.filter((turn): turn is Turn => !!turn && typeof turn === 'object' && (turn.role === 'user' || turn.role === 'assistant')
       && typeof turn.text === 'string' && Array.isArray(turn.steps) && Array.isArray(turn.proposals))
-      .map((turn) => ({ ...turn, pending: false }));
+      // Vorschläge, die nicht nach Vorschlag aussehen, fallen weg: Die nächste Frage liest sie
+      .map((turn) => ({ ...turn, pending: false, steps: turn.steps.filter((step: unknown) => typeof step === 'string'),
+        proposals: turn.proposals.filter((p: any) => !!p && ['metric', 'dashboard', 'template'].includes(p.kind)
+          && typeof p.name === 'string' && !!p.spec && typeof p.spec === 'object' && !Array.isArray(p.spec)) }));
   } catch { return []; }
 }
 

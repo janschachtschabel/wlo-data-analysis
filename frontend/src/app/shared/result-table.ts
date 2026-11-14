@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { Auth } from '../core/auth';
 import { RouterLink } from '@angular/router';
 import { Drill, cellLink } from './drill';
 import { formatDelta, formatNumber, formatPercent } from '../core/format';
@@ -122,6 +123,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
   `,
 })
 export class ResultTable {
+  private readonly viewer = inject(Auth).viewer;
   readonly columns = input.required<{ id: string; label: string; derived: boolean }[]>();
   readonly rows = input.required<ResultRow[]>();
   readonly rowTitle = input('');
@@ -135,7 +137,8 @@ export class ResultTable {
   readonly drill = input<Drill | null | undefined>(null);
   protected readonly links = computed(() => {
     const drill = this.drill();
-    if (!drill) return null;
+    // der Lesezugang hat keinen Explorer: Dort wären die Zahlen Links ins Leere
+    if (!drill || this.viewer()) return null;
     const columns = this.columns();
     return this.rows().map((row) => row.values.map((value, n) => (value ? cellLink(drill, row, columns[n]?.id ?? '') : null)));
   });

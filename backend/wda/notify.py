@@ -10,6 +10,7 @@ import smtplib
 import ssl
 from collections.abc import Awaitable, Callable
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 from typing import Any
 
 import httpx
@@ -98,11 +99,12 @@ class Notifier:
             return None
         report = build_report(run)
         targets = missed_targets(report)
-        changes: list[dict[str, Any]] = []
-        if not schedule.get("instance"):  # Veränderungen gibt es nur für die Hauptreihe
-            found = await self._history().highlights(limit=10, definition_id=report.definition_id)
-            changes = [c for c in found["items"] if c["run_id"] == report.run_id]
-        if send.get("only_notable") and not targets and not changes:
+        # verglichen wird mit dem letzten Lauf dieses Zeitplans, nicht mit einem Lauf, der
+        # dazwischen von Hand oder über Nacht entstand und die Änderung schon gesehen hat
+        changes = (await self._history().changes_since(report.run_id, schedule.get("last_run_id"))
+                   if report.run_id else [])
+        partial = report.status != "ok"  # ein lückenhafter Bericht ist selbst eine Nachricht
+        if send.get("only_notable") and not targets and not changes and not partial:
             return "Nichts Auffälliges, nicht verschickt."
         base = self._settings.public_url
         link = f"{base}/lauf/{report.run_id}" if base and report.run_id else ""
@@ -147,7 +149,10 @@ class Notifier:
         message = EmailMessage()
         message["From"] = self._settings.smtp_from
         message["To"] = ", ".join(recipients)
-        notable = " (auffällig)" if targets or changes else ""
+        message["Date"] = formatdate(localtime=True)
+        message["Message-ID"] = make_msgid(
+            domain=self._settings.smtp_from.rpartition("@")[2].strip("> ") or None)
+        notable = " (auffällig)" if targets or changes or report.status != "ok" else ""
         message["Subject"] = " ".join(f"{report.title}{notable}: Stand "
                                       f"{format_time(report.started_at)}".split())[:200]
         lines = [f"{report.title}", f"Stand: {format_time(report.started_at)}", ""]
@@ -157,7 +162,8 @@ class Notifier:
         if targets:
             lines += ["Zielwerte:"] + [f"- {t['block']}: {t['text']}" for t in targets] + [""]
         if changes:
-            lines += ["Auffällige Veränderungen seit dem vorigen Lauf:"]
+            since = format_time(changes[0]["previous_started_at"])
+            lines += [f"Auffällige Veränderungen seit dem Lauf vom {since}:"]
             lines += [f"- {change_line(c)}" for c in changes] + [""]
         if not targets and not changes:
             lines += ["Keine auffälligen Veränderungen, kein verfehlter Zielwert.", ""]

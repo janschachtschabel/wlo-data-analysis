@@ -20,11 +20,14 @@ _LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 MAX_COLUMNS = 6     # Spalten je Teil neben der Zeilenbeschriftung (Hochformat A4)
 MAX_ROWS = 2000     # je Tabelle; mehr trägt ein Textdokument nicht
 MAX_TOPICS = 3000
+MAX_TEXT = 8000     # Zeichen je Absatz oder Zelle
+_ITEM = re.compile(r"^\d{1,3}[.)] ")
 _NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
 
 
 def _run(text: str, bold: bool = False) -> str:
-    clean = escape(_BAD.sub("", text)[:8000])
+    text = _BAD.sub("", text)
+    clean = escape(text if len(text) <= MAX_TEXT else text[:MAX_TEXT] + " … (gekürzt)")
     look = "<w:rPr><w:b/></w:rPr>" if bold else ""
     return f'<w:r>{look}<w:t xml:space="preserve">{clean}</w:t></w:r>'
 
@@ -58,6 +61,10 @@ def _markdown(markdown: str) -> list[str]:
         elif line[:2] in ("- ", "* "):
             flush()
             out.append(_para("• " + _plain(line[2:])))
+        elif _ITEM.match(line) or line.startswith("|"):
+            flush()  # nummerierte Punkte und Tabellenzeilen bleiben je eine Zeile
+            if not set(line) <= set("|-: "):
+                out.append(_para(_plain(line.strip("|").replace("|", " · "))))
         else:
             buffer.append(line)
     flush()

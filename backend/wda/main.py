@@ -40,7 +40,7 @@ from .deps import AdminGate, require_admin
 from .instances import InstanceRegistry
 from .jobs import TooManyJobs
 from .scheduler import Scheduler, utc_now
-from .security import LoginThrottle, SessionSigner, session_signing_key
+from .security import LoginThrottle, SessionSigner, session_signing_key, viewer_mark
 from .services import Services
 
 # Die einzigen API-Pfade, die ohne Admin-Session antworten. Alles andere hängt am
@@ -83,6 +83,10 @@ def create_app(
             planner.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await planner
+        for task in list(app.state.precomputing):
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
         await app.state.services.aclose()
 
     app = FastAPI(
@@ -95,16 +99,25 @@ def create_app(
     )
     app.state.settings = settings
     app.state.instances = InstanceRegistry(settings.instances)
-    app.state.signer = SessionSigner(session_signing_key(settings), settings.session_max_age)
+    app.state.signer = SessionSigner(
+        session_signing_key(settings), settings.session_max_age, viewer_mark(settings))
     app.state.throttle = LoginThrottle(clock=clock)
     app.state.services = Services(settings, app.state.instances, transport=transport,
                                   llm_transport=llm_transport)
 
     app.state.scheduler_clock = now
 
+    precomputing: set[asyncio.Task[object]] = set()
+
     async def nightly(when: datetime) -> None:
         await app.state.services.nightly_snapshots(when)
-        await app.state.services.nightly_precompute(when)
+        # das Vorrechnen dauert; es läuft neben dem Planer, damit fällige Zeitpläne nicht warten
+        if not precomputing:
+            task = asyncio.create_task(app.state.services.nightly_precompute(when))
+            precomputing.add(task)
+            task.add_done_callback(precomputing.discard)
+
+    app.state.precomputing = precomputing
 
     app.state.scheduler = Scheduler(
         lambda: app.state.services.schedules, lambda: app.state.services.runner, clock=now,

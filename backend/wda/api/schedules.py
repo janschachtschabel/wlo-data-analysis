@@ -5,6 +5,7 @@ Ein Zeitplan enthält nur den Bezug auf eine Definition und einen Rhythmus, kein
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
@@ -22,6 +23,7 @@ from pydantic import (
 
 from ..errors import QueryError, UnknownInstance
 from ..store.definitions import Conflict
+from ..store.schedules import KEEP
 
 router = APIRouter()
 
@@ -51,7 +53,22 @@ class Send(BaseModel):
                     or parts.username or parts.password):
                 raise ValueError("Der Webhook ist eine Adresse mit http:// oder https://, "
                                  "ohne Zugangsdaten in der Adresse.")
+            if _internal(parts.hostname):
+                raise ValueError("Der Webhook zeigt auf eine interne Adresse; erlaubt sind "
+                                 "nur Adressen im Internet.")
         return self
+
+
+def _internal(host: str) -> bool:
+    """Ziele im eigenen Netz: die App soll nicht als Fühler nach innen dienen. Geprüft wird
+    die eingetragene Adresse; wohin ein öffentlicher Name auflöst, bleibt Sache des Betreibers."""
+    host = host.strip("[]").rstrip(".").casefold()
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return ("." not in host or host == "localhost"
+                or host.endswith((".localhost", ".local", ".internal")))
+    return not address.is_global
 
 
 class Rhythm(BaseModel):
@@ -102,7 +119,9 @@ async def update_schedule(schedule_id: str, body: Rhythm, request: Request) -> d
     return await _store(request).update(
         schedule_id, every=body.every, at=body.at, weekday=body.weekday, day=body.day,
         enabled=body.enabled, now=_now(request),
-        send=body.send.model_dump() if body.send else None)
+        # ohne das Feld bleibt der Versand, wie er ist; nur ein ausdrückliches null löscht ihn
+        send=(body.send.model_dump() if body.send else None)
+        if "send" in body.model_fields_set else KEEP)
 
 
 @router.delete("/schedules/{schedule_id}", status_code=204)

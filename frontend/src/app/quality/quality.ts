@@ -175,7 +175,9 @@ export class Quality {
       let stored: RunHead | null = null;
       if (QUALITY_TABS.find((t) => t.id === id)?.stored) {
         const runs = await this.api.get<RunHead[]>(`/definitions/${encodeURIComponent('builtin-' + id)}/runs?limit=5`).catch(() => []);
-        stored = runs.find((run) => !!run.id && run.status === 'ok' && !run.instance) ?? null;
+        // nur ein Lauf der jetzigen Fassung: Nach „Fassung übernehmen“ zeigte sonst der alte Lauf die alte Abfrage
+        const version = (await this.api.get<{ version: number }>(`/definitions/${encodeURIComponent('builtin-' + id)}`).catch(() => null))?.version;
+        stored = runs.find((run) => !!run.id && run.status === 'ok' && !run.instance && (version === undefined || run.definition_version === version)) ?? null;
       }
       if (this.current().id === id) {
         this.storedRun.set(stored);

@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # Uhrzeit (HH:MM in ``timezone``), zu der vorhandene Abzüge Änderungen nachziehen
     snapshot_nightly: str = "03:30"
     # Auswertungen, die jede Nacht zur selben Uhrzeit neu gezählt und abgelegt werden (IDs,
-    # durch Komma getrennt); leer: keine
+    # durch Komma getrennt); „off“: keine
     precompute: str = "builtin-themen"
     runs_keep: int = Field(default=500, ge=1, le=100000)
     # Versand von Berichten nach Zeitplan; ohne smtp_host gibt es keine E-Mails

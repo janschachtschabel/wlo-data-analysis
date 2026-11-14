@@ -19,6 +19,12 @@ describe('Unterhaltung im Browser behalten', () => {
     expect(storeTurns([])).toBe('');
     for (const bad of [null, '', 'kein json', '{"a":1}', '[1, null, {"role":"system","text":"x","steps":[],"proposals":[]}]']) expect(restoreTurns(bad)).toEqual([]);
   });
+  it('verwirft kaputte Vorschläge und Schritte', () => {
+    const stored = JSON.stringify([{ role: 'assistant', text: 'x', steps: ['ok', 3, null], proposals: [{}, null, { kind: 'metric', name: 'M', spec: [] }, { kind: 'metric', name: 'M', description: '', spec: {} }] }]);
+    const [back] = restoreTurns(stored);
+    expect(back.steps).toEqual(['ok']);
+    expect(back.proposals).toEqual([{ kind: 'metric', name: 'M', description: '', spec: {} }]);
+  });
   it('lässt bei Übergröße die ältesten Fragen weg', () => {
     const big = 'x'.repeat(600_000);
     const turns = [turn('user', 'eins'), turn('assistant', big), turn('user', 'zwei'), turn('assistant', big), turn('user', 'drei'), turn('assistant', big)];
