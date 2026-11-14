@@ -39,14 +39,7 @@ class LlmClient:
         effort = self.config.reasoning_effort
         if effort:
             body["reasoning_effort"] = effort
-        try:
-            data = await self._post(body)
-        except LlmError as exc:
-            # Nicht jedes Modell kennt den Parameter; dann einmal ohne ihn.
-            if not (effort and exc.status == 400 and "reasoning" in exc.message.lower()):
-                raise
-            del body["reasoning_effort"]
-            data = await self._post(body)
+        data = await self._post_adapting(body)
         try:
             message = data["choices"][0]["message"]
             content = message.get("content")
@@ -58,6 +51,28 @@ class LlmClient:
                            "Das Sprachmodell hat in einem unerwarteten Format geantwortet."
                            ) from None
         return {"role": "assistant", "content": content, "tool_calls": calls}
+
+    async def _post_adapting(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Modelle unterscheiden sich darin, was sie bei ``reasoning_effort`` annehmen:
+        manche kennen den Parameter nicht, andere verlangen mit Werkzeugen ausdrücklich
+        ``none``. Lehnt der Anbieter deshalb ab, folgen die anderen Formen."""
+        tried = [body.get("reasoning_effort")]
+        while True:
+            try:
+                return await self._post(body)
+            except LlmError as exc:
+                if not (exc.status == 400 and "reasoning" in exc.message.lower()):
+                    raise
+                # nennt die Meldung „none“, ist das der Ausweg; sonst zuerst ganz ohne
+                order = ("none", None) if "none" in exc.message.lower() else (None, "none")
+                following = next((v for v in order if v not in tried), False)
+                if following is False:
+                    raise
+                tried.append(following)
+                if following is None:
+                    body.pop("reasoning_effort", None)
+                else:
+                    body["reasoning_effort"] = following
 
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
         headers = {"Content-Type": "application/json"}

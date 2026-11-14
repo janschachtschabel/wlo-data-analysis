@@ -104,7 +104,7 @@ def test_settings_are_stored_and_never_return_the_key(api, settings):
     assert r.status_code == 200, r.text
     expected = {"base_url": "https://b-api.example.org/api/v1/llm/openai",
                 "model": "gpt-6-luna", "effort": "medium", "api_key_set": True,
-                "ready": True, "stored": True}
+                "ready": True, "stored": True, "locked": False}
     assert r.json() == expected
     assert api.get("/api/settings").json()["llm"] == expected
     for text in (r.text, api.get("/api/settings").text):
@@ -190,6 +190,34 @@ def test_retries_once_without_reasoning_effort():
 
     answer = run_client(handler)
     assert answer["content"] == "ok" and len(seen) == 2 and "reasoning_effort" not in seen[1]
+
+
+def test_function_tools_need_reasoning_effort_none():
+    """Live gesehen (OpenAI, 2026-11-14): Mit Werkzeugen lehnt das Modell jede Stufe außer
+    ``none`` ab, auch die eigene Voreinstellung."""
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body.get("reasoning_effort", "fehlt"))
+        if body.get("reasoning_effort") != "none":
+            return httpx.Response(400, json={"error": {"message": (
+                "Function tools with reasoning_effort are not supported for gpt-6-luna in "
+                "/v1/chat/completions. To use function tools, use /v1/responses or set "
+                "reasoning_effort to 'none'.")}})
+        return say("ok")
+
+    assert run_client(handler)["content"] == "ok"
+    assert seen == ["low", "none"]
+
+
+def test_a_reasoning_error_that_never_ends_is_reported():
+    def handler(request):
+        return httpx.Response(400, json={"error": {"message": "reasoning_effort: nein"}})
+
+    with pytest.raises(LlmError) as caught:
+        run_client(handler)
+    assert caught.value.kind == "llm_rejected"
 
 
 @pytest.mark.parametrize("response, kind", [
@@ -486,3 +514,40 @@ def test_chat_about_a_definition_counts_it_fresh_without_saving(api, model, repo
         "instance": "wlo-prod", "definition_id": "gibt-es-nicht",
         "messages": [{"role": "user", "content": "x"}]})
     assert r.status_code == 404
+
+
+def test_without_the_switch_only_the_environment_counts(tmp_path):
+    """Ohne ``WDA_LLM_SETTINGS_UI`` gilt allein die Umgebung: Gespeichertes zählt nicht, und
+    die App nimmt keine Änderung an."""
+    from fastapi.testclient import TestClient
+
+    from wda.config import Settings
+    from wda.main import create_app
+
+    from .conftest import ADMIN_PASSWORD
+
+    def app(**extra):
+        settings = Settings(admin_password=ADMIN_PASSWORD, cookie_secure=False,
+                            data_dir=tmp_path, scheduler=False, **extra)
+        client = TestClient(create_app(settings))
+        client.__enter__()
+        assert client.post("/api/auth/login",
+                           json={"password": ADMIN_PASSWORD}).status_code == 204
+        return client
+
+    stored = {"base_url": "https://anders.example/v1", "model": "m", "api_key": "aus-der-app"}
+    first = app(llm_settings_ui=True)
+    assert first.put("/api/settings/llm", json=stored).status_code == 200
+    assert first.get("/api/settings").json()["llm"]["locked"] is False
+    first.__exit__(None, None, None)
+
+    second = app(llm_api_key="aus-der-umgebung", llm_model="env-modell", llm_effort="off")
+    try:
+        llm = second.get("/api/settings").json()["llm"]
+        assert llm["locked"] and llm["model"] == "env-modell" and not llm["stored"]
+        assert llm["effort"] == "off" and "aus-der" not in json.dumps(llm)
+        assert second.put("/api/settings/llm", json=stored).status_code == 409
+        assert second.delete("/api/settings/llm").status_code == 409
+        assert second.app.state.services.llm.api_key == "aus-der-umgebung"
+    finally:
+        second.__exit__(None, None, None)

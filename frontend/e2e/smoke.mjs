@@ -30,6 +30,8 @@ await page.waitForURL(/\/bibliothek$/);
 await page.goto(base + '/');
 await page.waitForSelector('.big');
 const total = await page.textContent('.big');
+// Startansicht: unter der Gesamtzahl stehen die Füllgrade der wichtigsten Felder
+await page.waitForSelector('.overview canvas');
 const input = page.locator('app-filter-bar input[type=text]');
 await input.fill('bildungsstufe');
 await input.press('Enter');
@@ -286,7 +288,9 @@ await page.screenshot({ path: process.env.SHOT ?? '/dev/null', fullPage: true })
 
 // Menüpunkt „Qualität“: legt die mitgelieferten Auswertungen an und zeigt sie als Reiter
 await page.click('nav >> text=Qualität');
-await page.waitForURL(/\/qualitaet\/abdeckung$/);
+await page.waitForURL(/\/qualitaet\/datenqualitaet$/);
+await page.waitForSelector("app-report-view canvas", { timeout: 60000 });
+await page.click(".tabs >> text=Abdeckung");
 await page.waitForSelector('app-report-view td.h6', { timeout: 60000 });
 assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, 'Heatmap ist eingefärbt');
 await page.click('.tabs >> text=Datenprobleme');

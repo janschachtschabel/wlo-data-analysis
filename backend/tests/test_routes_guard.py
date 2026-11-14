@@ -154,4 +154,4 @@ def test_instances_and_settings_leak_no_secrets(admin):
     assert instances.json()[2]["has_credentials"] is True
     assert settings.json()["llm"] == {
         "base_url": "https://api.openai.com/v1", "model": "gpt-6-luna", "api_key_set": True,
-        "effort": "auto", "ready": True, "stored": False}
+        "effort": "auto", "ready": True, "stored": False, "locked": False}

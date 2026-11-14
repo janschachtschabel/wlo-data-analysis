@@ -26,6 +26,7 @@ def settings(tmp_path):
         cookie_secure=False,
         data_dir=tmp_path,
         llm_api_key=LLM_KEY,
+        llm_settings_ui=True,
         instances=json.dumps([
             {"id": "eigene", "name": "Eigene", "base_url": "https://edu.example.org",
              "username": "nutzer-789", "password": INSTANCE_PASSWORD},

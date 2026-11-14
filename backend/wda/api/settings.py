@@ -44,9 +44,17 @@ def _merged(body: LlmIn, current: LlmConfig) -> LlmConfig | JSONResponse:
     return LlmConfig(body.base_url, body.model, key, body.effort, True)
 
 
+def _locked() -> JSONResponse:
+    return JSONResponse(error_body(
+        "conflict", "Das Sprachmodell ist über die Umgebung eingestellt (WDA_LLM_…) und "
+                    "lässt sich hier nicht ändern."), status_code=409)
+
+
 @router.put("/llm")
 async def write_llm(body: LlmIn, request: Request) -> Any:
     services = request.app.state.services
+    if services.llm.locked:
+        return _locked()
     config = _merged(body, services.llm)
     if isinstance(config, JSONResponse):
         return config
@@ -58,6 +66,8 @@ async def write_llm(body: LlmIn, request: Request) -> Any:
 async def reset_llm(request: Request) -> dict[str, Any]:
     """Zurück auf die Werte der Umgebung (``WDA_LLM_*``)."""
     services = request.app.state.services
+    if services.llm.locked:
+        return _locked()
     await services.save_llm(None)
     return services.llm.public()
 
@@ -68,7 +78,7 @@ async def test_llm(request: Request, body: LlmIn | None = None) -> Any:
     gespeicherten) Einstellungen."""
     services = request.app.state.services
     config = services.llm
-    if body is not None:
+    if body is not None and not config.locked:
         config = _merged(body, config)
         if isinstance(config, JSONResponse):
             return config

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
@@ -26,6 +27,9 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: SecretStr | None = None
     llm_model: str = "gpt-6-luna"
+    llm_effort: Literal["auto", "off", "low", "medium", "high"] = "auto"
+    # ``on``: Adresse, Modell und Schlüssel lassen sich auch in der App eintragen
+    llm_settings_ui: bool = False
     cache_ttl: float = Field(default=900.0, ge=0)
     vocab_ttl: float = Field(default=86400.0, ge=60)
     upstream_timeout: float = Field(default=90.0, gt=0)

@@ -175,6 +175,17 @@ const VIEWS: { id: ViewType; label: string }[] = [
           <app-result-table [columns]="data.columns" [rows]="tableRows()" [rowTitle]="rowTitle() || (spec().fill ? 'Feld' : '')"
                             [heat]="view() === 'heatmap' ? heatScale(data.columns) : null" [heatOptions]="heatOptions(null, data.fill)" />
         }
+        @if (!spec().rows && !spec().fill && overview(); as fill) {
+          <section class="overview" aria-label="Füllgrade der wichtigsten Felder">
+            <div class="row">
+              <h2>Füllgrade der wichtigsten Felder{{ (spec().filters ?? []).length ? ' (mit den Filtern oben)' : '' }}</h2>
+              <span class="grow"></span>
+              <button type="button" (click)="setFill(true)">Im Explorer öffnen</button>
+              <a routerLink="/qualitaet/datenqualitaet">Alle Füllgrade</a>
+            </div>
+            <app-chart [data]="fill" view="stacked_bar" label="Grafik: Füllgrade der wichtigsten Felder" />
+          </section>
+        }
         <details class="origin" [open]="data.provenance.notes.length > 0">
           <summary>Herkunft: abgerufen {{ time(data.provenance.fetched_at) }}{{ data.provenance.cached ? ' (aus dem Zwischenspeicher)' : '' }},
             {{ data.provenance.queries }} {{ data.provenance.queries === 1 ? 'Abfrage' : 'Abfragen' }}@if (data.provenance.notes.length) {, <strong>{{ data.provenance.notes.length }} {{ data.provenance.notes.length === 1 ? 'Hinweis' : 'Hinweise' }}</strong>}</summary>
@@ -197,6 +208,7 @@ const VIEWS: { id: ViewType; label: string }[] = [
     .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
     .busy { margin: 0 0 6px; } .suggestion { margin: 0 6px 4px 0; padding: 2px 8px; }
     .head { margin-bottom: var(--gap); }
+    .overview { margin: var(--gap) 0; } .overview h2 { margin: 0; font-size: 16px; }
     .views button { border-radius: 0; margin-left: -1px; }
     .views button:first-child { border-radius: 6px 0 0 6px; } .views button:last-child { border-radius: 0 6px 6px 0; }
     .views button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -224,6 +236,8 @@ export class Explorer {
   protected readonly view = signal<ViewType>('table');
   protected readonly result = new Latest<QueryResult>();
   protected readonly linkError = signal('');
+  /** Startansicht: unter der Gesamtzahl die Füllgrade der wichtigsten Felder */
+  protected readonly overview = signal<QueryResult | null>(null);
   protected readonly fields = signal<FieldInfo[]>([]);
   protected readonly saving = signal(false);
   protected readonly saved = signal<Definition | null>(null);
@@ -324,6 +338,17 @@ export class Explorer {
             .then((page) => this.vocabs.update((all) => ({ ...all, [key]: vocabInfo(page.values) })), () => undefined);
         }
       });
+    });
+    // Startansicht (nur Gesamtzahl): dazu die Füllgrade der wichtigsten Felder.
+    effect((onCleanup) => {
+      const spec = this.spec();
+      const fields = fillDefaults(this.facetFields());
+      this.overview.set(null);
+      if (!spec.instance || spec.rows || spec.fill || !fields.length) return;
+      const stop = new AbortController();
+      onCleanup(() => stop.abort());
+      this.api.post<QueryResult>('/query', { instance: spec.instance, filters: spec.filters ?? [], fill: { fields, show: 'rate' } }, stop.signal)
+        .then((data) => { if (!stop.signal.aborted) this.overview.set(data); }, () => undefined);
     });
     // Nach erneuter Anmeldung zählt die Ansicht von selbst neu.
     const auth = inject(Auth);

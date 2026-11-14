@@ -60,7 +60,7 @@ def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     settings = Settings(admin_password=PASSWORD, cookie_secure=False,
                         data_dir=Path(tempfile.mkdtemp(prefix="wda-demo-")),
-                        llm_api_key="demo")
+                        llm_api_key="demo", llm_settings_ui=True)
     app = create_app(settings, transport=DataRepo().transport(),
                      llm_transport=httpx.MockTransport(demo_model))
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

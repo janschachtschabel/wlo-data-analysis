@@ -21,6 +21,29 @@ const PRESETS = [
     <h1>Einstellungen</h1>
     @if (loadError()) { <p class="error" role="alert">{{ loadError() }}</p> }
     @if (settings(); as all) {
+      @if (all.llm.locked) {
+        <section class="card">
+          <h2>KI: Sprachmodell für den Assistenten</h2>
+          <p class="muted">Das Sprachmodell wird über die Umgebung eingestellt (<code>WDA_LLM_BASE_URL</code>, <code>WDA_LLM_MODEL</code>,
+            <code>WDA_LLM_API_KEY</code>, etwa in der Datei <code>.env</code>). Der Schlüssel erscheint in der App nirgends.
+            Nach einer Änderung die App neu starten.</p>
+          <dl>
+            <dt>Basis-URL</dt><dd>{{ all.llm.base_url }}</dd>
+            <dt>Modell</dt><dd>{{ all.llm.model }}</dd>
+            <dt>Schlüssel</dt><dd>{{ all.llm.api_key_set ? 'gesetzt' : 'fehlt (WDA_LLM_API_KEY)' }}</dd>
+          </dl>
+          <div class="row actions"><button type="button" (click)="test()" [disabled]="busy()">Verbindung testen</button></div>
+          @if (busy()) { <p class="muted" role="status">{{ busy() }}</p> }
+          @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+          @if (tested(); as result) {
+            @if (result.ok) {
+              <p class="okay" role="status">Verbindung steht: {{ result.model }} hat in {{ result.seconds }} s geantwortet.</p>
+            } @else {
+              <p class="error" role="alert">{{ result.detail }}</p>
+            }
+          }
+        </section>
+      } @else {
       <form class="card" (ngSubmit)="save()">
         <h2>KI: Sprachmodell für den Assistenten</h2>
         <p class="muted">Jeder Anbieter mit OpenAI-kompatibler Schnittstelle. An das Modell gehen nur Feldnamen,
@@ -62,6 +85,7 @@ const PRESETS = [
           }
         }
       </form>
+      }
       <section class="card">
         <h2>Über diese Installation</h2>
         <dl>
@@ -126,7 +150,8 @@ export class SettingsPage {
   protected async test(): Promise<void> {
     this.begin('Frage das Modell …');
     try {
-      this.tested.set(await this.api.post<TestResult>('/settings/llm/test', this.body()));
+      const body = this.settings()?.llm.locked ? null : this.body();
+      this.tested.set(await this.api.post<TestResult>('/settings/llm/test', body));
     } catch (e) { this.fail(e, 'Der Test ist nicht möglich.'); } finally { this.busy.set(''); }
   }
 

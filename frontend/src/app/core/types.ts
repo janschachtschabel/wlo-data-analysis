@@ -78,7 +78,7 @@ export interface Report {
 }
 export interface LlmSettings {
   base_url: string; model: string; effort: 'auto' | 'off' | 'low' | 'medium' | 'high';
-  api_key_set: boolean; ready: boolean; stored: boolean;
+  api_key_set: boolean; ready: boolean; stored: boolean; locked: boolean;
 }
 export interface AppSettings {
   version: string; timezone?: string; export: { formats: string[]; pdf_available: boolean };

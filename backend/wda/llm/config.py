@@ -61,6 +61,7 @@ class LlmConfig:
     api_key: str | None
     effort: str = "auto"
     stored: bool = False  # in der Oberfläche gesetzt (sonst aus der Umgebung)
+    locked: bool = False  # nur über die Umgebung einstellbar: in der App reine Anzeige
 
     @property
     def ready(self) -> bool:
@@ -77,7 +78,8 @@ class LlmConfig:
     def public(self) -> dict[str, Any]:
         """Für die Oberfläche: nie der Schlüssel, nur ob einer gesetzt ist."""
         return {"base_url": self.base_url, "model": self.model, "effort": self.effort,
-                "api_key_set": bool(self.api_key), "ready": self.ready, "stored": self.stored}
+                "api_key_set": bool(self.api_key), "ready": self.ready, "stored": self.stored,
+                "locked": self.locked}
 
 
 class LlmIn(BaseModel):
@@ -105,13 +107,16 @@ class LlmIn(BaseModel):
 
 def from_env(settings: Settings) -> LlmConfig:
     key = settings.llm_api_key.get_secret_value().strip() if settings.llm_api_key else ""
-    return LlmConfig(settings.llm_base_url, settings.llm_model, key or None)
+    # Ohne ``WDA_LLM_SETTINGS_UI`` gilt allein die Umgebung; die App zeigt dann nur an.
+    return LlmConfig(settings.llm_base_url, settings.llm_model, key or None,
+                     settings.llm_effort, locked=not settings.llm_settings_ui)
 
 
 def from_stored(text: str | None, settings: Settings) -> LlmConfig:
     """Die gespeicherten Werte; Unlesbares fällt auf die Umgebung zurück."""
-    if not text:
-        return from_env(settings)
+    env = from_env(settings)
+    if not text or env.locked:
+        return env
     try:
         data = json.loads(text)
         checked = LlmIn(base_url=data["base_url"], model=data["model"],

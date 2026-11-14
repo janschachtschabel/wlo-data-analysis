@@ -52,6 +52,8 @@ Minute auch die richtige Anmeldung.
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
 | `WDA_LLM_API_KEY` | – | Schlüssel für die KI-Anbindung |
+| `WDA_LLM_EFFORT` | `auto` | Denkaufwand (`auto`, `off`, `low`, `medium`, `high`); die App passt ihn an, wenn das Modell ihn mit Werkzeugen ablehnt |
+| `WDA_LLM_SETTINGS_UI` | `off` | `on`: Adresse, Modell und Schlüssel lassen sich auch in der App unter „Einstellungen“ eintragen. Sonst gilt allein die Umgebung, und die App zeigt nur an |
 
 Vorbelegte Instanzen: `wlo-prod` (`https://redaktion.openeduhub.net`) und `wlo-staging`
 (`https://repository.staging.openeduhub.net`). Ein Eintrag in `WDA_INSTANCES` mit
@@ -234,11 +236,7 @@ Rechner mit mindestens fünf Materialien einzeln.
 
 ## KI: Assistent und Einstellungen
 
-- **Einstellungen** (Menü): Basis-URL, Modell, Schlüssel und Denkaufwand des Sprachmodells.
-  Jeder Anbieter mit OpenAI-kompatibler Schnittstelle (`…/chat/completions`), Vorgaben für
-  OpenAI und die B-API (`…/api/v1/llm/openai`), Standardmodell `gpt-6-luna`. Der Schlüssel
-  lässt sich nur setzen, nie lesen; für eine andere Adresse muss er neu eingegeben werden.
-  Ohne Eintrag gelten `WDA_LLM_BASE_URL`, `WDA_LLM_MODEL`, `WDA_LLM_API_KEY`.
+- **Einstellungen** (Menü): zeigt Basis-URL, Modell und ob ein Schlüssel gesetzt ist, und prüft die Verbindung. Eingestellt wird über die Umgebung (`WDA_LLM_BASE_URL`, `WDA_LLM_MODEL`, `WDA_LLM_API_KEY`, `WDA_LLM_EFFORT`), damit der Schlüssel in der App nirgends eingegeben werden muss. Mit `WDA_LLM_SETTINGS_UI=on` lassen sich die Werte auch in der App eintragen; sie gehen dann denen der Umgebung vor.
 - **Assistent** (Menü): Fragen in eigenen Worten. Der Assistent schlägt Felder und Werte nach,
   zählt über dieselbe Engine wie alle Auswertungen und zeigt Ansichten und Dashboards als
   Karten („Im Explorer öffnen“, „Als Kennzahl speichern“, „Dashboard anlegen“). Der Knopf

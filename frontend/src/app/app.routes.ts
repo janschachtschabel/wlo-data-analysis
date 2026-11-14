@@ -11,7 +11,7 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', title: 'Explorer – WLO-Daten', loadComponent: () => import('./explorer/explorer').then((m) => m.Explorer) },
       { path: 'assistent', title: 'Assistent – WLO-Daten', loadComponent: () => import('./assistant/assistant').then((m) => m.Assistant) },
       { path: 'einstellungen', title: 'Einstellungen – WLO-Daten', loadComponent: () => import('./settings/settings-page').then((m) => m.SettingsPage) },
-      { path: 'qualitaet', pathMatch: 'full', redirectTo: 'qualitaet/abdeckung' },
+      { path: 'qualitaet', pathMatch: 'full', redirectTo: 'qualitaet/datenqualitaet' },
       { path: 'qualitaet/:tab', title: 'Qualität – WLO-Daten', loadComponent: () => import('./quality/quality').then((m) => m.Quality) },
       { path: 'bibliothek', title: 'Bibliothek – WLO-Daten', loadComponent: () => import('./library/library').then((m) => m.Library) },
       { path: 'bearbeiten/:defId', title: 'Bearbeiten – WLO-Daten', loadComponent: () => import('./library/editor').then((m) => m.Editor),
