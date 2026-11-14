@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 import math
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from ..engine.engine import SCHEMA_VERSION
 from ..engine.formula import compile_formula
@@ -31,8 +32,18 @@ def format_number(value: Any, digits: int | None = None) -> str:
     return text.replace(",", " ").replace(".", ",").replace(" ", ".")
 
 
+_zone: tzinfo = UTC
+
+
+def set_display_zone(name: str | None) -> None:
+    """Zeitzone, in der Berichte, Exporte und E-Mails Zeitpunkte nennen (sonst UTC)."""
+    global _zone  # noqa: PLW0603 - eine Einstellung der Anwendung, beim Start gesetzt
+    _zone = ZoneInfo(name) if name else UTC
+
+
 def format_time(value: Any) -> str:
-    """Zeitpunkt als ``TT.MM.JJJJ HH:MM`` (UTC); akzeptiert Epoch-Sekunden und ISO-Text."""
+    """Zeitpunkt als ``TT.MM.JJJJ HH:MM`` mit Zone (die der Anwendung, sonst UTC); akzeptiert
+    Epoch-Sekunden und ISO-Text."""
     try:
         if isinstance(value, int | float) and not isinstance(value, bool):
             moment = datetime.fromtimestamp(value, UTC)
@@ -40,7 +51,8 @@ def format_time(value: Any) -> str:
             moment = datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
     except (ValueError, OverflowError, OSError):
         return "–"
-    return moment.strftime("%d.%m.%Y %H:%M") + " UTC"
+    local = moment.astimezone(_zone)
+    return local.strftime("%d.%m.%Y %H:%M ") + (local.tzname() or "UTC")
 
 
 def describe_filters(filters: list[dict[str, Any]]) -> str:

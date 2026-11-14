@@ -22,7 +22,7 @@ def api(settings):
 
 def test_file_names_are_harmless():
     assert file_name("Fächer & Größen: Ü/1", "2026-11-13T19:50:15Z", "pdf") == (
-        "Facher-Groen-U-1-2026-11-13.pdf")
+        "Faecher-Groessen-Ue-1-2026-11-13.pdf")
     assert file_name('../../etc/passwd"\r\nX: y', "kaputt", "csv") == "etc-passwd-X-y-lauf.csv"
     assert file_name("日本語", "2026-01-01", "md") == "bericht-2026-01-01.md"
     assert len(file_name("x" * 500, "2026-01-01", "html")) < 80
@@ -44,7 +44,7 @@ def test_export_in_every_format(api):
         assert r.headers["content-type"].startswith(media)
         disposition = r.headers["content-disposition"]
         day = run["started_at"][:10]
-        assert disposition.startswith(f'attachment; filename="Facher-nach-Fach-{day}.')
+        assert disposition.startswith(f'attachment; filename="Faecher-nach-Fach-{day}.')
         assert "sandbox" in r.headers["content-security-policy"]
         assert r.headers["cache-control"] == "no-store"
     assert api.get(f"/api/runs/{run['id']}/export").headers["content-type"].startswith(
