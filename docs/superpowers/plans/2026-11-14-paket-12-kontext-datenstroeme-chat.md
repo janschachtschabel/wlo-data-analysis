@@ -39,3 +39,10 @@
 - Verbindungstest 200 in 1,6 s. „Wieviele Inhalte mit Mathematik gibt es?“: 28.874, Gegenprobe über `/api/query` gleich. „Zeig mir als Grafik …“: Balkengrafik als Vorschlag, alle genannten Zahlen stimmen.
 - Auffällig: „Mathematik“ einmal mit, einmal ohne Hochschulfächer; ein gleichnamiger Wert der Hochschulfächersystematik (`n105`) fehlte im Filter; fünf Werkzeugaufrufe für eine einfache Zählung.
 - Der Schlüssel steht dort weiter in der App (Start mit `WDA_LLM_SETTINGS_UI=on`); Jan trägt ihn selbst in `.env` ein.
+
+## Probe gegen WLO Produktion (Jans Rechner, Stand 3913f27)
+
+- „Quellen“: 23 Kacheln ohne Fehler, 8,2 s, 264 Abfragen. Je Zeile gilt neu 30 Tage ≤ neu 12 Monate ≤ Bestand; die sechs Altersspalten summieren sich in allen 15 Zeilen exakt zum Bestand; keine negativen Werte. Gegenproben über `/api/query` treffen exakt (gesamt 923 neue in 12 Monaten, 2.684 geändert).
+- Befund in den Daten: Keine der 30 größten Quellen hat in 12 Monaten Zufluss, 99,2 % des Bestands sind seit 12 Monaten unberührt. Von den 923 neuen Materialien haben 751 keine Quelle (Crawler), 165 kommen von `oer_berlin_spider`.
+- Folge: zwei Kacheln „Wo fließt etwas?“ (neue Materialien der letzten 12 Monate nach Quelle, mit „ohne Wert“, und nach Bezugsquelle), Zufluss in Prozent auf zwei Stellen.
+- „Datenprobleme“ mit Kontext: `bpb_spider` 62.867, Bezugsquelle Youtube 56.052, je 12 Kacheln ohne Fehler, rund 1 s. Im Kontext einer Quelle zeigen Kacheln „je Quelle“ nur eine Zeile (erwartet).

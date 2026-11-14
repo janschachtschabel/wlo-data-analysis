@@ -94,7 +94,8 @@ def test_the_source_streams_of_the_builtin_dashboard(api):
     assert api.post("/api/builtin/quellen/install").status_code == 200
     run = api.post("/api/definitions/builtin-quellen/run", json={"save": False}).json()
     by_key = {r["key"]: r for r in run["results"]}
-    for key in ("strom-quellen", "strom-bezugsquellen", "zufluss-jahre"):
+    for key in ("strom-quellen", "strom-bezugsquellen", "zufluss-jahre", "zufluss-quellen",
+                "zufluss-bezugsquellen"):
         assert by_key[key]["error"] is None, by_key[key]["error"]
     stream = by_key["strom-quellen"]["result"]
     assert [c["id"] for c in stream["columns"]] == [
@@ -104,6 +105,12 @@ def test_the_source_streams_of_the_builtin_dashboard(api):
             total, _new30, new12, share, idle, _ = row["values"]
             assert 0 <= new12 <= total and 0 <= idle <= total
             assert share == round(new12 / total * 100, 1)
+    # wo gerade etwas fließt: dieselbe Zahl wie die Spalte „neu in 12 Monaten“
+    flow = {r["key"]: r["values"][0] for r in by_key["zufluss-quellen"]["result"]["rows"]
+            if r["kind"] == "value"}
+    for row in stream["rows"]:
+        if row["kind"] == "value" and row["values"][2]:
+            assert flow[row["key"]] == row["values"][2]
     ages = by_key["zufluss-jahre"]["result"]
     assert len(ages["columns"]) == 6
     whole = {r["key"]: r["values"][0] for r in stream["rows"]}
