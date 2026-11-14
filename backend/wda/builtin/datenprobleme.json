@@ -1,0 +1,540 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "datenprobleme",
+  "title": "Datenprobleme",
+  "description": "Wo stimmen die Metadaten nicht? Fehlende Angaben farbig markiert, Lücken je Quelle, Werte außerhalb der Vokabulare, gemischte Schreibweisen, unklare Lizenzangaben."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-datenprobleme",
+   "kind": "dashboard",
+   "name": "Datenprobleme",
+   "description": "Hinweise auf Datenprobleme, allein aus Zählungen. Füllgrade unter 50 % sind rot, darüber blau (je dunkler, desto vollständiger). Werte außerhalb des Vokabulars sind Feldwerte mit ihrer Häufigkeit, keine einzelnen Materialien. Gemessen an WLO Produktion.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "kernangaben",
+      "title": "Fehlende Kernangaben: wie vollständig sind die wichtigsten Felder?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         },
+         {
+          "property": "ccm:replicationsource",
+          "label": "Quelle"
+         },
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "rate"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 7
+      }
+     },
+     {
+      "id": "luecken-je-quelle",
+      "title": "Lücken je Quelle: Füllgrad in Prozent (40 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 40
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         }
+        ],
+        "show": "rate"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 7,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "fehlend-je-quelle",
+      "title": "Wo fehlt am meisten? Materialien ohne Wert je Quelle (40 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 40
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         }
+        ],
+        "show": "missing"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 21,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "luecken-je-stufe",
+      "title": "Lücken je Bildungsstufe: Füllgrad in Prozent",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/"
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         }
+        ],
+        "show": "rate"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 35,
+       "w": 12,
+       "h": 8
+      }
+     },
+     {
+      "id": "vokabular",
+      "title": "Werte außerhalb der Wertelisten je Feld (auch abweichende Schreibweisen wie Zahl statt URI)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "vocab_check": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         },
+         {
+          "property": "ccm:containsAdvertisement",
+          "label": "Werbung"
+         },
+         {
+          "property": "ccm:price",
+          "label": "Kosten"
+         },
+         {
+          "property": "ccm:conditionsOfAccess",
+          "label": "Zugang"
+         },
+         {
+          "property": "ccm:oeh_quality_login",
+          "label": "Qualität: Login"
+         },
+         {
+          "property": "ccm:oeh_quality_protection_of_minors",
+          "label": "Qualität: Jugendschutz"
+         },
+         {
+          "property": "ccm:oeh_quality_currentness",
+          "label": "Qualität: Aktualität"
+         },
+         {
+          "property": "ccm:oeh_quality_neutralness",
+          "label": "Qualität: Neutralität"
+         },
+         {
+          "property": "ccm:oeh_quality_medial",
+          "label": "Qualität: medial"
+         },
+         {
+          "property": "ccm:oeh_quality_language",
+          "label": "Qualität: Sprache"
+         },
+         {
+          "property": "ccm:oeh_quality_didactics",
+          "label": "Qualität: Didaktik"
+         },
+         {
+          "property": "ccm:fskRating",
+          "label": "Altersfreigabe"
+         },
+         {
+          "property": "ccm:oeh_buffet_criteria",
+          "label": "Buffet-Kriterien"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 43,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "stufe-unbekannt",
+      "title": "Bildungsstufe: Werte, die das Vokabular nicht kennt (30 häufigste)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:educationalcontext",
+        "vocab": "outside",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 53,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "fach-unbekannt",
+      "title": "Fach: Werte, die das Vokabular nicht kennt (30 häufigste)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "vocab": "outside",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 6,
+       "y": 53,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "sprache-unbekannt",
+      "title": "Sprache: Werte, die das Vokabular nicht kennt (30 häufigste)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "cclom:general_language",
+        "vocab": "outside",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 61,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "werbung-schreibweisen",
+      "title": "Werbung: gemischte Schreibweisen in einem Feld",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:containsAdvertisement",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 61,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "lizenz-je-quelle",
+      "title": "Lizenzlage je Quelle (25 größte): offen, eingeschränkt, eigene, ohne Angabe",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Gesamt"
+        },
+        {
+         "id": "offen",
+         "label": "offen (PD, CC0, CC BY, CC BY-SA)",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "OPEN",
+            "CC_BY_OPEN"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "nc_nd",
+         "label": "CC mit NC/ND",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "CC_BY_RESTRICTED"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "copyright",
+         "label": "urheberrechtlich geschützt",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "COPYRIGHT_OTHERS"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "custom",
+         "label": "eigene Lizenz (CUSTOM)",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "CUSTOM",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "mit",
+         "label": "mit Lizenzangabe",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "ohne",
+         "label": "ohne Lizenzangabe",
+         "formula": "gesamt - mit"
+        }
+       ],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 25
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 69,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "lizenzschluessel",
+      "title": "Lizenzschlüssel, mit „ohne Wert“",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:commonlicense_key",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 79,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "erschliessung",
+      "title": "Erschließungsstatus der Redaktion",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:editorial_checklist",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 6,
+       "y": 79,
+       "w": 6,
+       "h": 8
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

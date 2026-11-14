@@ -1,0 +1,544 @@
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { Chart } from '../charts/chart';
+import { Api, ApiError, Latest } from '../core/api';
+import { Auth } from '../core/auth';
+import { formatNumber, formatTime } from '../core/format';
+import { Instances } from '../core/instances';
+import { Definition, FieldInfo, FillShow, Filter, QueryResult, QuerySpec, ViewType, VocabPage } from '../core/types';
+import { FilterBar } from '../filters/filter-bar';
+import { ExplorerState, FILL_VIEWS, MAX_FILL_FIELDS, decodeState, emptyState, encodeState, fieldChoices, fillDefaults, replaceValue } from '../filters/state';
+import { heatOptions, heatScale } from '../shared/heat';
+import { ResultTable } from '../shared/result-table';
+import { VocabInfo, vocabInfo } from './vocab-info';
+
+const VIEWS: { id: ViewType; label: string }[] = [
+  { id: 'table', label: 'Tabelle' }, { id: 'heatmap', label: 'Heatmap' }, { id: 'bar', label: 'Balken' }, { id: 'stacked_bar', label: 'Gestapelt' },
+  { id: 'line', label: 'Linie' }, { id: 'pie', label: 'Kreis' },
+];
+
+interface Preset { label: string; hint: string; rows: { property: string; match?: string; rollup?: 'top' }; columns: string }
+const SCHOOL = 'http://w3id.org/openeduhub/vocabs/discipline/';
+const UNI = 'http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/';
+const SOURCE = 'ccm:replicationsource', PUBLISHER = 'ccm:oeh_publisher_combined', LEVEL = 'ccm:educationalcontext', SUBJECT = 'ccm:taxonid';
+/** Was trägt welche Quelle zum Bestand bei? Dazu Fach und Stufe gegeneinander. */
+const PRESETS: Preset[] = [
+  { label: 'Fach × Bildungsstufe', hint: 'Schulfächer gegen Bildungsstufen', rows: { property: SUBJECT, match: SCHOOL }, columns: LEVEL },
+  { label: 'Fach × Quelle', hint: 'Welche Quelle (Crawler) trägt zu welchem Schulfach bei?', rows: { property: SUBJECT, match: SCHOOL }, columns: SOURCE },
+  { label: 'Hochschulfach × Quelle', hint: 'Fächergruppen der Hochschulfächersystematik gegen die Quellen', rows: { property: SUBJECT, match: UNI, rollup: 'top' }, columns: SOURCE },
+  { label: 'Bildungsstufe × Quelle', hint: 'Welche Quelle trägt zu welcher Bildungsstufe bei?', rows: { property: LEVEL }, columns: SOURCE },
+  { label: 'Fach × Bezugsquelle', hint: 'Schulfächer gegen die größten Bezugsquellen', rows: { property: SUBJECT, match: SCHOOL }, columns: PUBLISHER },
+  { label: 'Hochschulfach × Bildungsstufe', hint: 'Fächergruppen der Hochschule gegen Bildungsstufen', rows: { property: SUBJECT, match: UNI, rollup: 'top' }, columns: LEVEL },
+];
+
+@Component({
+  selector: 'app-explorer',
+  imports: [FormsModule, FilterBar, ResultTable, Chart, RouterLink],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @if (linkError()) { <p class="notice" role="status">{{ linkError() }}</p> }
+    <section class="card">
+      <app-filter-bar [instance]="spec().instance" [filters]="spec().filters ?? []" [labels]="labels()"
+                      (changed)="setFilters($event)" />
+      @if (storedFilters().length || (spec().filters ?? []).length) {
+        <div class="row stored">
+          @if (storedFilters().length) {
+            <label>Gespeicherter Filter
+              <select name="stored-filter" (change)="applyFilter($any($event.target))">
+                <option value="">anwenden …</option>
+                @for (f of storedFilters(); track f.id) { <option [value]="f.id">{{ f.name }}</option> }
+              </select>
+            </label>
+          }
+          @if ((spec().filters ?? []).length) {
+            <button type="button" (click)="saving.set('filter')" title="Die gewählten Filter unter einem Namen ablegen: wiederverwendbar hier, in Dashboards und Templates">Diese Filter speichern</button>
+          }
+        </div>
+      }
+      @if (presets().length) {
+        <div class="row presets" role="group" aria-label="Schnellansichten">
+          <span class="muted">Schnellansicht:</span>
+          @for (p of presets(); track p.label) { <button type="button" [title]="p.hint" (click)="usePreset(p)">{{ p.label }}</button> }
+        </div>
+      }
+      <div class="row controls">
+        <div class="views" role="group" aria-label="Was gezählt wird">
+          <button type="button" [class.on]="!spec().fill" [attr.aria-pressed]="!spec().fill" (click)="setFill(false)">Verteilung</button>
+          <button type="button" [class.on]="!!spec().fill" [attr.aria-pressed]="!!spec().fill" (click)="setFill(true)"
+                  [disabled]="!facetFields().length" title="Wie oft ist ein Feld ausgefüllt?">Füllgrade</button>
+        </div>
+        <label>{{ spec().fill ? 'je' : 'Aufschlüsseln nach' }}
+          <select name="rows" [ngModel]="spec().rows?.property ?? ''" (ngModelChange)="setRows($event)">
+            <option value="">{{ spec().fill ? '– insgesamt –' : '– nur Gesamtzahl –' }}</option>
+            @for (field of facetFields(); track field.property) {
+              <option [value]="field.property">{{ field.caption || field.property }}</option>
+            }
+          </select>
+        </label>
+        @if (spec().fill; as fill) {
+          <details class="pick">
+            <summary>Felder ({{ fill.fields.length }})</summary>
+            <div class="list" role="group" aria-label="Felder für die Füllgrade">
+              @for (field of facetFields(); track field.property) {
+                @if (field.property !== spec().rows?.property && !field.property.startsWith('virtual:')) {
+                  <label><input type="checkbox" [name]="'fill-' + field.property" [checked]="hasFill(field.property)"
+                                [disabled]="!hasFill(field.property) && fill.fields.length >= maxFill || hasFill(field.property) && fill.fields.length === 1"
+                                (change)="toggleFill(field.property)" /> {{ field.caption || field.property }}</label>
+                }
+              }
+            </div>
+          </details>
+          @if (spec().rows) {
+            <label>Zeilen
+              <select [ngModel]="spec().rows?.top ?? 0" (ngModelChange)="setTop(+$event)">
+                <option [value]="10">Top 10</option><option [value]="25">Top 25</option>
+                <option [value]="100">Top 100</option><option [value]="0">alle</option>
+              </select>
+            </label>
+            <label>Anzeige
+              <select name="show" [ngModel]="fill.show ?? 'rate'" (ngModelChange)="setShow($event)">
+                <option value="rate">Füllgrad in %</option><option value="missing">Anzahl ohne Wert</option>
+                <option value="filled">Anzahl mit Wert</option>
+              </select>
+            </label>
+          }
+        }
+        @if (spec().rows && rowInfo().spaces.length) {
+          <label>Vokabular
+            <select name="row-match" [ngModel]="spec().rows?.match ?? ''" (ngModelChange)="setMatch($event)">
+              <option value="">alle</option>
+              @for (space of rowInfo().spaces; track space.prefix) { <option [value]="space.prefix">{{ space.label }}</option> }
+            </select>
+          </label>
+        }
+        @if (spec().rows && !spec().fill && rowInfo().tree) {
+          <label title="Jede Zeile zählt einen Wert der obersten Ebene samt allen Unterwerten">
+            <input type="checkbox" name="rollup" [ngModel]="!!spec().rows?.rollup" (ngModelChange)="setRollup($event)" /> oberste Ebene</label>
+        }
+        @if (spec().rows && !spec().fill) {
+          <label>Spalten nach
+            <select [ngModel]="spec().columns?.property ?? ''" (ngModelChange)="setColumns($event)">
+              <option value="">– eine Spalte –</option>
+              @for (field of facetFields(); track field.property) {
+                @if (field.property !== spec().rows?.property) {
+                  <option [value]="field.property">{{ field.caption || field.property }}</option>
+                }
+              }
+            </select>
+          </label>
+          @if (spec().columns && columnInfo().spaces.length) {
+            <label>Vokabular der Spalten
+              <select name="column-match" [ngModel]="spec().columns?.match ?? ''" (ngModelChange)="setColumnMatch($event)">
+                <option value="">alle</option>
+                @for (space of columnInfo().spaces; track space.prefix) { <option [value]="space.prefix">{{ space.label }}</option> }
+              </select>
+            </label>
+          }
+          <label>Zeilen
+            <select [ngModel]="spec().rows?.top ?? 0" (ngModelChange)="setTop(+$event)">
+              <option [value]="10">Top 10</option><option [value]="25">Top 25</option>
+              <option [value]="100">Top 100</option><option [value]="0">alle</option>
+            </select>
+          </label>
+          @if (!spec().rows?.match && !spec().rows?.rollup) {
+            <label><input type="checkbox" [ngModel]="spec().rows?.missing ?? false" (ngModelChange)="setMissing($event)" /> ohne Wert</label>
+          }
+          <label>Anteile
+            <select [ngModel]="spec().percent ?? 'none'" (ngModelChange)="patch({ percent: $event })">
+              <option value="none">keine</option><option value="column">je Spalte</option><option value="row">je Zeile</option>
+            </select>
+          </label>
+        }
+        <span class="grow"></span>
+        <button type="button" (click)="run(true)" [disabled]="result.loading()" title="Zwischenspeicher umgehen">Neu abrufen</button>
+        <button type="button" (click)="copyLink()">{{ copied() ? 'Link kopiert' : 'Link kopieren' }}</button>
+        <button type="button" class="primary" (click)="saving.set('metric')" [disabled]="!result.value()">Als Kennzahl speichern</button>
+      </div>
+      @if (saving()) {
+        <form class="row save" (ngSubmit)="save()">
+          <label class="grow">{{ saving() === 'filter' ? 'Name des Filters' : 'Name der Kennzahl' }} <input class="wide" name="name" [(ngModel)]="saveName" required maxlength="200" /></label>
+          <button class="primary" type="submit" [disabled]="!saveName.trim()">Speichern</button>
+          <button type="button" (click)="saving.set('')">Abbrechen</button>
+          @if (saveError()) { <span class="error" role="alert">{{ saveError() }}</span> }
+        </form>
+      }
+      @if (saved(); as made) {
+        <p class="notice" role="status">{{ made.kind === 'filter' ? 'Filter gespeichert' : 'Gespeichert' }} als „{{ made.name }}“. <a routerLink="/bibliothek">Zur Bibliothek</a></p>
+      }
+    </section>
+
+    <h1 class="sr-only">Explorer</h1>
+    <section class="card result" [attr.aria-busy]="stale()">
+      @if (stale() && (result.value() || result.error())) { <p class="muted busy" role="status">Zähle neu …</p> }
+      <div [class.stale]="stale()">
+      @if (result.error(); as error) {
+        <p class="error" role="alert">{{ error.message }}</p>
+        @if (suggestions().length) {
+          <p class="muted">Gemeint sein könnte:
+            @for (s of suggestions(); track s.id) {
+              <button type="button" class="suggestion" [title]="s.id" (click)="useSuggestion(s.id)">{{ s.label }}</button>
+            }
+          </p>
+        }
+      } @else if (result.value(); as data) {
+        <div class="row head">
+          @if (data.total_row === false) {
+            <div>
+              <div class="big">{{ number(data.base_total) }}</div>
+              <div class="muted">Materialien als Grundgesamtheit · {{ instances.name(data.instance) }}</div>
+            </div>
+          } @else if (data.columns.length === 1) {
+            <div>
+              <div class="big">{{ number(data.columns[0].total) }}</div>
+              <div class="muted">Materialien · {{ instances.name(data.instance) }}</div>
+            </div>
+          } @else {
+            <div class="muted">{{ data.rows.length }} Zeilen × {{ data.columns.length }} Spalten · {{ instances.name(data.instance) }}</div>
+          }
+          <span class="grow"></span>
+          @if (spec().rows || spec().fill) {
+            <div class="views" role="group" aria-label="Darstellung">
+              @for (v of shownViews(); track v.id) {
+                <button type="button" [class.on]="view() === v.id" [attr.aria-pressed]="view() === v.id" (click)="view.set(v.id)">{{ v.label }}</button>
+              }
+            </div>
+          }
+        </div>
+        @if (spec().rows || spec().fill) {
+          @if (view() !== 'table' && view() !== 'heatmap') { <app-chart [data]="data" [view]="view()" [label]="'Grafik: ' + (rowTitle() || 'Füllgrade')" /> }
+          <app-result-table [columns]="data.columns" [rows]="tableRows()" [rowTitle]="rowTitle() || (spec().fill ? 'Feld' : '')"
+                            [heat]="view() === 'heatmap' ? heatScale(data.columns) : null" [heatOptions]="heatOptions(null, data.fill)" />
+        }
+        @if (!spec().rows && !spec().fill && overview(); as fill) {
+          <section class="overview" aria-label="Füllgrade der wichtigsten Felder">
+            <div class="row">
+              <h2>Füllgrade der wichtigsten Felder{{ (spec().filters ?? []).length ? ' (mit den Filtern oben)' : '' }}</h2>
+              <span class="grow"></span>
+              <button type="button" (click)="setFill(true)">Im Explorer öffnen</button>
+              <a routerLink="/qualitaet/datenqualitaet">Alle Füllgrade</a>
+            </div>
+            <app-chart [data]="fill" view="stacked_bar" label="Grafik: Füllgrade der wichtigsten Felder" />
+          </section>
+        }
+        <details class="origin" [open]="data.provenance.notes.length > 0">
+          <summary>Herkunft: abgerufen {{ time(data.provenance.fetched_at) }}{{ data.provenance.cached ? ' (aus dem Zwischenspeicher)' : '' }},
+            {{ data.provenance.queries }} {{ data.provenance.queries === 1 ? 'Abfrage' : 'Abfragen' }}@if (data.provenance.notes.length) {, <strong>{{ data.provenance.notes.length }} {{ data.provenance.notes.length === 1 ? 'Hinweis' : 'Hinweise' }}</strong>}</summary>
+          <ul>@for (note of data.provenance.notes; track note.code + note.text) { <li>{{ note.text }}</li> }</ul>
+        </details>
+      } @else if (result.loading()) {
+        <p class="muted">Zähle …</p>
+      } @else if (stale()) {
+        <p class="muted">Zähle …</p>
+      } @else {
+        <p class="muted">Keine Instanz gewählt.</p>
+      }
+      </div>
+    </section>`,
+  styles: `
+    section + section { margin-top: var(--gap); }
+    .controls { margin-top: var(--gap); } .stored { margin-top: 8px; align-items: flex-end; }
+    .presets { margin-top: 8px; gap: 6px; } .presets button { border-radius: 999px; padding: 3px 12px; font-size: 13px; }
+    .controls label { display: inline-flex; gap: 6px; align-items: center; }
+    .save { margin-top: var(--gap); } .wide { width: min(420px, 100%); }
+    .big { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .busy { margin: 0 0 6px; } .suggestion { margin: 0 6px 4px 0; padding: 2px 8px; }
+    .head { margin-bottom: var(--gap); }
+    .overview { margin: var(--gap) 0; } .overview h2 { margin: 0; font-size: 16px; }
+    .views button { border-radius: 0; margin-left: -1px; }
+    .views button:first-child { border-radius: 6px 0 0 6px; } .views button:last-child { border-radius: 0 6px 6px 0; }
+    .views button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+    .pick { position: relative; } .pick summary { cursor: pointer; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; }
+    .pick .list { position: absolute; z-index: 5; top: 100%; left: 0; margin-top: 4px; min-width: 260px; max-width: min(360px, 90vw);
+                  max-height: 320px; overflow: auto; background: var(--surface); border: 1px solid var(--border);
+                  border-radius: 6px; padding: 8px 10px; display: grid; gap: 4px; box-shadow: 0 6px 18px rgb(0 0 0 / .15); }
+    .pick .list label { display: flex; }
+    @media (max-width: 640px) { .pick { flex-basis: 100%; } .pick .list { position: static; min-width: 0; max-width: none; } }
+    .origin { margin-top: var(--gap); color: var(--muted); font-size: 13px; }
+    .origin ul { margin: 6px 0 0; padding-left: 18px; }
+    app-chart { margin-bottom: var(--gap); }
+  `,
+})
+export class Explorer {
+  private readonly api = inject(Api);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  protected readonly instances = inject(Instances);
+  protected readonly views = VIEWS;
+  protected readonly number = formatNumber;
+  protected readonly time = formatTime;
+
+  protected readonly spec = signal<QuerySpec>({ instance: '', filters: [] });
+  protected readonly view = signal<ViewType>('table');
+  protected readonly result = new Latest<QueryResult>();
+  protected readonly linkError = signal('');
+  /** Startansicht: unter der Gesamtzahl die Füllgrade der wichtigsten Felder */
+  protected readonly overview = signal<QueryResult | null>(null);
+  protected readonly fields = signal<FieldInfo[]>([]);
+  /** was gerade einen Namen bekommt */
+  protected readonly saving = signal<'' | 'metric' | 'filter'>('');
+  protected readonly storedFilters = signal<Definition[]>([]);
+  protected readonly saved = signal<Definition | null>(null);
+  protected readonly saveError = signal('');
+  protected readonly copied = signal(false);
+  protected saveName = '';
+  /** Eine Eingabe wartet noch auf ihre Abfrage (Ruhezeit): Die Anzeige gehört zur vorigen. */
+  private readonly waiting = signal(false);
+  protected readonly stale = computed(() => this.waiting() || this.result.loading());
+  private readonly instance = computed(() => this.spec().instance);
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private fromUrl = false;
+
+  protected readonly facetFields = computed(() => fieldChoices(this.fields()));
+  private readonly vocabs = signal<Record<string, VocabInfo>>({});
+  private readonly none: VocabInfo = { spaces: [], tree: false };
+  protected readonly rowInfo = computed(() => this.vocabs()[this.spec().instance + '\n' + (this.spec().rows?.property ?? '')] ?? this.none);
+  protected readonly columnInfo = computed(() => this.vocabs()[this.spec().instance + '\n' + (this.spec().columns?.property ?? '')] ?? this.none);
+  protected readonly rowTitle = computed(() => {
+    const property = this.spec().rows?.property;
+    return this.fields().find((f) => f.property === property)?.caption || property || '';
+  });
+  /** Namen zu den Filterwerten, wie die API sie aufgelöst hat */
+  protected readonly labels = computed(() => {
+    const map = new Map<string, string>();
+    for (const filter of this.result.value()?.provenance.filters ?? []) {
+      for (const value of filter.values ?? []) {
+        if (value.label) map.set(filter.property + '\n' + value.value, value.label);
+      }
+    }
+    return map;
+  });
+  protected readonly tableRows = computed(() => {
+    const data = this.result.value();
+    if (!data) return [];
+    if (data.total_row === false) return data.rows;
+    return [...data.rows, { key: '__total__', label: 'Gesamt', kind: 'total' as const, values: data.columns.map((c) => c.total) }];
+  });
+  protected readonly maxFill = MAX_FILL_FIELDS;
+  protected readonly shownViews = computed(() => {
+    if (!this.spec().fill) return VIEWS;
+    // gestapelt (mit Wert / ohne Wert) gibt es nur ohne Zeilenfeld, die Heatmap nur mit
+    return VIEWS.filter((v) => FILL_VIEWS.includes(v.id) && (v.id !== 'stacked_bar' || !this.spec().rows));
+  });
+  protected readonly heatScale = heatScale;
+  protected readonly heatOptions = heatOptions;
+  protected readonly hasFill = (property: string) => !!this.spec().fill?.fields.some((f) => f.property === property);
+  protected readonly suggestions = computed<{ id: string; label: string }[]>(() =>
+    ((this.result.error()?.extra['suggestions'] ?? []) as any[]).slice(0, 6)
+      .filter((s) => s && typeof s.id === 'string')
+      .map((s) => ({ id: s.id as string, label: String(s.caption || s.id) })));
+
+  constructor() {
+    this.loadFilters();
+    const { state, error } = decodeState(this.route.snapshot.queryParamMap.get('q'));
+    this.linkError.set(error);
+    if (state) {
+      this.fromUrl = true;
+      this.spec.set(state.spec);
+      this.view.set(state.view);
+      this.instances.current.set(state.spec.instance);
+      // Ein Link kann eine Instanz nennen, die es hier nicht gibt: sagen und leer beginnen.
+      void this.instances.load().then(() => {
+        const list = this.instances.list();
+        if (list.length && !list.some((i) => i.id === state.spec.instance)) {
+          this.linkError.set('Die Instanz aus dem Link gibt es hier nicht; der Explorer startet leer.');
+          this.instances.current.set(list[0].id);
+        }
+      }, () => undefined);
+    }
+    // Instanzwahl im Kopf: wechselt die Instanz, beginnt die Abfrage neu (Felder sind andere).
+    effect(() => {
+      const instance = this.instances.current();
+      untracked(() => {
+        if (!instance || instance === this.spec().instance) return;
+        this.spec.set(emptyState(instance).spec);
+      });
+    });
+    effect(() => {
+      const instance = this.instance(); // nur die Instanz, nicht jede Änderung der Abfrage
+      untracked(() => this.fields.set([]));
+      if (!instance) return;
+      this.instances.fields(instance).then(
+        (fields) => { if (instance === this.instance()) this.fields.set(fields); },
+        () => undefined); // die Filterleiste zeigt den Fehler
+    });
+    // Wertelisten der gewählten Achsen: daraus entstehen „Vokabular“ und „oberste Ebene“.
+    effect(() => {
+      const instance = this.instance();
+      const wanted = [this.spec().rows?.property, this.spec().columns?.property];
+      const fields = this.fields();
+      untracked(() => {
+        for (const property of wanted) {
+          const key = instance + '\n' + property;
+          if (!property || key in this.vocabs()) continue;
+          if (!fields.find((f) => f.property === property)?.value_count) continue;
+          this.vocabs.update((all) => ({ ...all, [key]: this.none }));
+          this.api.get<VocabPage>(`/instances/${encodeURIComponent(instance)}/vocab?property=${encodeURIComponent(property)}&limit=5000`)
+            .then((page) => this.vocabs.update((all) => ({ ...all, [key]: vocabInfo(page.values) })), () => undefined);
+        }
+      });
+    });
+    // Startansicht (nur Gesamtzahl): dazu die Füllgrade der wichtigsten Felder.
+    effect((onCleanup) => {
+      const spec = this.spec();
+      const fields = fillDefaults(this.facetFields());
+      this.overview.set(null);
+      if (!spec.instance || spec.rows || spec.fill || !fields.length) return;
+      const stop = new AbortController();
+      onCleanup(() => stop.abort());
+      this.api.post<QueryResult>('/query', { instance: spec.instance, filters: spec.filters ?? [], fill: { fields, show: 'rate' } }, stop.signal)
+        .then((data) => { if (!stop.signal.aborted) this.overview.set(data); }, () => undefined);
+    });
+    // Nach erneuter Anmeldung zählt die Ansicht von selbst neu.
+    const auth = inject(Auth);
+    effect(() => { if (auth.renewed() > 0) untracked(() => this.spec().instance && this.run(false)); });
+    // Jede Änderung: Adresse nachführen und nach kurzer Ruhe zählen.
+    effect(() => {
+      const state: ExplorerState = { spec: this.spec(), view: this.view() };
+      if (!state.spec.instance) return;
+      untracked(() => {
+        void this.router.navigate([], { queryParams: { q: encodeState(state) }, replaceUrl: true });
+        this.saved.set(null);
+      });
+    });
+    effect(() => {
+      const spec = this.spec();
+      if (this.timer) clearTimeout(this.timer);
+      if (!spec.instance) return;
+      untracked(() => this.waiting.set(true));
+      this.timer = setTimeout(() => untracked(() => this.run(false)), this.fromUrl ? 0 : 250);
+      this.fromUrl = false;
+    });
+  }
+
+  protected run(refresh: boolean): void {
+    const spec = { ...this.spec(), refresh };
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    this.waiting.set(false);
+    void this.result.run((signal) => this.api.post<QueryResult>('/query', spec, signal));
+  }
+
+  /** fertige Kreuztabellen; die Filter bleiben, so wie sie sind */
+  protected readonly presets = computed(() => {
+    const known = new Set(this.facetFields().map((f) => f.property));
+    return PRESETS.filter((p) => known.has(p.rows.property) && known.has(p.columns));
+  });
+  protected usePreset(preset: Preset): void {
+    this.patch({ rows: { top: 40, ...preset.rows }, columns: { property: preset.columns, top: 10 }, fill: null, series: [], percent: 'none' });
+    this.view.set('heatmap');
+  }
+
+  protected patch(change: Partial<QuerySpec>): void { this.spec.update((spec) => ({ ...spec, ...change })); }
+  protected setFilters(filters: Filter[]): void { this.patch({ filters }); }
+
+  /** Zwischen Verteilung und Füllgraden wechseln; Filter und Zeilenfeld bleiben. */
+  protected setFill(on: boolean): void {
+    const spec = this.spec();
+    if (on === !!spec.fill) return;
+    if (!on) {
+      this.patch({ fill: null });
+      if (!spec.rows) this.view.set('table');
+      return;
+    }
+    const rows = spec.rows ? { property: spec.rows.property, top: spec.rows.top ?? 25 } : null;
+    const fields = fillDefaults(this.facetFields(), rows?.property);
+    if (!fields.length) return; // kein Feld übrig, dessen Füllgrad sich zählen ließe
+    this.patch({ fill: { fields, show: 'rate' }, rows, columns: null, percent: 'none', series: [] });
+    this.view.set(rows ? 'table' : 'stacked_bar');
+  }
+  protected toggleFill(property: string): void {
+    const fill = this.spec().fill;
+    if (!fill) return;
+    const fields = this.hasFill(property)
+      ? fill.fields.filter((f) => f.property !== property)
+      : [...fill.fields, { property }];
+    if (fields.length && fields.length <= MAX_FILL_FIELDS) this.patch({ fill: { ...fill, fields } });
+  }
+  protected setShow(show: FillShow): void {
+    const fill = this.spec().fill;
+    if (fill) this.patch({ fill: { ...fill, show } });
+  }
+
+  protected setRows(property: string): void {
+    const fill = this.spec().fill;
+    if (fill) {
+      // das Zeilenfeld kann nicht zugleich ein gezähltes Feld sein
+      const fields = fill.fields.filter((f) => f.property !== property);
+      const kept = fields.length ? fields : fillDefaults(this.facetFields(), property);
+      this.patch({ rows: property ? { property, top: this.spec().rows?.top ?? 25 } : null, fill: { ...fill, fields: kept } });
+      if (!FILL_VIEWS.includes(this.view()) || (property && this.view() === 'stacked_bar')) this.view.set('table');
+      return;
+    }
+    if (!property) { this.patch({ rows: null, columns: null, percent: 'none' }); this.view.set('table'); return; }
+    const columns = this.spec().columns?.property === property ? null : this.spec().columns;
+    this.patch({ rows: { property, top: this.spec().rows?.top ?? 25, missing: this.spec().rows?.missing ?? false }, columns });
+  }
+  protected setMatch(match: string): void {
+    const rows = this.spec().rows;
+    if (rows) this.patch({ rows: { ...rows, match: match || null, missing: false } });
+  }
+  protected setRollup(on: boolean): void {
+    const rows = this.spec().rows;
+    if (rows) this.patch({ rows: { ...rows, rollup: on ? 'top' : null, missing: false, top: on ? null : rows.top ?? 25 } });
+  }
+  protected setColumnMatch(match: string): void {
+    const columns = this.spec().columns;
+    if (columns) this.patch({ columns: { ...columns, match: match || null } });
+  }
+  protected setColumns(property: string): void { this.patch({ columns: property ? { property, top: 8 } : null }); }
+  protected setTop(top: number): void { const rows = this.spec().rows; if (rows) this.patch({ rows: { ...rows, top: top || null } }); }
+  protected setMissing(missing: boolean): void { const rows = this.spec().rows; if (rows) this.patch({ rows: { ...rows, missing } }); }
+
+  /** Vorschlag der API anstelle des Textes übernehmen, den sie nicht zuordnen konnte. */
+  protected useSuggestion(id: string): void {
+    const extra = this.result.error()?.extra ?? {};
+    const property = extra['property'], text = extra['text'];
+    if (typeof property !== 'string' || typeof text !== 'string') return;
+    this.setFilters(replaceValue(this.spec().filters ?? [], property, text, id));
+  }
+
+  protected async copyLink(): Promise<void> {
+    try {
+      // aus dem Zustand gebaut: Die Adresszeile kann der Eingabe einen Moment nachlaufen.
+      const q = encodeState({ spec: this.spec(), view: this.view() });
+      await navigator.clipboard.writeText(`${location.origin}${location.pathname}?q=${q}`);
+      this.copied.set(true);
+      setTimeout(() => this.copied.set(false), 2000);
+    } catch { /* ohne Zwischenablage bleibt die Adresszeile */ }
+  }
+
+  private loadFilters(): void {
+    this.api.get<Definition[]>('/definitions?kind=filter').then((all) => this.storedFilters.set(all), () => undefined);
+  }
+
+  /** Ein gespeicherter Filter ersetzt, was schon auf denselben Feldern filtert; der Rest bleibt. */
+  protected async applyFilter(select: HTMLSelectElement): Promise<void> {
+    const id = select.value;
+    select.value = '';
+    if (!id) return;
+    try {
+      const stored = await this.api.get<Definition>('/definitions/' + encodeURIComponent(id));
+      const added: Filter[] = stored.spec?.filters ?? [];
+      const fields = new Set(added.map((f) => f.property));
+      this.setFilters([...(this.spec().filters ?? []).filter((f) => !fields.has(f.property)), ...added]);
+    } catch (error) {
+      this.saveError.set(error instanceof ApiError ? error.message : 'Der Filter ließ sich nicht laden.');
+    }
+  }
+
+  protected async save(): Promise<void> {
+    this.saveError.set('');
+    const { refresh: _refresh, ...query } = this.spec();
+    try {
+      const made = await this.api.post<Definition>('/definitions', this.saving() === 'filter'
+        ? { kind: 'filter', name: this.saveName.trim(), spec: { instance: query.instance, filters: query.filters ?? [] } }
+        : { kind: 'metric', name: this.saveName.trim(), spec: { query, view: { type: this.view() } } });
+      this.saved.set(made);
+      this.saving.set('');
+      this.saveName = '';
+      if (made.kind === 'filter') this.loadFilters();
+    } catch (error) {
+      this.saveError.set(error instanceof ApiError ? error.message : 'Speichern nicht möglich.');
+    }
+  }
+}

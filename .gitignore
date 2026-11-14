@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.env
+/data/
+node_modules/
+dist/
+probe-results/
+
+# Oberfläche
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/test-results/
+# Bau der Oberfläche (entsteht aus frontend/, im Docker-Image enthalten)
+backend/wda/static/
