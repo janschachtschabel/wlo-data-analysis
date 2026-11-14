@@ -81,7 +81,7 @@ def test_list_install_run_and_export(api):
     listed = api.get("/api/builtin").json()
     assert [b["id"] for b in listed] == ["abdeckung", "datenprobleme", "datenqualitaet",
                                          "oer-statistik", "quellen", "steckbrief",
-                                         "themen", "tiefenpruefung"]
+                                         "themen", "tiefenpruefung", "wlo-oersi"]
     listed = listed[3:]
     assert listed[0]["definitions"] == [{"id": "builtin-oer-statistik", "kind": "template",
                                          "name": "OER-Statistik", "installed": False,
@@ -370,3 +370,20 @@ def test_dashboards_run_within_a_subject_level_or_publisher(api, bundle_id, prop
             assert total == own, result["key"]
     assert any(not r["error"] for r in run["results"])
     assert all(e.get("kind") == "not_applicable" for _, e in seen), seen
+
+
+def test_wlo_and_oersi_side_by_side(api):
+    """Die Gegenüberstellung: zwei Blöcke nebeneinander, je Bestand, OER und OER-Anteil."""
+    assert api.post("/api/builtin/wlo-oersi/install").status_code == 200
+    run = api.post("/api/definitions/builtin-wlo-oersi/run").json()
+    failed = [(r["key"], r["error"]) for r in run["results"] if r["error"]]
+    assert run["status"] == "ok", failed
+    report = api.get(f"/api/runs/{run['id']}/report").json()
+    assert [b["type"] for b in report["blocks"]] == ["text", "table", "text"]
+    table = report["blocks"][1]
+    assert [g[0] for g in table["header_groups"]] == ["WLO: Hochschule", "OERSI (direkt)"]
+    assert [c["label"] for c in table["columns"]] == ["Gesamt", "A: OER", "OER-Anteil %"] * 2
+    total = next(r for r in table["rows"] if r["kind"] == "total")
+    for at in (0, 3):  # der Anteil passt zu den beiden Zahlen links davon
+        whole, oer, share = total["values"][at:at + 3]
+        assert whole and share == round(100 * oer / whole, 1)

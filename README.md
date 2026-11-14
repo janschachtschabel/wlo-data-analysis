@@ -203,6 +203,11 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
   zeigen ihre Gesamtzahl über die letzten Läufe als kleine Linie. Der Kontextschalter kennt
   auch Fach und Bildungsstufe. Ein gespeicherter Lauf lässt sich mit derselben Auswertung an
   einer anderen Instanz vergleichen.
+- Soll und Ist: `view.options.target` (dazu `target_column`, `target_mode` min oder max) setzt
+  einen Zielwert; der Bericht sagt, welche Zeilen ihn erreichen. Im Formular das Feld
+  „Zielwert (mindestens)“.
+- Der mitgelieferte Bericht „WLO und OERSI im Vergleich“ stellt die Hochschulmaterialien beider
+  Bestände nach Fächergruppe nebeneinander.
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 

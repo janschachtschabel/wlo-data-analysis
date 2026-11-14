@@ -121,8 +121,10 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
         notes.append({"code": "view_changed",
                       "text": "Die gewählte Darstellung passt nicht zu Füllgraden; gezeigt "
                               "wird die Tabelle."})
+    target = _target(view, columns, rows, notes)
     return _checked(Table(
         key, title, columns, rows, view=view, notes=notes, fill=fill, drill=_drill(result),
+        target=target,
         sources=[{
             "label": inst.get("id") or result.get("instance"), "kind": "query",
             "instance": inst.get("id") or result.get("instance"),
@@ -131,6 +133,50 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
             "queries": prov.get("queries"),
             "filters": describe_filters(prov.get("filters") or []),
         }]))
+
+
+def _target(view: dict[str, Any], columns: list[Column], rows: list[Row],
+            notes: list[dict[str, str]]) -> dict[str, Any] | None:
+    """Soll und Ist. Die Darstellung trägt einen Zielwert (``options.target``), wahlweise die
+    Spalte (``target_column``, sonst „Füllgrad %“ oder die erste) und die Richtung
+    (``target_mode``: ``min`` mindestens, ``max`` höchstens). Das Ergebnis steht als Satz in
+    den Hinweisen und damit in jedem Export."""
+    options = view.get("options") if isinstance(view.get("options"), dict) else {}
+    goal = options.get("target")
+    if isinstance(goal, bool) or not isinstance(goal, int | float) or not columns:
+        return None
+    ids = [c.id for c in columns]
+    wanted = options.get("target_column")
+    at = ids.index(wanted) if wanted in ids else ids.index("rate") if "rate" in ids else 0
+    low = options.get("target_mode") != "max"
+    measured = [r for r in rows if r.kind in ("value", "group")] or [
+        r for r in rows if r.kind == "total"]
+    known = [(r, r.values[at]) for r in measured
+             if at < len(r.values) and r.values[at] is not None]
+    if not known:
+        return None
+    missed = [(r, v) for r, v in known if (v < goal if low else v > goal)]
+    missed.sort(key=lambda item: item[1], reverse=not low)
+
+    def number(value: float) -> str:
+        text = f"{value:,.1f}".rstrip("0").rstrip(".") if isinstance(value, float) else f"{value:,}"
+        return text.replace(",", "\u202f").replace(".", ",")
+
+    text = (f"Ziel: {'mindestens' if low else 'höchstens'} {number(goal)} bei "
+            f"„{columns[at].label}“. ")
+    if len(known) == 1 and known[0][0].kind == "total":
+        text += ("Erreicht." if not missed else
+                 f"Nicht erreicht: {number(known[0][1])}, es fehlen "
+                 f"{number(abs(goal - known[0][1]))}.")
+    else:
+        text += f"Erreicht von {len(known) - len(missed)} der {len(known)} Zeilen."
+        if missed:
+            names = ", ".join(f"{r.label} ({number(v)})" for r, v in missed[:8])
+            text += (f" {'Darunter' if low else 'Darüber'}: {names}"
+                     + (f" und {len(missed) - 8} weitere" if len(missed) > 8 else "") + ".")
+    notes.append({"code": "target", "text": text})
+    return {"column": columns[at].id, "value": goal, "mode": "min" if low else "max",
+            "reached": len(known) - len(missed), "of": len(known)}
 
 
 # Darstellungen für Füllgrade: je Feld (ohne Zeilenfeld) bzw. je Zeile

@@ -20,10 +20,14 @@ Vergleiche bequem, weiter allein aus Zählungen.
    Prozentpunkten, höchstens drei je Auswertung). Seite „Auffällig“ in der Navigation.
 5. **Trend in Kacheln.** `GET /api/definitions/{id}/trends`: je Kachel die Gesamtzahl über die
    letzten Läufe; die Kachel zeigt eine kleine Linie mit Stand und Veränderung.
-6. **Soll und Ist.** Zielwerte je Kachel.
-7. **WLO gegen OERSI.** Mitgelieferte Gegenüberstellung.
+6. **Soll und Ist.** Die Darstellung trägt einen Zielwert (`view.options.target`, wahlweise
+   `target_column` und `target_mode` min oder max). Der Bericht sagt in einem Hinweis, welche
+   Zeilen ihn erreichen (damit steht es in jedem Export); die Tabelle markiert verfehlte Zellen.
+   Im Formular für Kacheln und Abschnitte gibt es das Feld „Zielwert (mindestens)“.
+7. **WLO gegen OERSI.** Mitgelieferter Bericht „WLO und OERSI im Vergleich“: Hochschulmaterialien
+   nach Fächergruppe, je Bestand, offene Lizenzen und OER-Anteil, WLO und OERSI nebeneinander.
 
 ## Tests
 
 `tests/test_growth.py`, `tests/test_highlights.py`, `tests/test_builtin.py` (Kontexte),
-`trend.spec.ts`, `overview.spec.ts`, Durchstich.
+`tests/test_drill.py` (Zielwert), `trend.spec.ts`, `overview.spec.ts`, Durchstich.

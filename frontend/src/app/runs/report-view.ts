@@ -38,15 +38,15 @@ import { Trends, trendOf } from '../shared/trend';
                 <div class="big">{{ headline(block) }}</div>
               } @else {
                 @if (block.view.type === 'heatmap') {
-                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill"
+                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill" [target]="block.target"
                                     [heat]="scale(block)" [heatOptions]="heatOptions(block.view.options, block.fill)" />
                 } @else if (block.view.type !== 'table') {
                   <app-chart [data]="block" [view]="block.view.type" [label]="'Grafik: ' + block.title" />
                   <details><summary class="muted">Tabelle</summary>
-                    <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill" />
+                    <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill" [target]="block.target" />
                   </details>
                 } @else {
-                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill" />
+                  <app-result-table [name]="block.title" [columns]="block.columns" [rows]="block.rows" [headerGroups]="block.header_groups" [drill]="block.drill" [target]="block.target" />
                 }
               }
               @if (block.notes.length || block.sources.length) {

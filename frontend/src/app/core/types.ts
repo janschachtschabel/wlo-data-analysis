@@ -69,6 +69,7 @@ export interface RunHead {
 }
 export interface ReportTable {
   type: 'table'; key: string; title: string; fill?: FillInfo | null;
+  target?: { column: string; value: number; mode: 'min' | 'max'; reached: number; of: number } | null;
   columns: { id: string; label: string; derived: boolean }[]; rows: ResultRow[];
   header_groups?: [string, number][] | null; view: View; notes: Note[];
   /** Filter hinter den Zellen, für den Sprung in den Explorer */

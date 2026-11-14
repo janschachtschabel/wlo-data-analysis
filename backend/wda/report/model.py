@@ -44,6 +44,8 @@ class Table:
     fill: dict[str, Any] | None = None
     # Filter, mit denen sich eine Zelle im Explorer nachzählen lässt; None: nicht möglich
     drill: dict[str, Any] | None = None
+    # Soll und Ist: {"column", "value", "mode", "reached", "of"}; None ohne Zielwert
+    target: dict[str, Any] | None = None
 
 
 @dataclass

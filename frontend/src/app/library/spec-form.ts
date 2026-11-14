@@ -103,6 +103,10 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
                     }
                   </select>
                 </label>
+                <label title="Soll und Ist: Der Bericht sagt, welche Zeilen den Zielwert erreichen. Gemessen wird bei Füllgraden am Füllgrad in Prozent, sonst an der ersten Spalte.">Zielwert (mindestens)
+                  <input type="number" class="target" [name]="'target-' + item.id" [attr.name]="'target-' + item.id" [ngModel]="item.view?.options?.target ?? null"
+                         (ngModelChange)="setTarget(i, $event)" placeholder="keiner" />
+                </label>
               }
               @if (kind() === 'dashboard') {
                 <label>Breite
@@ -265,6 +269,16 @@ export class SpecForm {
 
   private setItems(items: any[]): void {
     this.patch({ [this.key()]: this.kind() === 'dashboard' ? flowLayout(items as TileSpec[]) : items });
+  }
+
+  /** Zielwert der Darstellung (Soll und Ist); leer nimmt ihn wieder heraus */
+  protected setTarget(index: number, value: number | null | ''): void {
+    const item = this.items()[index];
+    const options = { ...(item.view?.options ?? {}) };
+    if (typeof value === 'number' && Number.isFinite(value)) options['target'] = value;
+    else delete options['target'];
+    if (!item.view && !('target' in options)) return;
+    this.set(index, { view: { ...(item.view ?? { type: 'table' }), options } });
   }
 
   protected set(index: number, change: Record<string, unknown>): void {

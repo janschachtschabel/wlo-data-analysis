@@ -107,3 +107,39 @@ def test_no_drill_where_the_explorer_would_count_something_else(api):
     assert table(api, topics)["drill"] is None
     # ein Feld, das genau zählt, behält den Link
     assert table(api, {"rows": {"property": TAX}})["drill"]["rows"] == TAX
+
+
+def target_table(api, query, view):
+    out = api.post("/api/preview", json={"kind": "metric", "name": "M", "spec": {
+        "query": {"instance": "wlo-prod", **query}, "view": view}})
+    assert out.status_code == 200, out.text
+    [block] = out.json()["report"]["blocks"]
+    return block
+
+
+def test_target_says_which_rows_reach_it(api):
+    """Soll und Ist: ein Zielwert an der Darstellung, das Ergebnis als Satz im Bericht."""
+    fields = [{"property": TAX, "label": "Fach"}, {"property": LVL, "label": "Stufe"},
+              {"property": "ccm:educationalintendedenduserrole", "label": "Zielgruppe"}]
+    block = target_table(api, {"fill": {"fields": fields}},
+                         {"type": "heatmap", "options": {"scale": "rate", "target": 80}})
+    rates = {r["label"]: r["values"][2] for r in block["rows"]}
+    reached = sum(1 for v in rates.values() if v >= 80)
+    assert block["target"] == {"column": "rate", "value": 80, "mode": "min",
+                               "reached": reached, "of": 3}
+    note = next(n["text"] for n in block["notes"] if n["code"] == "target")
+    assert note.startswith("Ziel: mindestens 80 bei „Füllgrad %“. Erreicht von "
+                           f"{reached} der 3 Zeilen.")
+    for label, rate in rates.items():
+        assert (label in note) == (rate < 80)
+    # höchstens, andere Spalte; ohne Zeilen zählt die Gesamtzahl
+    most = target_table(api, {"fill": {"fields": fields}}, {"type": "table", "options": {
+        "target": 50, "target_column": "missing", "target_mode": "max"}})
+    assert most["target"]["column"] == "missing" and most["target"]["mode"] == "max"
+    assert "höchstens 50 bei „ohne Wert“" in most["notes"][-1]["text"]
+    total = target_table(api, {}, {"type": "number", "options": {"target": 1000000}})
+    assert "Nicht erreicht: 400, es fehlen 999" in total["notes"][-1]["text"]
+    assert total["target"]["reached"] == 0
+    # ohne Zielwert bleibt alles, wie es war
+    plain = target_table(api, {"fill": {"fields": fields}}, {"type": "table", "options": {}})
+    assert plain["target"] is None and all(n["code"] != "target" for n in plain["notes"])

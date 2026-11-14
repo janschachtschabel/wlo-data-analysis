@@ -482,6 +482,11 @@ await cellLink.click();
 await page.waitForURL(/\/explorer\?q=/);
 await page.waitForFunction((n) => (document.querySelector('.big')?.textContent ?? '').replace(/\s/g, '').includes(n.replace(/\s/g, '')), cellText);
 
+// Auffälligkeiten: die Seite lädt und sagt, was sie zeigt oder warum noch nichts
+await page.goto(base + '/auffaellig');
+await page.waitForSelector('h1:has-text("Was ist auffällig?")');
+await page.waitForSelector('app-overview .card');
+
 // Abmelden sperrt die API wieder
 await page.click('text=Abmelden');
 await page.waitForURL(/\/login/);

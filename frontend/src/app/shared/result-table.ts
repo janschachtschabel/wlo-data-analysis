@@ -41,6 +41,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
                     <a class="drill" [class.n]="!!row.topics" [routerLink]="['/explorer']" [queryParams]="{ q: link }"
                        [title]="'Diese ' + number(value) + ' im Explorer öffnen: weiter aufschlüsseln oder in der Suche ansehen'">{{ number(value) }}</a>
                   } @else if (row.topics) { <span class="n" title="Anzahl der Materialien">{{ number(value) }}</span> } @else { {{ number(value) }} }
+                  @if (misses()?.[rowIndex] === $index) { <span class="miss" [title]="missTitle()" aria-hidden="true">{{ target()?.mode === 'max' ? '▴' : '▾' }}</span><span class="sr">{{ missTitle() }}</span> }
                   @if (row.topics?.[$index]; as found) {
                     @if (found.length) {
                       <ol class="topics">
@@ -83,6 +84,7 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     .scroll.whole { max-height: none; }
     .rows-note { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
     .pct { margin-left: 6px; font-size: 12px; }
+    .miss { margin-left: 4px; font-weight: 700; } .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     a.drill { color: inherit; text-decoration: none; border-bottom: 1px dotted color-mix(in srgb, currentColor 45%, transparent); }
     a.drill:hover, a.drill:focus-visible { border-bottom-style: solid; color: var(--accent); }
     @media print { a.drill { border: 0; } }
@@ -136,6 +138,24 @@ export class ResultTable {
     if (!drill) return null;
     const columns = this.columns();
     return this.rows().map((row) => row.values.map((value, n) => (value ? cellLink(drill, row, columns[n]?.id ?? '') : null)));
+  });
+  /** Soll und Ist: Zellen der Zielspalte, die das Ziel verfehlen, bekommen ein Zeichen */
+  readonly target = input<{ column: string; value: number; mode: 'min' | 'max' } | null | undefined>(null);
+  protected readonly missTitle = computed(() => {
+    const target = this.target();
+    return target ? `${target.mode === 'max' ? 'über' : 'unter'} dem Ziel von ${target.value.toLocaleString('de-DE')}` : '';
+  });
+  /** je Zeile die Spalte, in der das Ziel verfehlt ist, sonst -1 */
+  protected readonly misses = computed(() => {
+    const target = this.target();
+    const at = target ? this.columns().findIndex((c) => c.id === target.column) : -1;
+    if (!target || at < 0) return null;
+    const single = this.rows().every((r) => r.kind === 'total');
+    return this.rows().map((row) => {
+      const value = row.values[at];
+      const counts = single || row.kind === 'value' || row.kind === 'group';
+      return counts && value !== null && value !== undefined && (target.mode === 'max' ? value > target.value : value < target.value) ? at : -1;
+    });
   });
   protected readonly shades = computed(() => {
     const scale = this.heat();

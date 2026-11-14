@@ -2,12 +2,12 @@
 import { Report } from '../core/types';
 
 export interface TileSpec {
-  id: string; title: string; metric_id?: string | null; query?: unknown; view?: { type: string } | null;
+  id: string; title: string; metric_id?: string | null; query?: unknown; view?: { type: string; options?: Record<string, unknown> } | null;
   layout: { x: number; y: number; w: number; h: number };
 }
 export interface SectionSpec {
   id: string; type: 'text' | 'table' | 'chart' | 'matrix'; title?: string; markdown?: string;
-  metric_id?: string | null; query?: unknown; view?: { type: string } | null; [more: string]: unknown;
+  metric_id?: string | null; query?: unknown; view?: { type: string; options?: Record<string, unknown> } | null; [more: string]: unknown;
 }
 
 export const GRID = 12;
