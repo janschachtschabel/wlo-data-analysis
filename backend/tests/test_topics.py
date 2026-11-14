@@ -189,6 +189,13 @@ def test_block_rule_spares_real_topics_and_finds_a_channels_set():
     assert _blocks(channel, 4000) == set()
 
 
+def test_block_rule_finds_large_sets_in_large_cells():
+    # live gemessen: fünf Wörter eines Kanals zwischen 504 und 518 in einer Zelle mit 8.153
+    war = [("wilhelm ii", 518), ("winston churchill", 512), ("1914 to 1918", 507),
+           ("history channel", 507), ("archduke franz ferdinand", 504), ("battlefield 1", 440)]
+    assert _blocks(war, 8153) == {key for key, _ in war[:5]}
+
+
 def test_names_and_short_words():
     names, whole = _names("Physik"), ("physik",)
     assert _is_name("physik", names, whole)

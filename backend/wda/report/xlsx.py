@@ -98,7 +98,11 @@ def to_xlsx(report: Report, meta: str, source_lines: Any) -> bytes:
     used: set[str] = {"übersicht", "history"}  # das erste Blatt; „History“ sperrt Excel
 
     def name(title: str) -> str:
-        base = _SHEET.sub(" ", _BAD.sub("", title)).strip(" '")[:28].strip(" '") or "Tabelle"
+        base = " ".join(_SHEET.sub(" ", _BAD.sub("", title)).split()).strip(" '")
+        if len(base) > 28:  # am Wortende kürzen, wenn eines in der Nähe liegt
+            cut = base[:28]
+            base = cut[:cut.rfind(" ")] if cut.rfind(" ") >= 16 else cut
+        base = base.strip(" '") or "Tabelle"
         candidate, n = base, 1
         while candidate.casefold() in used:
             n += 1

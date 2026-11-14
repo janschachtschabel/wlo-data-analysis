@@ -36,17 +36,21 @@ BASE_FACET_LIMIT = 2000    # Vergleichsbasis: die 10.000 häufigsten Werte des B
 MIN_COUNT = 2              # ein Wert, den nur ein Material trägt, ist kein Thema
 MIN_LIFT = 1.2
 BLOCK_SIZE = 5             # so viele Werte mit fast gleicher Zahl sind der Satz eines Kanals
-BLOCK_SPREAD = 0.03
+BLOCK_SPREAD = 0.05
 BLOCK_MIN = 20
-BLOCK_SHARE = 0.1         # und jeder davon an mindestens einem Zehntel der Zelle
+BLOCK_SHARE = 0.1         # und jeder davon an mindestens einem Zehntel der Zelle,
+BLOCK_LARGE = 100         # oder an mindestens so vielen Materialien und 2 % der Zelle
+BLOCK_LARGE_SHARE = 0.02
 
 
 def _blocks(items: list[tuple[str, int]], total: int) -> set[str]:
     """Schlüssel von Werten, die in einer Zelle zu fünft oder mehr fast dieselbe Zahl tragen
-    und je mindestens ein Zehntel der Zelle ausmachen: Ein Kanal hängt denselben Satz
-    Schlagwörter an alle seine Materialien. Gesucht wird in allen Werten der Zelle, auch in
-    Füllwörtern, weil sie zum selben Satz gehören."""
-    least = max(BLOCK_MIN, total * BLOCK_SHARE)
+    und je ein Zehntel der Zelle (oder 100 Materialien und 2 %) ausmachen: Ein Kanal hängt
+    denselben Satz Schlagwörter an alle seine Materialien. Gesucht wird in allen Werten
+    der Zelle, auch in Füllwörtern, weil sie zum selben Satz gehören."""
+    # Gleichstand bei kleinen Zahlen ist Zufall; bei Hunderten von Materialien nicht
+    least = max(BLOCK_MIN, min(total * BLOCK_SHARE,
+                               max(BLOCK_LARGE, total * BLOCK_LARGE_SHARE)))
     ranked = sorted(((key, key, count) for key, count in items if count >= least),
                     key=lambda i: -i[2])
     out: set[str] = set()
