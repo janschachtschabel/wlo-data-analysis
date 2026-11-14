@@ -1,4 +1,4 @@
-import { Component, effect, inject, signal, untracked } from '@angular/core';
+import { Component, HostListener, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Assistant } from '../assistant/assistant';
@@ -31,7 +31,7 @@ import { Instances } from '../core/instances';
         }
       </select>
       @if (!onAssistant()) {
-        <button type="button" class="primary" (click)="toggleChat()" [attr.aria-expanded]="chatOpen()" aria-controls="chat-dock"
+        <button type="button" class="primary" (click)="toggleChat()" [attr.aria-expanded]="chatOpen()"
                 title="Den Assistenten neben dieser Ansicht befragen">Chat</button>
       }
       <button type="button" (click)="toggleTheme()" aria-label="Zwischen heller und dunkler Darstellung wechseln">Hell/Dunkel</button>
@@ -41,8 +41,9 @@ import { Instances } from '../core/instances';
     <div class="stage" [class.with-chat]="chatOpen() && !onAssistant()">
       <main [attr.inert]="auth.expired() ? '' : null"><router-outlet /></main>
       @if (chatOpen() && !onAssistant()) {
-        <aside id="chat-dock" class="chat" aria-label="Chat mit dem Assistenten" [attr.inert]="auth.expired() ? '' : null">
-          <app-assistant [dock]="true" (closed)="chatOpen.set(false)" />
+        <aside id="chat-dock" class="chat" aria-label="Chat mit dem Assistenten" [attr.inert]="auth.expired() ? '' : null"
+               [style.--head.px]="headHeight()" (keydown.escape)="closeChat()">
+          <app-assistant [dock]="true" (closed)="closeChat()" />
         </aside>
       }
     </div>
@@ -73,7 +74,7 @@ import { Instances } from '../core/instances';
     /* das Chatfenster steht neben der Ansicht, nicht darüber: beides bleibt bedienbar */
     .stage.with-chat { display: grid; grid-template-columns: minmax(0, 1fr) min(520px, 42vw); align-items: start; }
     .stage.with-chat main { width: 100%; }
-    .chat { position: sticky; top: 49px; height: calc(100dvh - 49px); border-left: 1px solid var(--border); background: var(--bg, var(--surface)); }
+    .chat { position: sticky; top: var(--head, 49px); height: calc(100dvh - var(--head, 49px)); border-left: 1px solid var(--border); background: var(--bg, var(--surface)); }
     @media (max-width: 900px) {
       .stage.with-chat { display: block; }
       .chat { position: fixed; inset: 0; top: 0; height: auto; z-index: 20; border: 0; }
@@ -91,6 +92,8 @@ export class Shell {
   private readonly chat = inject(Chat);
   protected readonly chatOpen = signal(false);
   protected readonly onAssistant = signal(false);
+  /** der Kopf bricht bei schmalem Fenster um; das Chatfenster beginnt darunter */
+  protected readonly headHeight = signal(49);
 
   constructor() {
     this.instances.load().catch((error) =>
@@ -102,7 +105,11 @@ export class Shell {
     effect(() => {
       if (this.auth.expired()) setTimeout(() => document.getElementById('relogin-pw')?.focus());
     });
-    const place = () => this.onAssistant.set(this.router.url.split('?')[0] === '/assistent');
+    const place = () => {
+      this.onAssistant.set(this.router.url.split('?')[0] === '/assistent');
+      // Solange noch nichts gefragt ist, folgt der Bezug der Ansicht, die im Bild ist.
+      if (this.chatOpen() && !this.chat.turns().length) setTimeout(() => this.chat.context.set(aboutPage(this.router.url)), 300);
+    };
     place();
     this.router.events.subscribe((event) => { if (event instanceof NavigationEnd) place(); });
     const saved = localStorage.getItem('wda-theme'); // nur eine Darstellungsvorliebe
@@ -113,7 +120,19 @@ export class Shell {
   protected toggleChat(): void {
     const open = !this.chatOpen();
     if (open && !this.chat.turns().length) this.chat.context.set(aboutPage(this.router.url));
+    if (open) this.headHeight.set(document.querySelector('header')?.getBoundingClientRect().height ?? 49);
     this.chatOpen.set(open);
+    if (open) setTimeout(() => document.querySelector<HTMLElement>('#chat-dock #question')?.focus());
+  }
+
+  protected closeChat(): void {
+    this.chatOpen.set(false);
+    document.querySelector<HTMLElement>('header button.primary')?.focus();
+  }
+
+  @HostListener('window:resize')
+  protected measure(): void {
+    if (this.chatOpen()) this.headHeight.set(document.querySelector('header')?.getBoundingClientRect().height ?? 49);
   }
 
   toggleTheme(): void {
@@ -137,6 +156,10 @@ export class Shell {
 
   async logout(): Promise<void> {
     if (!this.leave.allowed()) return; // ungespeicherte Eingaben: erst fragen, dann abmelden
+    // die Unterhaltung gehört zur Sitzung: nichts davon bleibt für die nächste Anmeldung stehen
+    this.chat.restart();
+    this.chat.context.set(null);
+    this.chatOpen.set(false);
     await this.auth.logout().catch(() => undefined);
     await this.router.navigate(['/login']);
   }

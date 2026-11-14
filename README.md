@@ -242,7 +242,7 @@ Rechner mit mindestens fünf Materialien einzeln.
 
 ## KI: Assistent und Einstellungen
 
-- **Einstellungen** (Menü): zeigt Basis-URL, Modell und ob ein Schlüssel gesetzt ist, und prüft die Verbindung. Eingestellt wird über die Umgebung (`WDA_LLM_BASE_URL`, `WDA_LLM_MODEL`, `WDA_LLM_API_KEY`, `WDA_LLM_EFFORT`), damit der Schlüssel in der App nirgends eingegeben werden muss. Mit `WDA_LLM_SETTINGS_UI=on` lassen sich die Werte auch in der App eintragen; sie gehen dann denen der Umgebung vor.
+- **Einstellungen** (Menü): zeigt Basis-URL, Modell und ob ein Schlüssel gesetzt ist, und prüft die Verbindung. Eingestellt wird über die Umgebung (`WDA_LLM_BASE_URL`, `WDA_LLM_MODEL`, `WDA_LLM_API_KEY`, `WDA_LLM_EFFORT`), damit der Schlüssel in der App nirgends eingegeben werden muss. Mit `WDA_LLM_SETTINGS_UI=on` lassen sich die Werte auch in der App eintragen; sie gehen dann denen der Umgebung vor. Ein früher in der App eingetragener Schlüssel bleibt in der Datenbank der App liegen, auch wenn der Schalter wieder aus ist; er wird dann nicht benutzt. Wer ihn loswerden will, löscht ihn einmal mit eingeschaltetem Schalter unter „Einstellungen“. `WDA_LLM_BASE_URL` sollte mit `https://` beginnen, sonst reist der Schlüssel unverschlüsselt.
 - **Assistent** (Menü): Fragen in eigenen Worten. Der Assistent schlägt Felder und Werte nach,
   zählt über dieselbe Engine wie alle Auswertungen und zeigt Ansichten und Dashboards als
   Karten („Im Explorer öffnen“, „Als Kennzahl speichern“, „Dashboard anlegen“). Der Knopf

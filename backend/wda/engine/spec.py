@@ -249,6 +249,7 @@ class QuerySpec(_Model):
             raise ValueError("round, max und min sind als Spalten-ID nicht erlaubt")
         if self.series and all(s.hidden for s in self.series):
             raise ValueError("mindestens eine Spalte muss sichtbar bleiben (hidden)")
-        if self.gaps and any(s.hidden for s in self.series):
-            raise ValueError("gaps geht nicht zusammen mit verborgenen Spalten (hidden)")
+        if self.percent == "row" and any(s.hidden for s in self.series):
+            raise ValueError("Anteile je Zeile gehen nicht zusammen mit verborgenen Spalten "
+                             "(hidden)")
         return self

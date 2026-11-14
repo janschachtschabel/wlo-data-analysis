@@ -44,12 +44,13 @@ export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?:
         @if (kind()) {
           <label class="grow">{{ contextLabel() }}
             <select name="context-value" [value]="value()" (change)="value.set($any($event.target).value)" [disabled]="!choices().length">
-              <option value="">{{ choices().length ? 'bitte wählen' : 'wird geladen …' }}</option>
+              <option value="">{{ choicesState() === 'loading' ? 'wird geladen …' : choicesState() === 'empty' ? 'keine Werte' : choicesState() === 'failed' ? 'nicht ladbar' : 'bitte wählen' }}</option>
               @for (c of choices(); track c.key) { <option [value]="c.key" [selected]="c.key === value()">{{ c.label }} ({{ c.count }})</option> }
             </select>
           </label>
           @if (value()) { <button type="button" (click)="setKind('')">Zurück zum Gesamtbestand</button> }
         }
+        @if (choicesState() === 'failed') { <span class="error" role="alert">Die Liste ließ sich nicht laden. <button type="button" class="link" (click)="setKind(kind())">Noch einmal</button></span> }
         <span class="muted hint">{{ value() ? 'Alle Kacheln zählen nur diesen Ausschnitt.' : 'Dieselbe Auswertung lässt sich auf eine Quelle einengen.' }}</span>
       </div>
     }
@@ -57,7 +58,13 @@ export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?:
     @if (outdated()) {
       <p class="notice row" role="status">
         <span class="grow">Diese Auswertung weicht von der mitgelieferten Fassung ab: Es gibt eine neuere, oder du hast sie selbst geändert.</span>
-        <button type="button" (click)="renew()" title="Eigene Änderungen an dieser Auswertung gehen dabei verloren">Mitgelieferte Fassung übernehmen</button>
+        @if (confirming()) {
+          <strong>Eigene Änderungen an dieser Auswertung gehen dabei verloren.</strong>
+          <button type="button" class="primary" (click)="renew()">Ja, überschreiben</button>
+          <button type="button" (click)="confirming.set(false)">Abbrechen</button>
+        } @else {
+          <button type="button" (click)="confirming.set(true)">Mitgelieferte Fassung übernehmen</button>
+        }
       </p>
     }
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
@@ -83,6 +90,9 @@ export class Quality {
   protected readonly error = signal('');
   /** die installierte Auswertung ist nicht (mehr) die mitgelieferte */
   protected readonly outdated = signal(false);
+  protected readonly confirming = signal(false);
+  /** null: wird geladen */
+  protected readonly choicesState = signal<'loading' | 'ready' | 'empty' | 'failed'>('ready');
   /** Worauf sich eine Auswertung einengen lässt: die Quelle des Crawlers oder die Bezugsquelle */
   protected readonly contexts = [
     { property: 'ccm:replicationsource', label: 'eine Quelle (Crawler)', short: 'Quelle' },
@@ -107,11 +117,14 @@ export class Quality {
     this.kind.set(property);
     this.value.set('');
     this.choices.set([]);
+    this.choicesState.set(property ? 'loading' : 'ready');
     if (!property) return;
     this.api.post<QueryResult>('/query', { instance: INSTANCE, rows: { property, top: 300 } }).then((data) => {
       if (this.kind() !== property) return;
-      this.choices.set(data.rows.filter((r) => r.kind === 'value').map((r) => ({ key: r.key, label: r.label, count: r.values[0] ?? 0 })));
-    }, (error) => this.error.set(error instanceof ApiError ? error.message : 'Die Quellen ließen sich nicht laden.'));
+      const found = data.rows.filter((r) => r.kind === 'value').map((r) => ({ key: r.key, label: r.label, count: r.values[0] ?? 0 }));
+      this.choices.set(found);
+      this.choicesState.set(found.length ? 'ready' : 'empty');
+    }, () => { if (this.kind() === property) this.choicesState.set('failed'); });
   }
 
   /** nach einem Abzug: die Auswertung neu zählen */
@@ -126,6 +139,7 @@ export class Quality {
     try {
       await this.api.post(`/builtin/${encodeURIComponent(id)}/install?mode=replace`);
       this.outdated.set(false);
+      this.confirming.set(false);
       this.reload(this.complete());
     } catch (error) {
       this.error.set(error instanceof ApiError ? error.message : 'Die Fassung ließ sich nicht übernehmen.');
@@ -135,6 +149,7 @@ export class Quality {
   private async prepare(id: string): Promise<void> {
     this.ready.set(false);
     this.outdated.set(false);
+    this.confirming.set(false);
     this.error.set('');
     try {
       const bundles = await this.api.get<Builtin[]>('/builtin');

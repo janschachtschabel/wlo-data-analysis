@@ -66,7 +66,7 @@ def test_since_only_fits_the_time_criteria(api):
     r = api.post("/api/query", json={"instance": "wlo-prod", "filters": [
         {"property": "ccm:taxonid", "values": [{"since": "5d"}]}]})
     assert r.status_code == 422 and "virtual:time_after_created" in r.json()["detail"]
-    for bad in ["5", "0d", "5w", "-5d", "12345d"]:
+    for bad in ["5", "0d", "5w", "-5d", "123456d", "36501d"]:
         r = api.post("/api/query", json={"instance": "wlo-prod", "filters": [
             {"property": CREATED, "values": [{"since": bad}]}]})
         assert r.status_code == 422, bad

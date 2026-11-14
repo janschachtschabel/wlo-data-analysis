@@ -26,6 +26,8 @@ class LlmClient:
     def __init__(self, http: httpx.AsyncClient, config: LlmConfig, timeout: float = 120.0
                  ) -> None:
         self._http, self.config, self._timeout = http, config, timeout
+        # je Art der Anfrage (mit oder ohne Werkzeuge) der Wert, den der Anbieter annimmt
+        self._adapted: dict[bool, str | None] = {}
 
     async def chat(self, messages: list[dict[str, Any]],
                    tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -37,9 +39,11 @@ class LlmClient:
         if tools:
             body["tools"] = tools
         effort = self.config.reasoning_effort
+        # was der Anbieter für diese Art Anfrage schon einmal verlangt hat, gilt weiter
+        effort = self._adapted.get(bool(tools), effort)
         if effort:
             body["reasoning_effort"] = effort
-        data = await self._post_adapting(body)
+        data = await self._post_adapting(body, bool(tools))
         try:
             message = data["choices"][0]["message"]
             content = message.get("content")
@@ -52,16 +56,21 @@ class LlmClient:
                            ) from None
         return {"role": "assistant", "content": content, "tool_calls": calls}
 
-    async def _post_adapting(self, body: dict[str, Any]) -> dict[str, Any]:
+    async def _post_adapting(self, body: dict[str, Any], with_tools: bool) -> dict[str, Any]:
         """Modelle unterscheiden sich darin, was sie bei ``reasoning_effort`` annehmen:
         manche kennen den Parameter nicht, andere verlangen mit Werkzeugen ausdrücklich
         ``none``. Lehnt der Anbieter deshalb ab, folgen die anderen Formen."""
         tried = [body.get("reasoning_effort")]
         while True:
             try:
-                return await self._post(body)
+                data = await self._post(body)
+                if len(tried) > 1:
+                    self._adapted[with_tools] = body.get("reasoning_effort")
+                return data
             except LlmError as exc:
-                if not (exc.status == 400 and "reasoning" in exc.message.lower()):
+                # nur, wenn die Meldung den Parameter nennt: Ein anderer Fehler, der bloß
+                # von „reasoning“ spricht, soll die Einstellung nicht still verändern
+                if not (exc.status in (400, 422) and "reasoning_effort" in exc.message.lower()):
                     raise
                 # nennt die Meldung „none“, ist das der Ausweg; sonst zuerst ganz ohne
                 order = ("none", None) if "none" in exc.message.lower() else (None, "none")

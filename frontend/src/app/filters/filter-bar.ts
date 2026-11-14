@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Api, ApiError, Latest } from '../core/api';
 import { Instances } from '../core/instances';
 import { FieldInfo, Filter, VocabPage, VocabValue } from '../core/types';
-import { addValue, looksLikeUri, removeFilter, removeValue, valueOf } from './state';
+import { addValue, looksLikeUri, removeFilter, removeValue, valueOf, sinceLabel } from './state';
 
 interface Option { kind: 'field' | 'value' | 'literal'; id: string; label: string; hint: string }
 
@@ -11,6 +11,8 @@ interface Option { kind: 'field' | 'value' | 'literal'; id: string; label: strin
  * Filterleiste: ein Eingabefeld für alles. Erst das Feld (Name oder Property), dann Werte mit
  * Vorschlägen aus dem Vokabular. Eine eingefügte URI wird als Wert erkannt.
  */
+const TIME_LABELS: Record<string, string> = { 'virtual:time_after_created': 'neu angelegt', 'virtual:time_after_modified': 'geändert' };
+
 @Component({
   selector: 'app-filter-bar',
   imports: [FormsModule],
@@ -183,10 +185,12 @@ export class FilterBar {
   });
 
   protected fieldLabel(property: string): string {
-    return this.fields().find((f) => f.property === property)?.caption || property;
+    return this.fields().find((f) => f.property === property)?.caption || TIME_LABELS[property] || property;
   }
 
   protected valueLabel(property: string, value: string): string {
+    const since = sinceLabel(value);
+    if (since) return since;
     const key = property + '\n' + value;
     return this.picked().get(key) ?? this.labels().get(key) ?? (value === '' ? '(leer)' : value);
   }

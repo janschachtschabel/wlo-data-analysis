@@ -17,6 +17,7 @@ from ..edusharing.vocab import UnresolvedValue
 from ..engine.engine import run_query
 from ..engine.spec import QuerySpec
 from ..errors import QueryError, describe_validation
+from ..filters import TIME_CRITERIA, SinceValue
 from ..report.build import build_report
 from ..report.formats import report_data
 from ..store.definitions import NotFound
@@ -223,6 +224,9 @@ class Toolbox:
         for flt in [*spec.filters, *(f for s in spec.series for f in s.filters)]:
             if flt.property in allowed:
                 continue
+            if flt.property in TIME_CRITERIA and all(
+                    isinstance(v, SinceValue) for v in flt.values):
+                continue  # „neu seit“ und „geändert seit“: ein Zeitraum, kein Datensatz
             try:
                 await self._vocab.check_facet(flt.property)
             except EduSharingError:

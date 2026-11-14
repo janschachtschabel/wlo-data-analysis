@@ -200,6 +200,9 @@ class MatrixSection(_Model):
     def _unique(self) -> MatrixSection:
         _unique_ids([b.id for b in self.blocks], "Blöcke")
         _unique_ids([s.id for s in self.series], "Spalten")
+        if any(s.hidden for s in self.series):
+            raise ValueError("verborgene Spalten (hidden) gibt es in einer Matrix nicht; "
+                             "dafür 'show' verwenden")
         unknown = set(self.show or []) - {s.id for s in self.series}
         if unknown or len(set(self.show or [])) != len(self.show or []):
             raise ValueError("show nennt unbekannte oder doppelte Spalten")

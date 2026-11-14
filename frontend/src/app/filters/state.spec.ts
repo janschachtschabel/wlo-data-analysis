@@ -142,3 +142,17 @@ describe('Link-Zustand: Prüfung', () => {
     expect(fillDefaults([])).toEqual([]);
   });
 });
+
+describe('Zeitraum als Filterwert', () => {
+  it('übersteht den Link und bekommt eine lesbare Beschriftung', async () => {
+    const { decodeState, encodeState, sinceLabel, valueOf } = await import('./state');
+    const spec = { instance: 'wlo-prod', filters: [{ property: 'virtual:time_after_created', values: [{ since: '12m' }] }] };
+    const back = decodeState(encodeState({ spec, view: 'table' }));
+    expect(back.error).toBe('');
+    expect(back.state?.spec.filters).toEqual(spec.filters);
+    expect(valueOf({ since: '12m' })).toBe('since:12m');
+    expect(sinceLabel('since:12m')).toBe('seit 12 Monaten');
+    expect(sinceLabel('since:1y')).toBe('seit 1 Jahr');
+    expect(sinceLabel('Mathematik')).toBeNull();
+  });
+});

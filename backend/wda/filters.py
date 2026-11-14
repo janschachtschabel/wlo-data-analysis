@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from calendar import monthrange
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
 
 from .edusharing.client import MAX_VALUE_LENGTH, Criterion, Facet
 from .edusharing.errors import EduSharingError
@@ -29,14 +30,26 @@ class LiteralValue(BaseModel):
 ValueIn = Value | LiteralValue
 
 
+SINCE_MAX = {"d": 36500, "m": 1200, "y": 100}
+
+
 class SinceValue(BaseModel):
     """Zeitpunkt relativ zu heute: ``30d``, ``12m`` oder ``5y`` (Tage, Monate, Jahre). Nur
     für die beiden Zeitkriterien; so lassen sich Zufluss und Pflege eines Bestands zählen."""
 
     model_config = ConfigDict(extra="forbid")
-    since: Annotated[StrictStr, Field(pattern=r"^[1-9]\d{0,3}[dmy]$")]
+    since: Annotated[StrictStr, Field(pattern=r"^[1-9]\d{0,4}[dmy]$")]
+
+    @model_validator(mode="after")
+    def _within_reach(self) -> SinceValue:
+        count, unit = int(self.since[:-1]), self.since[-1]
+        if count > SINCE_MAX[unit]:
+            raise ValueError("ein Zeitraum reicht höchstens 100 Jahre zurück "
+                             "(36500d, 1200m, 100y)")
+        return self
 
 
+_TIME_VALUE = re.compile(r"\d{1,16}|\d{4}-\d{2}-\d{2}")
 TIME_CRITERIA = ("virtual:time_after_created", "virtual:time_after_modified")
 
 
@@ -64,13 +77,19 @@ def _since(property: str, item: SinceValue) -> dict[str, str]:
     day = since_day(item.since)
     # ganze Tage in UTC: so bleibt die Abfrage einen Tag lang dieselbe (Zwischenspeicher)
     millis = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000)
-    return {"value": str(millis), "label": f"seit {day:%d.%m.%Y}", "how": "since"}
+    return {"value": str(millis), "label": f"seit {day:%d.%m.%Y} (UTC)", "how": "since"}
 
 
 class FilterIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     property: Name
     values: list[ValueIn | SinceValue] = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def _one_point_in_time(self) -> FilterIn:
+        if len(self.values) > 1 and any(isinstance(v, SinceValue) for v in self.values):
+            raise ValueError("ein Zeitraum (since) steht allein in seinem Filter")
+        return self
 
 
 async def resolve_values(
@@ -82,6 +101,16 @@ async def resolve_values(
         if isinstance(item, SinceValue):
             found = _since(property, item)
             resolved.setdefault(found["value"], found)
+            continue
+        if property in TIME_CRITERIA:
+            text = item.value if isinstance(item, LiteralValue) else item
+            if not _TIME_VALUE.fullmatch(text.strip()):
+                raise EduSharingError(
+                    "invalid_query",
+                    f"'{property}' nimmt einen Zeitraum ({{\"since\": \"12m\"}}), ein Datum "
+                    "(JJJJ-MM-TT) oder Millisekunden seit 1970.")
+            resolved.setdefault(text.strip(), {"value": text.strip(), "label": text.strip(),
+                                               "how": "literal"})
             continue
         if isinstance(item, LiteralValue):
             res = await vocab.resolve(property, item.value, literal=True)

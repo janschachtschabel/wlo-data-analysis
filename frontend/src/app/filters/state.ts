@@ -22,12 +22,24 @@ export function fillDefaults(fields: FieldInfo[], skip = ''): { property: string
 const VIEWS: ViewType[] = ['table', 'number', 'bar', 'stacked_bar', 'line', 'pie', 'heatmap'];
 
 export function valueOf(value: Value): string {
-  return typeof value === 'string' ? value : value.value;
+  if (typeof value === 'string') return value;
+  return 'since' in value ? 'since:' + value.since : value.value;
+}
+
+/** „seit 12 Monaten“ für einen Zeitraum, sonst null */
+export function sinceLabel(text: string): string | null {
+  const found = /^since:(\d+)([dmy])$/.exec(text);
+  if (!found) return null;
+  const count = Number(found[1]);
+  const unit = { d: ['Tag', 'Tagen'], m: ['Monat', 'Monaten'], y: ['Jahr', 'Jahren'] }[found[2] as 'd' | 'm' | 'y'];
+  return `seit ${count} ${count === 1 ? unit[0] : unit[1]}`;
 }
 
 function isValue(value: unknown): boolean {
   if (typeof value === 'string') return true;
-  return !!value && typeof value === 'object' && typeof (value as { value?: unknown }).value === 'string';
+  if (!value || typeof value !== 'object') return false;
+  if (typeof (value as { since?: unknown }).since === 'string') return /^[1-9]\d{0,4}[dmy]$/.test((value as { since: string }).since);
+  return typeof (value as { value?: unknown }).value === 'string';
 }
 
 /** Ersetzt in einem Feld einen Wert durch einen anderen (Vorschlag der API statt des unbekannten Textes). */

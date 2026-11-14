@@ -1,5 +1,6 @@
 /** Formen der API, von Hand gepflegt (siehe backend/wda). */
-export type Value = string | { value: string; literal?: boolean };
+/** `since`: Zeitpunkt relativ zu heute (30d, 12m, 5y), nur für die Zeitkriterien */
+export type Value = string | { value: string; literal?: boolean } | { since: string };
 export interface Filter { property: string; values: Value[] }
 export interface Series { id: string; label: string; filters?: Filter[]; formula?: string | null }
 export interface Rows {
