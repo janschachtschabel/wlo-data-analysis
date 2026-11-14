@@ -59,3 +59,20 @@ def test_problems_stand_alone():
                 {"problems": {"fields": [{"property": TAX}], "top": 0}}):
         with pytest.raises(ValidationError):
             QuerySpec(instance="t", **bad)
+
+
+def test_blank_values_count_once_and_undetermined_fields_stay_visible(repo, tmp_path):  # noqa: F811
+    blank = 0
+    for n, doc in enumerate(repo.docs):
+        if doc[LVL] and n % 9 == 0:
+            doc[LVL] = [" "]
+            blank += 1
+    assert blank
+    result = query(repo, tmp_path, problems={"fields": [{"property": LVL}]})
+    rows = {r["key"]: r["values"][0] for r in result["rows"]}
+    without = sum(1 for d in repo.docs if not any(v.strip() for v in d[LVL]))
+    assert rows[f"{LVL}|missing"] == without
+    # der leere Wert steht nicht noch einmal als Wert außerhalb der Werteliste
+    assert rows[f"{LVL}|unknown"] == repo.brute(repo.has(LVL, "political"))
+    # gezählt sind Materialien, nicht Zuordnungen
+    assert "Zuordnungen" not in " ".join(r["label"] for r in result["rows"])

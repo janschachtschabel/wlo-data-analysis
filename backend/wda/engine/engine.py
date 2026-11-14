@@ -16,8 +16,10 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
+from .. import filters
 from ..edusharing.client import MAX_VALUES, Aggregate, Criterion, EduSharingClient
 from ..edusharing.errors import EduSharingError
 from ..edusharing.vocab import VocabStore
@@ -70,6 +72,8 @@ class _Run:
         self._refresh = refresh
         self._tasks: dict[tuple, asyncio.Task[Aggregate]] = {}
         self.results: list[Aggregate] = []
+        # für Berichte: prüfen, ob das Zeilenfeld als Filter dasselbe zählt (Link der Zelle)
+        self.probe = False
 
     def call(self, criteria: tuple[Criterion, ...], facet: str | None = None,
              facet_limit: int | None = None) -> asyncio.Task[Aggregate]:
@@ -95,13 +99,14 @@ class _Run:
 
 
 async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
-                    snapshot: Any = None) -> dict[str, Any]:
+                    snapshot: Any = None, probe: bool = False) -> dict[str, Any]:
     if spec.snapshot is not None:
         # aus dem lokalen Abzug, ohne Anfrage an das Repositorium
         if snapshot is None:
             raise QueryError("Der lokale Abzug steht hier nicht zur Verfügung.")
         return await asyncio.to_thread(run_analysis, snapshot, spec, client.instance)
     run = _Run(client, spec.content_type, spec.refresh)
+    run.probe = probe
     try:
         result = await _execute(spec, client, vocab, run)
     except BaseException:
@@ -160,6 +165,57 @@ def _gaps(result: dict[str, Any], spec: QuerySpec) -> dict[str, Any]:
                                        for c in columns]}}
 
 
+async def _execute_growth(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
+                          run: _Run) -> dict[str, Any]:
+    """Zuwachs je Kalendermonat. Je Monatsanfang zählt eine Abfrage, was seither angelegt
+    (oder geändert) wurde; der Monat ist die Differenz zum folgenden Monatsanfang."""
+    ask = spec.growth
+    assert ask is not None
+    prop = f"virtual:time_after_{ask.by}"
+    notes = Notes()
+    base_list, base_described = await resolve_filters(vocab, spec.filters)
+    base = tuple(base_list)
+    if any(c.property in filters.TIME_CRITERIA for c in base):
+        raise QueryError("Der Zuwachs je Monat rechnet selbst mit dem Zeitraum; bitte den "
+                         "Zeitfilter weglassen.")
+    check_prefix_shape(base, set(client.instance.prefix_fields))
+    today = filters._today()
+    index = today.year * 12 + today.month - 1
+    starts = []  # Monatsanfänge, der älteste zuerst
+    for back in range(ask.months - 1, -1, -1):
+        year, month = divmod(index - back, 12)
+        starts.append(datetime(year, month + 1, 1, tzinfo=UTC))
+    main, *since = await asyncio.gather(run.call(base), *[
+        run.call(base + (Criterion(prop, (str(int(start.timestamp() * 1000)),)),))
+        for start in starts])
+    created = ask.by == "created"
+    columns = [{"id": "new", "label": "neu" if created else "zuletzt geändert",
+                "derived": False, "total": None}]
+    stock = created and ask.stock
+    if stock:
+        columns.append({"id": "stock", "label": "Bestand am Monatsende", "derived": True,
+                        "total": None})
+    rows = []
+    for n, start in enumerate(starts):
+        later = since[n + 1].total if n + 1 < len(since) else 0
+        last = n + 1 == len(starts)
+        values: list[Number | None] = [max(0, since[n].total - later)]
+        if stock:
+            values.append(main.total - later)
+        rows.append({"key": f"{start:%Y-%m}",
+                     "label": f"{start:%m/%Y}" + (" (bis heute)" if last else ""),
+                     "kind": "value", "values": values})
+    notes.add("growth",
+              ("Gezählt wird, in welchem Monat die heutigen Materialien angelegt wurden; "
+               "Gelöschtes fehlt, der frühere Bestand war also eher größer. "
+               if created else
+               "Gezählt wird, in welchem Monat die heutigen Materialien zuletzt geändert "
+               "wurden; jedes Material zählt nur in diesem einen Monat. ")
+              + "Monatsgrenzen in UTC.")
+    result = _result(spec, client, run, notes, columns, rows, base_described, None)
+    return {**result, "total_row": False, "base_total": main.total}
+
+
 async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                             run: _Run) -> dict[str, Any]:
     """Rangliste der Datenprobleme: die Füllgrade und der Abgleich mit den Wertelisten,
@@ -181,22 +237,49 @@ async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: Vo
         client, vocab, run) if listed else None
     total = fill["base_total"]
     found: list[tuple[int, int, dict[str, Any]]] = []
-    unknown = 0
+    undetermined: list[dict[str, Any]] = []
     for n, row in enumerate(fill["rows"]):
         missing = row["values"][1]
-        if missing is None:
-            unknown += 1
+        if missing is None:  # nicht bestimmbar: sichtbar am Ende statt stillschweigend weg
+            undetermined.append({
+                "key": f"{row['key']}|missing", "label": f"{row['label']}: ohne Angabe",
+                "kind": "value", "values": [None, None]})
         elif missing > 0:
             found.append((missing, -n, {
                 "key": f"{row['key']}|missing", "label": f"{row['label']}: ohne Angabe",
                 "kind": "value", "values": [missing, _rate(missing, total)]}))
+    base = tuple((await resolve_filters(vocab, spec.filters))[0])
+    counted_uses = []
     for n, row in enumerate(check["rows"] if check else []):
         bad, uses = row["values"][3], row["values"][2]
-        if bad:
-            found.append((bad, -n, {
-                "key": f"{row['key']}|unknown",
-                "label": f"{row['label']}: Wert außerhalb der Werteliste",
-                "kind": "value", "values": [bad, _rate(bad, uses)]}))
+        if not bad:
+            continue
+        # Materialien statt Zuordnungen, wo das Repositorium die Werte als Filter zählt:
+        # ein Kriterium mit allen Werten außerhalb der Werteliste
+        prop = row["key"]
+        field = await vocab.field(prop)
+        known = {v.id for v in field.values} if field else set()
+        facet = (await run.call(base, prop)).facets[prop]
+        outside = [v for v in facet.values if v.value.strip() and v.value not in known]
+        materials = None
+        if outside and len(outside) <= MAX_VALUES and prop not in client.instance.prefix_fields:
+            try:
+                got = (await run.call(base + (Criterion(
+                    prop, tuple(v.value for v in outside)),))).total
+                if max(v.count for v in outside) <= got <= min(bad, total):
+                    materials = got
+            except EduSharingError as exc:
+                if not _refused(exc):
+                    raise
+        label = f"{row['label']}: Wert außerhalb der Werteliste"
+        if materials is None:
+            counted_uses.append(row["label"])
+            found.append((bad, -n, {"key": f"{prop}|unknown", "label": label + " (Zuordnungen)",
+                                    "kind": "value", "values": [bad, _rate(bad, uses)]}))
+        else:
+            found.append((materials, -n, {
+                "key": f"{prop}|unknown", "label": label, "kind": "value",
+                "values": [materials, _rate(materials, total)]}))
     found.sort(key=lambda item: (item[0], item[1]), reverse=True)
     rows = [item[2] for item in found]
     notes = Notes()
@@ -205,16 +288,20 @@ async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: Vo
         if note["code"] not in seen and note["code"] not in ("fill_base", "vocab_check"):
             seen.add(note["code"])
             notes.add(note["code"], note["text"])
-    text = (f"Grundgesamtheit: {total} Materialien. „Ohne Angabe“ zählt Materialien, der "
-            "Anteil bezieht sich auf alle Materialien. „Wert außerhalb der Werteliste“ zählt "
-            "Zuordnungen (ein Material mit mehreren solchen Werten zählt mehrfach), der "
-            "Anteil bezieht sich auf alle Zuordnungen des Feldes. Felder ohne Befund fehlen.")
-    if unknown:
-        text += f" Bei {unknown} Feldern ließ sich „ohne Angabe“ nicht bestimmen."
+    text = (f"Grundgesamtheit: {total} Materialien. Gezählt sind Materialien, der Anteil "
+            "bezieht sich auf alle Materialien. Felder ohne Befund fehlen.")
+    if counted_uses:
+        text += (f" Bei {', '.join(counted_uses)} zählt das Repositorium die Werte nicht als "
+                 "Filter: Dort stehen Zuordnungen (ein Material mit mehreren solchen Werten "
+                 "zählt mehrfach), der Anteil bezieht sich auf die Zuordnungen des Feldes.")
+    if undetermined:
+        text += (f" Bei {len(undetermined)} Feldern ließ sich „ohne Angabe“ nicht bestimmen; "
+                 "sie stehen ohne Zahl am Ende.")
     notes.add("problems", text)
     if ask.top is not None and len(rows) > ask.top:
         notes.add("rows_top", f"Angezeigt werden die ersten {ask.top} von {len(rows)} Zeilen.")
         rows = rows[: ask.top]
+    rows += undetermined
     columns = [{"id": "count", "label": "Betroffen", "derived": False, "total": None},
                {"id": "share", "label": "Anteil %", "derived": True, "total": None}]
     result = _result(spec, client, run, notes, columns, rows, fill["provenance"]["filters"],
@@ -226,6 +313,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                    ) -> dict[str, Any]:
     if spec.problems is not None:
         return await _execute_problems(spec, client, vocab, run)
+    if spec.growth is not None:
+        return await _execute_growth(spec, client, vocab, run)
     if spec.fill is not None:
         return await _execute_fill(spec, client, vocab, run)
     if spec.vocab_check is not None:
@@ -532,6 +621,17 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                 if name in entry:
                     entry[name] = [entry[name][n] for n in keep]
 
+    # Zählt das Zeilenfeld als Filter dasselbe wie in der Tabelle? Nur dann führt eine Zelle
+    # in den Explorer. Ein Präfix-Feld und Summen aus Einzelwerten tun es nie.
+    exact: bool | None = probed[0] if probed else None
+    if single or mode == "sum":
+        exact = False
+    elif run.probe and rows_spec and data_columns and not probed:
+        try:
+            exact = await exact_criterion()
+        except (EduSharingError, QueryError):
+            exact = False
+
     fetched = [r.fetched_at for r in run.results]
     inst = client.instance
     return {
@@ -549,7 +649,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             "instance": {"id": inst.id, "base_url": inst.base_url, "repository": inst.repository,
                          "metadataset": inst.metadataset, "query": inst.query},
             "spec": spec.model_dump(mode="json", exclude={"refresh"}),
-            "rows": ({"property": row_prop, "mode": mode, "include": include_map,
+            "rows": ({"property": row_prop, "mode": mode, "exact": exact,
+                      "include": include_map,
                       "groups": [{"key": g.key, "label": g.label, "values": list(g.members)}
                                  for g in groups]} if rows_spec else None),
             "filters": base_described,
@@ -637,7 +738,9 @@ async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab:
         else:
             if facet.truncated:
                 cut.append(label)
-            outside = [v for v in facet.values if v.value not in known[item.property]]
+            # ein leerer Wert ist keine Angabe, also auch kein Wert außerhalb der Werteliste
+            outside = [v for v in facet.values
+                       if v.value.strip() and v.value not in known[item.property]]
             uses, bad = sum(v.count for v in facet.values), sum(v.count for v in outside)
             values = [len(facet.values), len(outside), uses, bad,
                       round(100 * bad / uses, 1) if uses else None]

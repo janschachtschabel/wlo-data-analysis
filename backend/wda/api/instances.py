@@ -77,6 +77,8 @@ def _build(instance_id: str, body: InstanceBody, previous: Instance | None) -> I
         data["facet_fields"] = previous.facet_fields
         data["prefix_fields"] = previous.prefix_fields
         data["vocab_names"] = previous.vocab_names
+        data["search_fields"] = previous.search_fields
+        data["vocab_levels"] = previous.vocab_levels
     try:
         return Instance(id=instance_id, username=username, password=password, **data)
     except ValidationError as exc:

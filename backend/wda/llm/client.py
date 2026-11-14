@@ -20,10 +20,11 @@ class LlmError(Exception):
     def __init__(self, kind: str, message: str, status: int | None = None) -> None:
         super().__init__(message)
         self.kind, self.message, self.status = kind, message, status
+        self.timed_out = False
 
 
 class LlmClient:
-    def __init__(self, http: httpx.AsyncClient, config: LlmConfig, timeout: float = 120.0
+    def __init__(self, http: httpx.AsyncClient, config: LlmConfig, timeout: float = 90.0
                  ) -> None:
         self._http, self.config, self._timeout = http, config, timeout
         # je Art der Anfrage (mit oder ohne Werkzeuge) der Wert, den der Anbieter annimmt
@@ -43,7 +44,16 @@ class LlmClient:
         effort = self._adapted.get(bool(tools), effort)
         if effort:
             body["reasoning_effort"] = effort
-        data = await self._post_adapting(body, bool(tools))
+        try:
+            data = await self._post_adapting(body, bool(tools))
+        except LlmError as exc:
+            # Kommt bis zur Zeitgrenze nichts, einmal wiederholen statt die Frage scheitern
+            # zu lassen; dabei mit wenig Nachdenken, falls mehr eingestellt war.
+            if not exc.timed_out:
+                raise
+            if body.get("reasoning_effort") not in (None, "low", "none"):
+                body["reasoning_effort"] = "low"
+            data = await self._post_adapting(body, bool(tools))
         try:
             message = data["choices"][0]["message"]
             content = message.get("content")
@@ -99,8 +109,10 @@ class LlmClient:
                                        "Die Antwort des Sprachmodells ist zu groß.")
                 status = response.status_code
         except httpx.TimeoutException:
-            raise LlmError("llm_unreachable",
-                           "Das Sprachmodell hat nicht rechtzeitig geantwortet.") from None
+            late = LlmError("llm_unreachable",
+                            "Das Sprachmodell hat nicht rechtzeitig geantwortet.")
+            late.timed_out = True
+            raise late from None
         except httpx.HTTPError:
             raise LlmError("llm_unreachable",
                            "Das Sprachmodell ist unter der eingestellten Adresse nicht "

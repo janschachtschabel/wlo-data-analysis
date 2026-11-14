@@ -22,6 +22,8 @@ from .runner import load_run
 
 MAX_SERIES = 8
 MAX_RUNS = 1000
+# „Was ist auffällig?“: ab wann eine Veränderung zählt, und wie viele je Definition
+MIN_DELTA, MIN_PERCENT, MIN_PP, PER_DEFINITION = 10, 10.0, 5.0, 3
 TOTAL = row_key("total", "__total__")
 _WHEN = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})?)?$")
 
@@ -135,6 +137,124 @@ class History:
                             for r in block.rows]}
                   for block in report.blocks if isinstance(block, Table)]
         return {"run_id": row["id"], "blocks": blocks}
+
+    async def trends(self, def_id: str, limit: int = 12) -> dict[str, Any]:
+        """Je Block die Gesamtzahl (Summenzeile, erste Spalte) über die jüngsten brauchbaren
+        Läufe, ältester zuerst: Grundlage der kleinen Verlaufslinien in den Kacheln."""
+
+        def fn(con: sqlite3.Connection) -> dict[str, Any]:
+            fetch(con, def_id)
+            where, args = _scope(def_id, None)
+            heads = list(reversed(con.execute(
+                _HEAD + f"WHERE {where}{_USABLE} ORDER BY seq DESC LIMIT ?",  # noqa: S608
+                [*args, limit]).fetchall()))
+            if len(heads) < 2:
+                return {"runs": [], "blocks": {}}
+            # nur Läufe seit der letzten Änderung der Abfrage sind vergleichbar
+            start = max((n for n in range(1, len(heads)) if changed(heads[n - 1], heads[n])),
+                        default=0)
+            heads = heads[start:]
+            if len(heads) < 2:
+                return {"runs": [], "blocks": {}}
+            position = {head["id"]: n for n, head in enumerate(heads)}
+            first = {b["key"]: b["columns"][0]["id"]
+                     for b in self._layout(con, def_id, None)["blocks"]
+                     if b["columns"] and any(r["key"] == TOTAL for r in b["rows"])}
+            blocks: dict[str, list[float | int | None]] = {}
+            marks = ",".join("?" * len(heads))
+            for point in con.execute(
+                    "SELECT run_id, key, column_id, value FROM points"  # noqa: S608
+                    f" WHERE run_id IN ({marks}) AND row_key=?",
+                    [*position, TOTAL]):
+                if first.get(point["key"]) != point["column_id"] or point["value"] is None:
+                    continue
+                value = point["value"]
+                blocks.setdefault(point["key"], [None] * len(heads))[
+                    position[point["run_id"]]] = (int(value) if float(value).is_integer()
+                                                  else round(value, 2))
+            return {"runs": [{"run_id": h["id"], "started_at": h["started_at"]} for h in heads],
+                    "blocks": {key: values for key, values in blocks.items()
+                               if sum(v is not None for v in values) >= 2}}
+
+        return await self._db.read(fn)
+
+    async def highlights(self, limit: int = 20) -> dict[str, Any]:
+        """Die größten Veränderungen zwischen den beiden jüngsten brauchbaren Läufen jeder
+        Definition (ohne abweichende Instanz). Zählungen: mindestens ``MIN_DELTA`` und
+        ``MIN_PERCENT`` Prozent; Prozentspalten: mindestens ``MIN_PP`` Prozentpunkte. Läufe
+        vor und nach einer Änderung der Abfrage werden nicht verglichen."""
+
+        def fn(con: sqlite3.Connection) -> dict[str, Any]:
+            items: list[dict[str, Any]] = []
+            watched = compared = 0
+            for definition in con.execute("SELECT id, name, kind FROM definitions").fetchall():
+                where, args = _scope(definition["id"], None)
+                heads = con.execute(
+                    _HEAD + f"WHERE {where}{_USABLE} ORDER BY seq DESC LIMIT 2",  # noqa: S608
+                    args).fetchall()
+                if not heads:
+                    continue
+                watched += 1
+                if len(heads) < 2 or changed(heads[1], heads[0]):
+                    continue
+                compared += 1
+                now, before = ({(r["key"], r["row_key"], r["column_id"]): r["value"]
+                                for r in con.execute(
+                                    "SELECT key, row_key, column_id, value FROM points"
+                                    " WHERE run_id=?", (head["id"],))} for head in heads)
+                moved = []
+                for where_, after in now.items():
+                    old = before.get(where_)
+                    if after is None or old is None or after == old:
+                        continue
+                    moved.append((where_, old, after))
+                if not moved:
+                    continue
+                layout = self._layout(con, definition["id"], None)
+                blocks = {b["key"]: b for b in layout["blocks"]}
+                found = []
+                for (key, row, column), old, after in moved:
+                    block = blocks.get(key)
+                    if block is None:
+                        continue
+                    row_label = next((r["label"] for r in block["rows"] if r["key"] == row),
+                                     None)
+                    column_label = next((c["label"] for c in block["columns"]
+                                         if c["id"] == column), None)
+                    if row_label is None or column_label is None:
+                        continue
+                    delta = after - old
+                    if column_label.rstrip().endswith("%"):
+                        if abs(delta) < MIN_PP:
+                            continue
+                        percent, score, unit = None, abs(delta) * 2, "pp"
+                    else:
+                        if abs(delta) < MIN_DELTA:
+                            continue
+                        percent = round(100 * delta / old, 1) if old else None
+                        if percent is not None and abs(percent) < MIN_PERCENT:
+                            continue
+                        score, unit = (abs(percent) if percent is not None else 100.0), "count"
+
+                    def tidy(value: float) -> float | int:
+                        return int(value) if float(value).is_integer() else round(value, 1)
+
+                    found.append((score, {
+                        "definition_id": definition["id"], "name": definition["name"],
+                        "kind": definition["kind"], "run_id": heads[0]["id"],
+                        "previous_run_id": heads[1]["id"],
+                        "started_at": heads[0]["started_at"],
+                        "previous_started_at": heads[1]["started_at"],
+                        "block": block["title"], "row": row_label, "column": column_label,
+                        "before": tidy(old), "after": tidy(after), "delta": tidy(delta),
+                        "percent": percent, "unit": unit}))
+                found.sort(key=lambda item: -item[0])
+                items += found[:PER_DEFINITION]
+            items.sort(key=lambda item: -item[0])
+            return {"items": [item for _, item in items[:limit]], "watched": watched,
+                    "compared": compared}
+
+        return await self._db.read(fn)
 
     async def keys(self, def_id: str, instance: str | None = None) -> dict[str, Any]:
         def fn(con: sqlite3.Connection) -> dict[str, Any]:

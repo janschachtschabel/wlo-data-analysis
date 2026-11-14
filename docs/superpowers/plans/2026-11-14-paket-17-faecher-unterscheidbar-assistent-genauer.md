@@ -47,3 +47,26 @@ Ein unabhängiges Review fand keine kritischen, vier wichtige und neun kleinere 
   lange Antworten brechen um. Frage und Antworten werden strenger geprüft.
 - Unterscheidung gleichnamiger Werte: längster Anfang gewinnt, nie zweimal derselbe Name, kein
   Zusammenstoß mit vorhandenen Namen, lineare Laufzeit.
+
+## Liveprobe (echtes Modell, WLO Produktion, Stand 25ed657)
+
+Was hielt: „Mathematik (Schule)“ und die Hochschulwerte sind unterscheidbar, 41 von 416 Werten
+tragen einen Zusatz, der erste Abruf der Felder dauert 1,5 s. Der Assistent nimmt Schule und
+Hochschule zusammen und sagt es (28.874, nachgerechnet richtig). Die Rückfrage kommt mit vier
+Antworten und die Unterhaltung geht danach sinnvoll weiter. Die Selbstprüfung kostet kaum Zeit.
+
+Was nicht hielt, und was daraufhin geändert wurde:
+
+- Drei von neun Läufen endeten nach rund zwei Minuten mit einer Zeitüberschreitung des Modells.
+  Jetzt wird ein Aufruf nach 90 Sekunden einmal wiederholt (mit wenig Nachdenken, falls mehr
+  eingestellt war).
+- Vorschläge gingen verloren, weil gescheiterte Versuche die Grenze von zwei Dashboards oder
+  Berichten je Frage verbrauchten. Jetzt zählen nur gelungene; Versuche sind auf fünf begrenzt.
+- Derselbe Vorschlag erschien doppelt. Jetzt einmal.
+- Gescheiterte Schritte waren unsichtbar. Jetzt stehen sie mit ihrem Grund in der Schrittliste
+  („Ohne Ergebnis: …“) und im Protokoll des Servers.
+- Die Antwort behauptete „keine berechneten Anteile“, obwohl die Ansicht sie zeigt. Die Fakten
+  der Selbstprüfung nennen jetzt, dass eine Tabelle Anteile in Prozent zeigt.
+- Fünf Namen waren innerhalb der Hochschulsystematik doppelt, ein Zusatz nannte eine Kennung
+  („n105“). Gleichnamige Werte desselben Vokabulars heißen jetzt nach ihrer Ebene:
+  „Mathematik (Hochschule, Studienbereich)“ und „Mathematik (Hochschule, Studienfach)“.

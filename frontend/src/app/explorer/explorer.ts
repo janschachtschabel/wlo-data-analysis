@@ -6,6 +6,7 @@ import { Api, ApiError, Latest } from '../core/api';
 import { Auth } from '../core/auth';
 import { formatNumber, formatTime } from '../core/format';
 import { Instances } from '../core/instances';
+import { searchLink } from '../shared/search-link';
 import { Definition, FieldInfo, FillShow, Filter, QueryResult, QuerySpec, ViewType, VocabPage } from '../core/types';
 import { FilterBar } from '../filters/filter-bar';
 import { ExplorerState, FILL_VIEWS, MAX_FILL_FIELDS, decodeState, emptyState, encodeState, fieldChoices, fillDefaults, replaceValue } from '../filters/state';
@@ -197,6 +198,10 @@ const PRESETS: Preset[] = [
             <div class="muted">{{ data.rows.length }} Zeilen × {{ data.columns.length }} Spalten · {{ instances.name(data.instance) }}</div>
           }
           <span class="grow"></span>
+          @if (searchLink(); as link) {
+            <a class="btn" [href]="link" target="_blank" rel="noopener noreferrer"
+               title="Öffnet die Trefferliste zu diesen Filtern in der Suche des Repositoriums (neues Fenster). Die Suche zählt etwas anders und zeigt meist einige Treffer weniger.">In der Suche ansehen</a>
+          }
           @if (spec().rows || spec().fill) {
             <div class="views" role="group" aria-label="Darstellung">
               @for (v of shownViews(); track v.id) {
@@ -297,6 +302,11 @@ export class Explorer {
   protected readonly rowTitle = computed(() => {
     const property = this.spec().rows?.property;
     return this.fields().find((f) => f.property === property)?.caption || property || '';
+  });
+  /** dieselben Filter als Trefferliste in der Suche des Repositoriums; null, wenn die Suche einen Filter nicht übernähme */
+  protected readonly searchLink = computed(() => {
+    const data = this.result.value();
+    return data ? searchLink(this.instances.list().find((i) => i.id === data.instance), data.provenance.filters) : null;
   });
   /** Namen zu den Filterwerten, wie die API sie aufgelöst hat */
   protected readonly labels = computed(() => {

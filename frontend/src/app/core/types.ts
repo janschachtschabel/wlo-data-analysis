@@ -37,11 +37,13 @@ export interface QueryResult {
   provenance: {
     fetched_at: number | null; oldest_fetched_at: number | null; cached: boolean;
     queries: number; notes: Note[];
-    filters: { property: string; values: { value: string; label?: string }[] }[];
+    filters: { property: string; values: { value: string; label?: string; how?: string }[] }[];
   };
 }
 export interface Instance {
   id: string; name: string; base_url: string; search_url?: string | null;
+  /** Felder, die die Suche des Repositoriums als Filter in der Adresse übernimmt */
+  search_fields?: string[];
   has_credentials: boolean;
   repository?: string; metadataset?: string; query?: string; facet_fields?: string[];
   source?: 'preset' | 'config' | 'stored'; overridden?: boolean;

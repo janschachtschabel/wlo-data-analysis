@@ -337,7 +337,36 @@ def test_profile_dashboard_runs_for_everything_and_for_one_source(api):
         results = {r["key"]: r["result"] for r in run["results"]}
         assert results["kernangaben"]["base_total"] == len(stock)
         assert results["probleme"]["base_total"] == len(stock)
-        assert results["zufluss"]["columns"][0]["total"] == len(stock)
+        assert results["zufluss"]["base_total"] == len(stock)
+        assert len(results["zufluss"]["rows"]) == 24
         levels = {r["key"]: r["values"][0] for r in results["stufen"]["rows"]}
         for key, count in levels.items():
             assert count == sum(1 for d in stock if key in d["ccm:educationalcontext"])
+
+
+@pytest.mark.parametrize("bundle_id", ["steckbrief", "datenprobleme", "datenqualitaet",
+                                       "abdeckung"])
+@pytest.mark.parametrize("prop", ["ccm:taxonid", "ccm:educationalcontext",
+                                  "ccm:oeh_publisher_combined"])
+def test_dashboards_run_within_a_subject_level_or_publisher(api, bundle_id, prop):
+    """Kontext Fach, Bildungsstufe, Bezugsquelle: Jede Kachel zählt den Ausschnitt oder sagt
+    in einem Satz, warum sie entfällt; nichts bricht ab."""
+    assert api.post(f"/api/builtin/{bundle_id}/install").status_code == 200
+    docs = api.repo.docs
+    value = next(v for d in docs for v in d[prop] if v.strip())
+    own = sum(1 for d in docs if value in d[prop])
+    out = api.post(f"/api/definitions/builtin-{bundle_id}/run", json={
+        "save": False, "scope": [{"property": prop, "values": [
+            {"value": value, "literal": True}]}]})
+    assert out.status_code == 200, out.text
+    run = out.json()
+    seen = []
+    for result in run["results"]:
+        if result["error"]:
+            seen.append((result["key"], result["error"]))
+            continue
+        total = result["result"].get("base_total")
+        if total is not None:
+            assert total == own, result["key"]
+    assert any(not r["error"] for r in run["results"])
+    assert all(e.get("kind") == "not_applicable" for _, e in seen), seen

@@ -272,16 +272,27 @@ def test_same_named_values_of_two_vocabularies_get_told_apart(tmp_path):
     repo.mds_error = httpx.Response(200, json=mds)
     http = httpx.AsyncClient(transport=repo.transport())
     inst = Instance(id="t", name="T", base_url="https://repo.example", vocab_names={
-        DISC: "Schule", hsf: "Hochschule"})
+        DISC: "Schule", hsf: "Hochschule"}, vocab_levels={
+        hsf: ("Fächergruppe", "Studienbereich", "Studienfach")})
+    widget["values"] += [  # gleichnamig nur innerhalb der Hochschulsystematik
+        {"id": hsf + "n30", "caption": "Medienwissenschaft", "parent": hsf + "n4"},
+        {"id": hsf + "n302", "caption": "Medienwissenschaft", "parent": hsf + "n30"}]
+    repo.mds_error = httpx.Response(200, json=mds)
     store = VocabStore(EduSharingClient(inst, http, TTLCache(ttl=900)), tmp_path, clock=Clock())
 
     async def scenario():
         assert await store.label("ccm:taxonid", DISC + "380") == "Mathematik (Schule)"
         assert await store.label("ccm:taxonid", hsf + "n128") == "Physik (Hochschule)"
-        # zwei gleichnamige Hochschulfächer: dazu, worunter sie stehen
+        # zwei gleichnamige Hochschulfächer: dazu die Ebene im Baum
         assert await store.label("ccm:taxonid", hsf + "n37") == (
-            "Mathematik (Hochschule, Mathematik, Naturwissenschaften)")
-        assert await store.label("ccm:taxonid", hsf + "n105") == "Mathematik (Hochschule, n105)"
+            "Mathematik (Hochschule, Studienbereich)")
+        assert await store.label("ccm:taxonid", hsf + "n105") == (
+            "Mathematik (Hochschule, Studienfach)")
+        # auch ohne gleichnamiges Schulfach
+        assert await store.label("ccm:taxonid", hsf + "n30") == (
+            "Medienwissenschaft (Hochschule, Studienbereich)")
+        assert await store.label("ccm:taxonid", hsf + "n302") == (
+            "Medienwissenschaft (Hochschule, Studienfach)")
         # was nur einmal vorkommt, bleibt, wie es heißt
         assert await store.label("ccm:taxonid", hsf + "n4") == "Mathematik, Naturwissenschaften"
         # der neue Name trifft genau; der alte bleibt mehrdeutig und nennt die Auswahl
@@ -289,10 +300,10 @@ def test_same_named_values_of_two_vocabularies_get_told_apart(tmp_path):
         with pytest.raises(UnresolvedValue) as info:
             await store.resolve("ccm:taxonid", "Mathematik")
         assert info.value.ambiguous and {s["caption"] for s in info.value.suggestions} == {
-            "Mathematik (Schule)", "Mathematik (Hochschule, Mathematik, Naturwissenschaften)",
-            "Mathematik (Hochschule, n105)"}
+            "Mathematik (Schule)", "Mathematik (Hochschule, Studienbereich)",
+            "Mathematik (Hochschule, Studienfach)"}
         # „Sport“ gibt es zweimal im selben Vokabular: dort hilft kein Zusatz der Herkunft
-        assert await store.label("ccm:taxonid", DISC + "900") == "Sport"
+        assert (await store.label("ccm:taxonid", DISC + "900")).startswith("Sport")
         # ohne Zusatz für Themen und Suche
         assert await store.plain("ccm:taxonid", DISC + "380") == "Mathematik"
         assert await store.plain("ccm:taxonid", hsf + "n4") == "Mathematik, Naturwissenschaften"
@@ -305,7 +316,8 @@ def _told(names, values):
 
     from wda.edusharing.vocab import VocabValue
     store = VocabStore.__new__(VocabStore)
-    store._client = SimpleNamespace(instance=SimpleNamespace(vocab_names=names))
+    store._client = SimpleNamespace(instance=SimpleNamespace(vocab_names=names,
+                                                             vocab_levels={}))
     return [v.caption for v in store._told_apart(tuple(VocabValue(*v) for v in values))]
 
 
@@ -323,6 +335,9 @@ def test_telling_apart_at_the_edges():
     assert len(set(out)) == 3 and out[2] == "M (A)"
     # ein Wert ohne benanntes Vokabular bleibt, wie er heißt
     assert _told(names, [("http://a/1", "M"), ("http://c/1", "M")]) == ["M (A)", "M"]
+    # gleichnamig im selben Vokabular: die Ebene, ohne Namen der Ebenen als Zahl
+    assert _told(names, [("http://a/1", "M"), ("http://a/2", "M", "http://a/1")]) == [
+        "M (A, Ebene 1)", "M (A, Ebene 2)"]
 
 
 def test_telling_apart_stays_fast_with_many_same_named_values():
@@ -340,5 +355,10 @@ def test_instances_name_their_vocabularies():
     assert names["http://w3id.org/openeduhub/vocabs/discipline/"] == "Schule"
     assert "Hochschule" in names.values() and PRESETS[1].vocab_names == names
     assert Instance(id="x", name="X", base_url="https://r.example").vocab_names == {}
+    # die Suche übernimmt nur Felder ihres Formulars; nur gemessene Instanzen nennen sie
+    assert "ccm:taxonid" in PRESETS[0].search_fields and PRESETS[1].search_fields == ()
+    assert "ccm:replicationsource" not in PRESETS[0].search_fields
+    assert PRESETS[0].public()["search_fields"] == list(PRESETS[0].search_fields) or \
+        tuple(PRESETS[0].public()["search_fields"]) == PRESETS[0].search_fields
     with pytest.raises(ValueError):
         Instance(id="x", name="X", base_url="https://r.example", vocab_names={"a": "b" * 60})

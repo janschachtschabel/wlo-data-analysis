@@ -38,3 +38,33 @@ Regel zu brechen, dass nur Auswertungen nach außen gehen.
   alles und für eine Quelle mit den Zahlen dieser Quelle.
 - Oberfläche: `drill.spec.ts`, `options.spec.ts`; Durchstich öffnet Steckbrief und Rangliste
   und folgt einer Zelle in den Explorer.
+
+## Messung: Link in die Suche (WLO Produktion, als Gast)
+
+Die Suche übernimmt Filter als `…/edu-sharing/components/search?filters=<JSON>` mit
+`{Feld: [Wert, …]}`, aber nur für Felder ihres Suchformulars (Fach, Bildungsstufe, Materialart,
+Zielgruppe, Bezugsquelle). Jedes andere Feld (Lizenzschlüssel, Quelle des Crawlers, „Feld ist
+leer“) verwirft sie stillschweigend und zeigt den ganzen Bestand. Die Suche zählt durchweg etwas
+weniger als die App (Mathematik und Sekundarstufe I: 10.120 gegen 10.125).
+
+Umgesetzt: `search_fields` je Instanz (für WLO Produktion gesetzt). Der Explorer zeigt „In der
+Suche ansehen“ nur, wenn jeder Filter auf einem dieser Felder liegt und kein Zeitraum dabei ist.
+
+## Stand nach Review
+
+Ein unabhängiges Review fand nichts Kritisches und acht wichtige Befunde. Behoben:
+
+- Der Link einer Zelle zählte in mehreren Fällen etwas anderes als die Zelle oder wurde
+  abgelehnt (Felder, die nur als Facette zählen, Lizenzschlüssel als Präfix-Feld, Gruppen als
+  Summe, Themen je Fach und Stufe, anderer Inhaltstyp). Für Berichte prüft die Engine jetzt mit
+  einer Probe, ob das Zeilenfeld als Filter dasselbe zählt (`provenance.rows.exact`); nur dann
+  gibt es Links. Zu lange Links entfallen.
+- Rangliste: leere Werte zählten doppelt (als „ohne Angabe“ und als Wert außerhalb der
+  Werteliste). „Außerhalb der Werteliste“ zählt jetzt Materialien statt Zuordnungen, wo das
+  Repositorium die Werte als Filter zählt; sonst sagt die Zeile „(Zuordnungen)“. Felder, bei
+  denen „ohne Angabe“ nicht bestimmbar ist, stehen ohne Zahl am Ende.
+- `topics.min_share` misst an der häufigsten einzelnen Schreibweise und blendet den Namen der
+  Zeile nicht mehr aus (gerade er hängt pauschal an allem).
+- Die Steckbrief-Kachel mit den häufigsten Schlagwörtern zeigte bei kleinen Quellen Schlagwörter
+  einzelner Materialien. Sie ist durch die Auswertung der pauschalen Schlagwörter ersetzt, die
+  eine Mindestanzahl verlangt.

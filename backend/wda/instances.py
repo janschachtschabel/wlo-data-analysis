@@ -52,6 +52,15 @@ class Instance(BaseModel):
                       Annotated[str, Field(min_length=1, max_length=40)]] = Field(
         default_factory=dict, max_length=20)
 
+    # Namen der Ebenen eines Vokabularbaums (Anfang der Werte → Namen von oben nach unten):
+    # so heißen gleichnamige Werte desselben Vokabulars „… (Hochschule, Studienfach)“.
+    vocab_levels: dict[Annotated[str, Field(min_length=1, max_length=300)], tuple[
+        Annotated[str, Field(min_length=1, max_length=40)], ...]] = Field(
+        default_factory=dict, max_length=20)
+    # Felder, die die Suche des Repositoriums als Filter in der Adresse übernimmt (gemessen:
+    # nur die Felder ihres Suchformulars; jedes andere verwirft sie stillschweigend).
+    search_fields: tuple[str, ...] = ()
+
     @field_validator("name")
     @classmethod
     def _name_not_blank(cls, value: str) -> str:
@@ -59,7 +68,7 @@ class Instance(BaseModel):
             raise ValueError("darf nicht leer sein")
         return value.strip()
 
-    @field_validator("facet_fields", "prefix_fields")
+    @field_validator("facet_fields", "prefix_fields", "search_fields")
     @classmethod
     def _field_names(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if len(value) > 100 or not all(_FIELD_NAME.match(name) for name in value):
@@ -108,6 +117,13 @@ class Instance(BaseModel):
 WLO_VOCABS = {"http://w3id.org/openeduhub/vocabs/discipline/": "Schule",
               "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/": "Hochschule"}
 
+# an WLO Produktion gemessen (Suchformular mds_oeh, Gruppe ngsearch)
+WLO_SEARCH_FIELDS = ("ccm:taxonid", "ccm:educationalcontext", "ccm:oeh_lrt_aggregated",
+                     "ccm:educationalintendedenduserrole", "ccm:oeh_publisher_combined")
+
+WLO_LEVELS = {"http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/": (
+    "Fächergruppe", "Studienbereich", "Studienfach")}
+
 PRESETS: tuple[Instance, ...] = (
     Instance(
         id="wlo-prod",
@@ -115,12 +131,15 @@ PRESETS: tuple[Instance, ...] = (
         base_url="https://redaktion.openeduhub.net",
         search_url="https://suche.wirlernenonline.de",
         vocab_names=WLO_VOCABS,
+        vocab_levels=WLO_LEVELS,
+        search_fields=WLO_SEARCH_FIELDS,
     ),
     Instance(
         id="wlo-staging",
         name="WLO Staging",
         base_url="https://repository.staging.openeduhub.net",
         vocab_names=WLO_VOCABS,
+        vocab_levels=WLO_LEVELS,
     ),
 )
 

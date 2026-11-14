@@ -4,8 +4,10 @@ import { Api, ApiError, Latest, isAbort } from '../core/api';
 import { runAsJob } from '../core/jobs';
 import { formatTime } from '../core/format';
 import { Auth } from '../core/auth';
+import { Instances } from '../core/instances';
 import { AppSettings, Definition, Filter, Report, RunHead } from '../core/types';
 import { ReportView } from './report-view';
+import { Trends } from '../shared/trend';
 
 /** der Router setzt fehlende Eingaben auf undefined */
 const EMPTY: Filter[] = [];
@@ -57,15 +59,26 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
             <option value="">kein Vergleich</option><option value="previous">vorigem Lauf</option>
             <option value="date">Stand an einem Tag</option>
             @if (others().length) { <option value="run">einem bestimmten Lauf</option> }
+            @if (report.value()?.definition_id && instances.list().length > 1) { <option value="instance">einer anderen Instanz</option> }
           </select>
         </label>
         @if (mode() === 'run') {
           <label>Lauf
             <select name="compare-run" [value]="other()" (change)="other.set($any($event.target).value)">
               <option value="">bitte wählen</option>
-              @for (run of others(); track run.id) { <option [value]="run.id" [selected]="run.id === other()">{{ time(run.started_at) }}{{ run.status === 'ok' ? '' : ' (' + status(run.status) + ')' }}</option> }
+              @for (run of others(); track run.id) { <option [value]="run.id" [selected]="run.id === other()">{{ time(run.started_at) }}{{ run.instance ? ' · ' + instanceName(run.instance) : '' }}{{ run.status === 'ok' ? '' : ' (' + status(run.status) + ')' }}</option> }
             </select>
           </label>
+        }
+        @if (mode() === 'instance') {
+          <label>Instanz
+            <select name="compare-instance" [value]="otherInstance()" (change)="otherInstance.set($any($event.target).value)">
+              <option value="">bitte wählen</option>
+              @for (inst of instances.list(); track inst.id) { <option [value]="inst.id">{{ inst.name }}</option> }
+            </select>
+          </label>
+          <button type="button" (click)="countOther()" [disabled]="!otherInstance() || counting()"
+                  title="Zählt dieselbe Auswertung an der anderen Instanz, speichert den Lauf und zeigt die Abweichung hinter jeder Zahl">{{ counting() ? 'Zählt …' : 'Zählen und vergleichen' }}</button>
         }
         @if (mode() === 'date') {
           <label>Tag <input type="date" name="compare-date" [value]="date()" (change)="date.set($any($event.target).value)" /></label>
@@ -80,7 +93,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
     @if (report.value(); as data) {
       <p class="muted">Stand {{ time(data.started_at) }} · {{ status(data.status) }}
         @if (!runId()) { · nicht gespeichert }</p>
-      <app-report-view [report]="data" [widths]="widths()" />
+      <app-report-view [report]="data" [widths]="widths()" [trends]="scope().length ? null : trends()" />
     } @else if (report.error(); as error) {
       <p class="error card" role="alert">{{ error.message }}</p>
     } @else {
@@ -116,6 +129,12 @@ export class RunPage {
   /** frühere Läufe derselben Definition, zum Auswählen */
   protected readonly others = signal<RunHead[]>([]);
   protected readonly other = signal('');
+  /** Gesamtzahl je Kachel über die gespeicherten Läufe (nur für den Gesamtbestand) */
+  protected readonly trends = signal<Trends | null>(null);
+  protected readonly instances = inject(Instances);
+  protected readonly otherInstance = signal('');
+  protected readonly counting = signal(false);
+  protected readonly instanceName = (id: string) => this.instances.list().find((i) => i.id === id)?.name ?? id;
   protected readonly compare = computed(() =>
     this.mode() === 'run' ? this.other() : this.mode() === 'previous' ? 'previous' : this.mode() === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(this.date()) ? this.date() : '');
   private waiting: AbortController | null = null;
@@ -131,6 +150,7 @@ export class RunPage {
 
   constructor() {
     this.api.get<AppSettings>('/settings').then((s) => this.settings.set(s), () => undefined);
+    void this.instances.load();
     effect(() => {
       // Die Instanz steht in der Definition; die Wahl im Kopf löst hier keine zweite Zählung aus.
       this.runId(); this.defId(); this.auth.renewed(); this.compare(); this.scope();
@@ -144,6 +164,11 @@ export class RunPage {
         .then((runs) => this.others.set(runs.filter((r) => r.id !== runId)), () => this.others.set([]));
     });
     effect(() => { this.runId(); untracked(() => this.other.set('')); });
+    effect(() => {
+      const id = this.defId() ?? this.report.value()?.definition_id;
+      untracked(() => this.trends.set(null));
+      if (id) this.api.get<Trends>(`/definitions/${encodeURIComponent(id)}/trends`).then((t) => this.trends.set(t), () => undefined);
+    });
     effect(() => {
       const id = this.defId();
       this.auth.renewed();
@@ -192,6 +217,30 @@ export class RunPage {
       if (!isAbort(error)) this.storeError.set(error instanceof ApiError ? error.message : 'Speichern nicht möglich.');
     } finally {
       if (this.waiting === waiting) { this.waiting = null; this.storing.set(false); }
+    }
+  }
+
+  /** Dieselbe Auswertung an einer anderen Instanz zählen und mit diesem Lauf vergleichen. */
+  protected async countOther(): Promise<void> {
+    const defId = this.report.value()?.definition_id;
+    const instance = this.otherInstance();
+    const shown = this.runId();
+    if (!defId || !instance || this.counting()) return;
+    this.counting.set(true);
+    this.compareNote.set('');
+    const waiting = (this.waiting = new AbortController());
+    try {
+      const id = await runAsJob(this.api, `/definitions/${encodeURIComponent(defId)}/run`, { wait: false, instance }, () => undefined, waiting.signal);
+      if (this.runId() !== shown) return;
+      const runs = await this.api.get<RunHead[]>(`/definitions/${encodeURIComponent(defId)}/runs?limit=100`);
+      this.others.set(runs.filter((r) => r.id !== shown));
+      this.other.set(id);
+      this.mode.set('run');
+    } catch (error) {
+      if (!isAbort(error)) this.compareNote.set(error instanceof ApiError ? error.message : 'Der Vergleich ließ sich nicht zählen.');
+    } finally {
+      if (this.waiting === waiting) this.waiting = null;
+      this.counting.set(false);
     }
   }
 

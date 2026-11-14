@@ -542,7 +542,8 @@ def test_result_carries_what_a_stored_run_needs(repo, tmp_path):
                                 "repository": "-home-", "metadataset": "mds_oeh",
                                 "query": "ngsearch"}
     assert "refresh" not in prov["spec"] and prov["spec"]["rows"]["property"] == TAX
-    assert prov["rows"] == {"property": TAX, "mode": "distinct", "include": None, "groups": [
+    assert prov["rows"] == {"property": TAX, "mode": "distinct", "exact": True,
+                            "include": None, "groups": [
         {"key": "g_mint_f_cher", "label": "MINT Fächer", "values": sorted([M, P])},
         {"key": "deutsch", "label": "Deutsch", "values": [D]}]}
     assert all(set(n) == {"code", "text"} for n in prov["notes"])

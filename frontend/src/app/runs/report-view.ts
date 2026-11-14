@@ -4,6 +4,7 @@ import { formatTime } from '../core/format';
 import { Report, ReportBlock } from '../core/types';
 import { heatOptions, heatScale } from '../shared/heat';
 import { ResultTable } from '../shared/result-table';
+import { Trends, trendOf } from '../shared/trend';
 
 /** Zeigt einen Bericht: Texte, Tabellen mit Grafik, Fehlerblöcke. Dashboards als Raster. */
 @Component({
@@ -27,6 +28,12 @@ import { ResultTable } from '../shared/result-table';
             }
             @case ('table') {
               <h2>{{ block.title }}</h2>
+              @if (trend(block.key); as t) {
+                <p class="trend muted" [title]="'Gesamtzahl über die letzten ' + t.count + ' gespeicherten Läufe'">
+                  <svg viewBox="0 0 96 24" width="96" height="24" aria-hidden="true"><polyline [attr.points]="t.points" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" /></svg>
+                  <span>Gesamt {{ number(t.last) }}, {{ t.delta > 0 ? '+' : '' }}{{ number(t.delta) }}@if (t.percent !== null && t.delta) { ({{ t.delta > 0 ? '+' : '' }}{{ number(t.percent) }} %) } seit {{ time(t.since) }}</span>
+                </p>
+              }
               @if (block.view.type === 'number') {
                 <div class="big">{{ headline(block) }}</div>
               } @else {
@@ -65,12 +72,20 @@ import { ResultTable } from '../shared/result-table';
     .origin { margin-top: var(--gap); color: var(--muted); font-size: 13px; }
     .origin ul { margin: 6px 0 0; padding-left: 18px; }
     .prose { max-width: 80ch; }
+    .trend { display: flex; align-items: center; gap: 8px; margin: -4px 0 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .trend svg { flex: none; color: var(--accent); }
+    @media print { .trend svg { display: none; } }
   `,
 })
 export class ReportView {
   readonly report = input.required<Report>();
   /** Kachel-Breiten eines Dashboards (Schlüssel → Spalten von 12) */
   readonly widths = input<Record<string, number> | null>(null);
+  /** Gesamtzahl jeder Kachel über die gespeicherten Läufe; ohne Angabe keine Verlaufslinie */
+  readonly trends = input<Trends | null>(null);
+  protected trend(key: string) { return trendOf(this.trends(), key); }
+  protected readonly number = (value: number) => value.toLocaleString('de-DE');
+  protected readonly time = formatTime;
   protected readonly grid = computed(() => this.report().kind === 'dashboard');
 
   protected span(block: ReportBlock): string | null {

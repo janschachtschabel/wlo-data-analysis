@@ -141,6 +141,15 @@ class Problems(_Model):
         return self
 
 
+class Growth(_Model):
+    """Zuwachs je Kalendermonat: wie viele der heutigen Materialien in welchem Monat
+    angelegt (oder zuletzt geändert) wurden. Je Monat eine Zählung."""
+
+    months: int = Field(default=12, ge=1, le=60)
+    by: Literal["created", "modified"] = "created"
+    stock: bool = False  # dazu der Bestand am Monatsende (nur bei created)
+
+
 MAX_PROFILE_ROWS = 60
 
 
@@ -238,16 +247,18 @@ class QuerySpec(_Model):
     snapshot: SnapshotQuery | None = None
     gaps: Gaps | None = None
     problems: Problems | None = None
+    growth: Growth | None = None
     percent: Literal["none", "column", "row"] = "none"
     refresh: bool = False
 
     @model_validator(mode="after")
     def _consistent(self) -> QuerySpec:
-        if self.problems and (self.rows or self.series or self.columns or self.fill
-                              or self.vocab_check or self.profile or self.sizes or self.topics
-                              or self.snapshot or self.gaps or self.percent != "none"):
-            raise ValueError("problems (Rangliste der Datenprobleme) steht für sich: nur "
-                             "zusammen mit filters")
+        for name in ("problems", "growth"):
+            if getattr(self, name) and (
+                    self.rows or self.series or self.columns or self.fill or self.vocab_check
+                    or self.profile or self.sizes or self.topics or self.snapshot or self.gaps
+                    or self.percent != "none" or (self.problems and self.growth)):
+                raise ValueError(f"{name} steht für sich: nur zusammen mit filters")
         if self.series and self.columns:
             raise ValueError("series und columns schließen sich aus")
         if self.fill and (self.series or self.columns or self.percent != "none"):

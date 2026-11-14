@@ -457,7 +457,8 @@ class Runner:
         try:
             out["result"] = await run_query(
                 query, client, vocab,
-                self._services.snapshot(query.instance) if query.snapshot else None)
+                self._services.snapshot(query.instance) if query.snapshot else None,
+                probe=True)
         except QueryError as exc:
             out["error"] = _error("invalid_query", str(exc))
         except UnresolvedValue as exc:

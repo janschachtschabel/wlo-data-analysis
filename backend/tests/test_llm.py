@@ -77,12 +77,14 @@ def api(settings, model, repo):
         yield client
 
 
-def chat(api, text="Wie viele Materialien gibt es?", **more):
+def chat(api, text="Wie viele Materialien gibt es?", failures=False, **more):
+    """Die Ereignisse einer Antwort; gescheiterte Schritte nur auf Wunsch."""
     r = api.post("/api/assistant/chat", json={
         "instance": "wlo-prod", "messages": [{"role": "user", "content": text}], **more})
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("application/x-ndjson")
-    return [json.loads(line) for line in r.text.splitlines()]
+    events = [json.loads(line) for line in r.text.splitlines()]
+    return events if failures else [e for e in events if e["type"] != "step_failed"]
 
 
 # ---- Einstellungen ---------------------------------------------------------------------
@@ -703,8 +705,9 @@ def test_template_proposals_with_mistakes_come_back_as_text(api, model, change, 
 
 
 def test_template_proposals_share_the_limit_and_the_guide_explains_them(api, model):
-    one = ("propose_template", {"name": "B", "sections": _template_sections()[2:3]})
-    model.answers = [call(one), call(one), call(one), say("Genug.")]
+    def one(n):
+        return ("propose_template", {"name": f"B{n}", "sections": _template_sections()[2:3]})
+    model.answers = [call(one(1)), call(one(2)), call(one(3)), say("Genug.")]
     events = chat(api)
     assert [e["type"] for e in events].count("proposal") == 2
     assert "höchstens" in json.loads(model.bodies[3]["messages"][-1]["content"])["fehler"]
@@ -834,3 +837,63 @@ def test_assistant_can_ask_with_choices_instead_of_guessing(api, model):
     assert "fehler" in json.loads(model.bodies[-1]["messages"][-1]["content"])
     guide = model.bodies[0]["messages"][0]["content"]
     assert "ask_choice" in guide and "(Schule)" in guide
+
+
+def test_failed_steps_are_visible_and_do_not_use_up_the_proposals(api, model):
+    bad = ("propose_template", {"name": "B", "sections": [{"type": "table", "title": "T",
+           "spec": {"rows": {"property": "cclom:title"}}}]})
+    good = ("propose_template", {"name": "B", "sections": [{"type": "table", "title": "T",
+            "spec": {"rows": {"property": TAX, "match": DISC}}}]})
+    # drei Fehlversuche verbrauchen die beiden erlaubten Vorschläge nicht
+    model.answers = [call(bad), call(bad), call(bad), call(good), say("Fertig.")]
+    events = chat(api, failures=True)
+    assert [e["type"] for e in events] == ["step", "step_failed"] * 3 + [
+        "step", "proposal", "final"]
+    assert "cclom:title" in events[1]["text"] and events[1]["tool"] == "propose_template"
+    # derselbe Vorschlag zweimal erscheint einmal
+    view = ("propose_view", {"title": "Fächer", "spec": {"rows": {"property": TAX}}})
+    model.answers = [call(view), call(view), say("Fertig.")]
+    assert [e["type"] for e in chat(api)] == ["step", "proposal", "step", "final"]
+    # auch Versuche sind begrenzt
+    model.answers = [call(bad)] * 7 + [say("Schluss.")]
+    texts = [e["text"] for e in chat(api, failures=True) if e["type"] == "step_failed"]
+    assert len(texts) == 7 and "Zu viele Versuche" in texts[-1]
+
+
+def test_a_slow_model_gets_one_more_try_with_little_thinking():
+    import asyncio
+
+    import httpx
+
+    from wda.llm.client import LlmClient, LlmError
+    from wda.llm.config import LlmConfig
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body.get("reasoning_effort"))
+        if len(seen) == 1:
+            raise httpx.ReadTimeout("zu spät")
+        return httpx.Response(200, json={"choices": [{"message": {"content": "Da."}}]})
+
+    async def go(effort):
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        config = LlmConfig(base_url="https://llm.example/v1", model="m", api_key="k",
+                           effort=effort)
+        return await LlmClient(http, config).chat([{"role": "user", "content": "x"}])
+
+    assert asyncio.run(go("high"))["content"] == "Da." and seen == ["high", "low"]
+    seen.clear()
+    assert asyncio.run(go("off"))["content"] == "Da." and seen == [None, None]
+
+    def never(request):
+        raise httpx.ReadTimeout("zu spät")
+
+    async def lost():
+        http = httpx.AsyncClient(transport=httpx.MockTransport(never))
+        config = LlmConfig(base_url="https://llm.example/v1", model="m", api_key="k",
+                           effort="low")
+        return await LlmClient(http, config).chat([{"role": "user", "content": "x"}])
+
+    with pytest.raises(LlmError):
+        asyncio.run(lost())

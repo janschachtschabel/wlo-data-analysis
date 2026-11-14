@@ -31,4 +31,13 @@ describe('Von der Zelle zur Abfrage', () => {
     expect(decodeState(link).state?.spec.filters).toHaveLength(3);
     expect(decodeState(link).error).toBe('');
   });
+
+  it('gibt keinen Link, der zu lang wäre oder auf geerbte Schlüssel trifft', () => {
+    const many = Array.from({ length: 400 }, (_, n) => 'http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/n' + n);
+    const drill = { instance: 'i', filters: [], rows: 'ccm:taxonid', groups: { g: many }, columns: { count: [] } };
+    expect(cellLink(drill, { key: 'g', kind: 'group' }, 'count')).toBeNull();
+    expect(cellLink(drill, { key: 'constructor', kind: 'group' }, 'count')).toBeNull();
+    expect(cellLink(drill, { key: 'x', kind: 'value' }, 'constructor')).toBeNull();
+    expect(cellLink(drill, { key: 'x', kind: 'value' }, 'count')).not.toBeNull();
+  });
 });

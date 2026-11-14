@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import difflib
 import json
+import logging
 import re
 import time
 from collections.abc import AsyncIterator
@@ -14,6 +15,7 @@ from ..report.text import markdown_to_html
 from .client import LlmClient, LlmError
 from .tools import Toolbox
 
+log = logging.getLogger(__name__)
 MAX_ROUNDS = 16
 MAX_TOOL_CALLS = 32
 
@@ -97,6 +99,10 @@ Werteliste. Ohne rows.
 - problems: {{"fields": [{{"property": Feld}}, …], "top": n}} ist die Rangliste der \
 Datenprobleme: je Feld „ohne Angabe“ und „Wert außerhalb der Werteliste“ in einer Tabelle, \
 das Größte zuerst. Nur zusammen mit filters; passt auf „Was sind die größten Probleme?“.
+- growth: {{"months": n, "by": "created"|"modified", "stock": true|false}} ist der Zuwachs je \
+Kalendermonat (höchstens 60 Monate): wie viele der heutigen Materialien in welchem Monat \
+angelegt oder zuletzt geändert wurden. Nur zusammen mit filters (ohne Zeitfilter); \
+Darstellung bar oder line. Passt auf „Wie hat sich der Bestand entwickelt?“.
 - profile: {{"property": Merkmal, "top": n, "show": "share"|"count"}} zusammen mit rows (mit \
 top bis 60): Ausprägungen eines Merkmals je Zeile, z. B. Kosten oder Werbung je Bezugsquelle. \
 Geht auch bei Feldern, die als Filter nicht zählbar sind. Darstellung heatmap.
@@ -168,8 +174,9 @@ Besonderheiten bei WLO
 "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/", sinnvoll mit rollup "top").
 - Ein Fach wie „Mathematik“ gibt es deshalb doppelt, als Schulfach und als Hochschulfach \
 (teils mehrere gleichnamige Werte). Solche Werte heißen hier „Mathematik (Schule)“ und \
-„Mathematik (Hochschule)“, bei mehreren Hochschulwerten mit weiterem Zusatz wie \
-„Mathematik (Hochschule, Mathematik, Naturwissenschaften)“; nimm die Namen genau so, wie \
+„Mathematik (Hochschule)“, bei mehreren Hochschulwerten mit der Ebene wie \
+„Mathematik (Hochschule, Studienbereich)“ und „Mathematik (Hochschule, \
+Studienfach)“; nimm die Namen genau so, wie \
 find_values sie liefert, oder die URI. Fragt jemand allgemein nach \
 einem Fach, nimm das \
 Schulfach und alle gleichnamigen Hochschulfächer zusammen in einen Filter und sag das in \
@@ -259,6 +266,16 @@ MAX_CHECK_SECONDS = 45
 CUT = "… gekürzt, weitere Abschnitte vorhanden"
 
 
+def _failure(result: str) -> str:
+    """Die Fehlermeldung eines Werkzeugs in einem Satz, leer, wenn es geklappt hat."""
+    if not result.startswith('{"fehler"'):
+        return ""
+    try:
+        return " ".join(str(json.loads(result).get("fehler") or "").split())[:300]
+    except ValueError:
+        return "Der Schritt ist gescheitert."
+
+
 def _label(value: Any, limit: int = 60) -> str:
     return _one_line(str(value if value is not None else ""))[:limit]
 
@@ -285,6 +302,8 @@ def _facts(proposal: dict[str, Any]) -> str:
                 f"{len(rows)} Zeilen ({', '.join(names)}{' …' if len(rows) > 15 else ''}); "
                 f"Spalten: {', '.join(columns)}"
                 + (f"; Blöcke: {', '.join(groups)}" if groups else ""))
+            if any(r.get("percent") for r in rows):
+                lines.append("  Die Tabelle zeigt neben jeder Anzahl den Anteil in Prozent.")
             lines += [f"  Hinweis: {_label(n.get('text'), 200)}"
                       for n in (block.get("notes") or [])[:3]]
         elif block.get("type") == "failure":
@@ -357,6 +376,7 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
 
     toolbox.on_question = on_question
     facts: list[str] = []
+    seen: set[str] = set()
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}, *history]
     used = 0
     said = ""  # letzter Text des Modells neben Werkzeugaufrufen
@@ -404,10 +424,22 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
                         result = ('{"fehler":"Der Schritt hat zu lange gedauert und wurde '
                                   'abgebrochen. Antworte mit dem, was du hast."}')
                 messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
+                failed = _failure(result)
+                if failed:
+                    # sichtbar für den Nutzer und im Protokoll: sonst bleibt unklar, warum
+                    # ein Vorschlag ausblieb
+                    log.warning("assistant tool %s failed: %s", name[:40], failed)
+                    yield {"type": "step_failed", "tool": name[:40], "text": failed}
                 while proposals:
+                    proposal = proposals.pop(0)
+                    mark = json.dumps([proposal.get("kind"), proposal.get("spec")],
+                                      sort_keys=True, default=str)
+                    if mark in seen:  # derselbe Vorschlag ein zweites Mal
+                        continue
+                    seen.add(mark)
                     shown += 1
-                    facts.append(_facts(proposals[0]))
-                    yield {"type": "proposal", **proposals.pop(0)}
+                    facts.append(_facts(proposal))
+                    yield {"type": "proposal", **proposal}
                 while questions:
                     yield {"type": "choices", **questions.pop(0)}
     except LlmError as exc:

@@ -12,6 +12,7 @@ export const routes: Routes = [
       // Die App beginnt beim Assistenten; alte Links auf den Explorer (/?q=…) gelten weiter.
       { path: '', pathMatch: 'full', redirectTo: ({ queryParams }) => (queryParams['q']
           ? inject(Router).createUrlTree(['/explorer'], { queryParams }) : '/assistent') },
+      { path: 'auffaellig', title: 'Was ist auffällig? – WLO-Daten', loadComponent: () => import('./overview/overview').then((m) => m.Overview) },
       { path: 'explorer', title: 'Explorer – WLO-Daten', loadComponent: () => import('./explorer/explorer').then((m) => m.Explorer) },
       { path: 'assistent', title: 'Assistent – WLO-Daten', loadComponent: () => import('./assistant/assistant').then((m) => m.Assistant) },
       { path: 'einstellungen', title: 'Einstellungen – WLO-Daten', loadComponent: () => import('./settings/settings-page').then((m) => m.SettingsPage) },

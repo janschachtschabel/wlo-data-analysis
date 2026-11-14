@@ -193,7 +193,16 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
   Zeile tragen. So zeigt die Kachel „Pauschal vergebene Schlagwörter“ je Quelle, was ein
   Crawler an fast alle seine Materialien hängt.
 - Gezählte Zellen in Tabellen sind Links in den Explorer mit genau der Abfrage hinter der
-  Zelle; dort lässt sich weiter aufschlüsseln.
+  Zelle; dort lässt sich weiter aufschlüsseln. Den Link gibt es nur, wo der Explorer dasselbe
+  zählt (geprüft mit einer Probe je Tabelle).
+- Der Explorer zeigt „In der Suche ansehen“, wenn die Suche des Repositoriums alle Filter
+  übernimmt (`search_fields` der Instanz; bei WLO Fach, Bildungsstufe, Materialart, Zielgruppe,
+  Bezugsquelle).
+- `growth: {"months": n}`: Zuwachs je Kalendermonat. Die Seite „Auffällig“ nennt die größten
+  Veränderungen zwischen den beiden jüngsten gespeicherten Läufen jeder Auswertung; Kacheln
+  zeigen ihre Gesamtzahl über die letzten Läufe als kleine Linie. Der Kontextschalter kennt
+  auch Fach und Bildungsstufe. Ein gespeicherter Lauf lässt sich mit derselben Auswertung an
+  einer anderen Instanz vergleichen.
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 

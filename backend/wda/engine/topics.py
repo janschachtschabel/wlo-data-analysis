@@ -289,7 +289,8 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                     items = [(key, label, count, best) for key, (label, count, best)
                              in merged.items()
                              if key not in blocked and key not in banned
-                             and not _is_name(key, names, whole)
+                             and (topics.min_share is not None
+                                  or not _is_name(key, names, whole))
                              and not (topics.stopwords and _too_short(key, label))]
                     if any(item[0] in boilerplate for item in items):
                         blocks_any = True
@@ -303,8 +304,10 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
                 for key, label, count, best in items:
                     if best < MIN_COUNT:
                         continue
+                    # gemessen an der häufigsten einzelnen Schreibweise: Die Summe der
+                    # Schreibweisen zählt ein Material mehrfach und läge zu hoch
                     if topics.min_share is not None and (
-                            not answer.total or 100 * count / answer.total < topics.min_share):
+                            not answer.total or 100 * best / answer.total < topics.min_share):
                         continue
                     score = float(count)
                     lift = None

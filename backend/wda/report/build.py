@@ -52,7 +52,7 @@ def describe_filters(filters: list[dict[str, Any]]) -> str:
 
 
 # Abfragearten, deren Zellen keine schlichte Schnittmenge von Filtern sind
-_NO_DRILL = ("fill", "vocab_check", "sizes", "gaps", "snapshot", "profile", "problems")
+_NO_DRILL = ("fill", "vocab_check", "sizes", "gaps", "snapshot", "profile", "problems", "growth")
 
 
 def _drill(result: dict[str, Any]) -> dict[str, Any] | None:
@@ -68,6 +68,11 @@ def _drill(result: dict[str, Any]) -> dict[str, Any] | None:
     if asked.get("rollup") or asked.get("vocab"):
         return None  # Zeilen samt Unterwerten oder außerhalb der Werteliste
     rows = prov.get("rows") if isinstance(prov.get("rows"), dict) else None
+    if rows is not None and rows.get("exact") is not True:
+        return None  # das Zeilenfeld zählt als Filter anders (oder es ist nicht geprüft)
+    if spec.get("content_type") not in (None, "FILES") or (
+            spec.get("topics") and spec.get("columns")):
+        return None  # der Explorer kennt beides nicht bzw. die Spalte trägt keinen Filter
     try:
         columns = {
             c["id"]: [{"property": f["property"],
@@ -82,7 +87,7 @@ def _drill(result: dict[str, Any]) -> dict[str, Any] | None:
                 "rows": rows["property"] if rows else None,
                 "groups": {g["key"]: list(g["values"]) for g in (rows or {}).get("groups") or []},
                 "columns": columns}
-    except (KeyError, TypeError):
+    except (KeyError, TypeError, AttributeError):
         return None  # älterer Lauf ohne diese Angaben
 
 

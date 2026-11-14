@@ -299,9 +299,29 @@ def test_min_share_shows_what_nearly_every_material_of_a_row_carries(api, repo):
     for row, full in zip(out.json()["rows"], plain.json()["rows"], strict=True):
         kept = row["topics"][0]
         assert all(t["share"] >= 50 for t in kept)
-        assert [t["label"] for t in kept] == [
-            t["label"] for t in full["topics"][0] if t["share"] >= 50]
+        # auch der Name der Zeile und seine Kurzform: Gerade sie hängen pauschal an allem
+        assert {t["label"] for t in full["topics"][0] if t["share"] >= 50} <= {
+            t["label"] for t in kept}
     assert any(row["topics"][0] for row in out.json()["rows"])
     assert "mindestens 50 %" in next(
         n["text"] for n in out.json()["provenance"]["notes"] if n["code"] == "topics")
     assert ask(api, **query, topics={"property": KEY, "min_share": 0}).status_code == 422
+
+
+def test_min_share_is_not_fooled_by_spellings(tmp_path):
+    """Ein Schlagwort an 30 % der Materialien in drei Schreibweisen ist nicht pauschal."""
+    own = docs()
+    math = [d for d in own if MATH in d[TAX]]
+    for n, doc in enumerate(math):
+        doc[KEY] = ["überall"] + (["Sonderfall", "sonderfall", "#Sonderfall"] if n % 10 < 3
+                                  else [])
+    settings = Settings(admin_password=PASSWORD, cookie_secure=False, data_dir=tmp_path,
+                        instances=json.dumps([]))
+    with TestClient(create_app(settings, transport=DataRepo(own).transport())) as client:
+        assert client.post("/api/auth/login", json={"password": PASSWORD}).status_code == 204
+        out = ask(client, rows={"property": TAX, "include": ["Mathematik"]},
+                  topics={"property": KEY, "rank": "frequent", "stopwords": False,
+                          "min_share": 50})
+        assert out.status_code == 200, out.text
+        labels = [t["label"].casefold() for t in out.json()["rows"][0]["topics"][0]]
+        assert "überall" in labels and "sonderfall" not in labels

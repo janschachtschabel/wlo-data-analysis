@@ -46,3 +46,18 @@ async def history(
             end=end, limit=limit)
     except QueryError as exc:
         return JSONResponse(error_body("invalid_request", str(exc)), status_code=422)
+
+
+@router.get("/highlights")
+async def highlights(request: Request,
+                     limit: Annotated[int, Query(ge=1, le=100)] = 20) -> dict[str, Any]:
+    """„Was ist auffällig?“: die größten Veränderungen zwischen den beiden jüngsten
+    gespeicherten Läufen jeder Auswertung."""
+    return await _history(request).highlights(limit)
+
+
+@router.get("/definitions/{def_id}/trends")
+async def trends(def_id: str, request: Request,
+                 limit: Annotated[int, Query(ge=2, le=60)] = 12) -> dict[str, Any]:
+    """Je Kachel die Gesamtzahl über die jüngsten gespeicherten Läufe."""
+    return await _history(request).trends(def_id, limit)

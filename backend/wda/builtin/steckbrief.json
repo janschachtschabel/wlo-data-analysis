@@ -4,7 +4,7 @@
  "builtin": {
   "id": "steckbrief",
   "title": "Steckbrief",
-  "description": "Ein Bestand auf einer Seite: die größten Datenprobleme, Füllgrade, Fächer, Bildungsstufen, Materialarten, Lizenzen, Sprachen, Zufluss und häufigste Schlagwörter. Gedacht für eine einzelne Quelle oder Bezugsquelle (oben auswählen), läuft auch für den ganzen Bestand."
+  "description": "Ein Bestand auf einer Seite: die größten Datenprobleme, Füllgrade, Fächer, Bildungsstufen, Materialarten, Lizenzen, Sprachen, Zuwachs je Monat und pauschal vergebene Schlagwörter. Gedacht für eine einzelne Quelle oder Bezugsquelle (oben auswählen), läuft auch für den ganzen Bestand."
  },
  "groups": [
   {
@@ -269,92 +269,41 @@
      },
      {
       "id": "zufluss",
-      "title": "Wann kam der Bestand herein? Materialien seit …",
+      "title": "Zuwachs je Monat: wann kamen die heutigen Materialien herein? (24 Monate)",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
-       "series": [
-        {
-         "id": "gesamt",
-         "label": "Bestand"
-        },
-        {
-         "id": "s1",
-         "label": "seit 3 Jahren",
-         "filters": [
-          {
-           "property": "virtual:time_after_created",
-           "values": [
-            {
-             "since": "3y"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "id": "s2",
-         "label": "seit 1 Jahr",
-         "filters": [
-          {
-           "property": "virtual:time_after_created",
-           "values": [
-            {
-             "since": "1y"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "id": "s3",
-         "label": "seit 3 Monaten",
-         "filters": [
-          {
-           "property": "virtual:time_after_created",
-           "values": [
-            {
-             "since": "3m"
-            }
-           ]
-          }
-         ]
-        },
-        {
-         "id": "s4",
-         "label": "seit 1 Monat",
-         "filters": [
-          {
-           "property": "virtual:time_after_created",
-           "values": [
-            {
-             "since": "1m"
-            }
-           ]
-          }
-         ]
-        }
-       ]
+       "growth": {
+        "months": 24
+       }
       },
       "view": {
-       "type": "table"
+       "type": "line",
+       "options": {}
       },
       "layout": {
        "x": 0,
        "y": 33,
        "w": 12,
-       "h": 5
+       "h": 8
       }
      },
      {
       "id": "schlagwoerter",
-      "title": "Häufigste Schlagwörter, mit Anteil an den Materialien (hohe Anteile sprechen für pauschal vergebene Schlagwörter)",
+      "title": "Pauschal vergebene Schlagwörter: was trägt mindestens ein Drittel der Materialien einer Quelle? (10 größte Quellen)",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
        "rows": {
+        "property": "ccm:replicationsource",
+        "top": 10
+       },
+       "topics": {
         "property": "cclom:general_keyword",
-        "top": 25
+        "top": 10,
+        "rank": "frequent",
+        "stopwords": false,
+        "min_share": 33
        }
       },
       "view": {
@@ -362,7 +311,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 38,
+       "y": 41,
        "w": 12,
        "h": 10
       }

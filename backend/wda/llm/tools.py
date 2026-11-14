@@ -27,7 +27,7 @@ from ..store.runner import DamagedRun
 from ..store.specs import InvalidDefinition, parse_spec
 
 MAX_ROWS, MAX_COLUMNS, MAX_RESULT_CHARS = 40, 12, 12000
-MAX_RUN_TABLES, MAX_DASHBOARDS = 30, 2
+MAX_RUN_TABLES, MAX_DASHBOARDS, MAX_BIG_ATTEMPTS = 30, 2, 5
 MAX_TILES = 12
 MAX_SECTIONS, MAX_GROUPS, MAX_BLOCKS = 12, 40, 6
 # Eine gegliederte Tabelle kostet je Block und Spalte Abfragen: wenige davon je Vorschlag
@@ -208,6 +208,7 @@ class Toolbox:
         self.on_question: Callable[[dict[str, Any]], None] = lambda question: None
         self._asked = False
         self._dashboards = 0
+        self._attempts = 0
 
     @property
     def definitions(self) -> list[dict[str, Any]]:
@@ -347,12 +348,21 @@ class Toolbox:
         tables = [b for b in report["blocks"] if b.get("type") == "table"]
         return {"gezeigt": title, "ergebnis": _compact_table(tables[0]) if tables else None}
 
-    async def _propose_dashboard(self, args: dict[str, Any]) -> Any:
-        name = " ".join(str(args.get("name") or "").split())[:200] or "Dashboard"
-        self._dashboards += 1
-        if self._dashboards > MAX_DASHBOARDS:  # jedes kostet viele Abfragen am Repositorium
+    def _big_proposal(self) -> None:
+        """Dashboards und Berichte kosten viele Abfragen: höchstens zwei gelungene je Frage.
+        Ein Versuch, der an der Prüfung scheitert, zählt nicht dazu, aber auch Versuche
+        sind begrenzt."""
+        self._attempts += 1
+        if self._dashboards >= MAX_DASHBOARDS:
             raise QueryError(f"Je Frage höchstens {MAX_DASHBOARDS} Vorschläge für Dashboards "
                              "oder Templates.")
+        if self._attempts > MAX_BIG_ATTEMPTS:
+            raise QueryError("Zu viele Versuche für ein Dashboard oder einen Bericht; "
+                             "antworte jetzt und sag, woran es lag.")
+
+    async def _propose_dashboard(self, args: dict[str, Any]) -> Any:
+        name = " ".join(str(args.get("name") or "").split())[:200] or "Dashboard"
+        self._big_proposal()
         raw = args.get("tiles")
         if not isinstance(raw, list) or not raw:
             raise QueryError("tiles muss eine Liste mit mindestens einer Kachel sein.")
@@ -386,6 +396,7 @@ class Toolbox:
         report: dict[str, Any] | None = report_data(build_report(run), with_html=False)
         if _size(report) > MAX_PREVIEW_CHARS:  # dann zeigt die Karte nur die Titel
             report = None
+        self._dashboards += 1
         self.on_proposal({"kind": "dashboard", "name": name, "description": description,
                            "spec": spec, "report": report})
         if report is None:
@@ -418,10 +429,7 @@ class Toolbox:
 
     async def _propose_template(self, args: dict[str, Any]) -> Any:
         name = _text(args.get("name")) or "Bericht"
-        self._dashboards += 1
-        if self._dashboards > MAX_DASHBOARDS:  # jeder kostet viele Abfragen am Repositorium
-            raise QueryError(f"Je Frage höchstens {MAX_DASHBOARDS} Vorschläge für Dashboards "
-                             "oder Templates.")
+        self._big_proposal()
         raw = args.get("sections")
         if not isinstance(raw, list) or not raw:
             raise QueryError("sections muss eine Liste mit mindestens einem Abschnitt sein.")
@@ -449,6 +457,7 @@ class Toolbox:
         if _size(report) > MAX_PREVIEW_CHARS:  # dann zeigt die Karte nur die Abschnitte
             report = None
         built = report or {}
+        self._dashboards += 1
         self.on_proposal({"kind": "template", "name": name,
                           "description": _text(args.get("description"), 1000), "spec": spec,
                           "report": report})
@@ -621,6 +630,8 @@ def _about(spec: Any) -> str:
         parts.append("Lückenliste")
     if isinstance(spec.get("problems"), dict):
         parts.append("Rangliste der Datenprobleme")
+    if isinstance(spec.get("growth"), dict):
+        parts.append("Zuwachs je Monat")
     if isinstance(spec.get("snapshot"), dict):
         parts.append(f"aus dem lokalen Abzug ({str(spec['snapshot'].get('analysis'))[:40]})")
     if isinstance(spec.get("sizes"), dict):

@@ -89,3 +89,21 @@ def test_series_and_groups_carry_their_filters_and_formulas_do_not_drill(api):
 ])
 def test_tables_whose_cells_are_no_plain_filter_have_no_drill(api, query):
     assert table(api, query).get("drill") is None
+
+
+def test_no_drill_where_the_explorer_would_count_something_else(api):
+    """Der Link einer Zelle gilt nur, wenn die Abfrage dahinter dasselbe zählt."""
+    # Präfix-Feld: „CC_BY“ als Filter zählt auch „CC_BY_SA“
+    assert table(api, {"rows": {"property": LIC}})["drill"] is None
+    # Feld, das das Repositorium nur als Facette zählt
+    assert table(api, {"rows": {"property": "ccm:price"}})["drill"] is None
+    # Gruppen als Summe der Einzelwerte zählen Materialien mehrfach
+    grouped = {"property": TAX, "group_mode": "sum", "groups": [
+        {"label": "MINT", "values": [DISC + "380", DISC + "460"]}]}
+    assert table(api, {"rows": grouped})["drill"] is None
+    # Themen je Fach und Stufe: die Spalte trägt hier keinen Filter
+    topics = {"rows": {"property": TAX, "top": 3}, "columns": {"property": LVL, "top": 2},
+              "topics": {"property": "cclom:general_keyword"}}
+    assert table(api, topics)["drill"] is None
+    # ein Feld, das genau zählt, behält den Link
+    assert table(api, {"rows": {"property": TAX}})["drill"]["rows"] == TAX

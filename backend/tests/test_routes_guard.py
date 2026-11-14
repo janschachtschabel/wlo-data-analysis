@@ -39,6 +39,7 @@ PROTECTED = {
     "/api/definitions/{def_id}/runs", "/api/runs", "/api/runs/{run_id}",
     "/api/runs/{run_id}/export", "/api/builtin", "/api/builtin/{bundle_id}/install",
     "/api/definitions/{def_id}/history", "/api/definitions/{def_id}/history/keys",
+    "/api/definitions/{def_id}/trends", "/api/highlights",
     "/api/schedules", "/api/schedules/{schedule_id}", "/api/schedules/{schedule_id}/run",
     "/api/settings/llm", "/api/settings/llm/test", "/api/assistant/chat", "/api/assistant/document",
 }

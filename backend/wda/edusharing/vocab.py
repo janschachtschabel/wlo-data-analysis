@@ -275,21 +275,31 @@ class VocabStore:
             same.setdefault(_norm(value.caption), []).append((value, origin(value)))
         by_id = {v.id: v for v in values}
         out: dict[str, str] = {}
+        levels = self._client.instance.vocab_levels
+
+        def level(value: VocabValue, name: str) -> str:
+            """Die Ebene im Baum mit ihrem Namen („Studienfach“), sonst „Ebene 3“."""
+            depth, at = 1, value
+            while at.parent and at.parent in by_id and depth < 12:
+                depth, at = depth + 1, by_id[at.parent]
+            named = next((levels[p] for p in prefixes if p in levels
+                          and value.id.startswith(p)), ())
+            return named[depth - 1] if depth <= len(named) else f"Ebene {depth}"
+
         for group in same.values():
+            if len(group) < 2:
+                continue
             origins = Counter(name for _, name in group)
-            if len(origins) < 2:
-                continue  # nur ein Vokabular: der Zusatz würde nichts unterscheiden
             wanted: dict[str, str] = {}
             for value, name in group:
                 if name is None:
                     continue
                 if origins[name] == 1:
-                    wanted[value.id] = f"{value.caption} ({name})"
+                    if len(origins) > 1:  # nur ein Vokabular: der Zusatz unterschiede nichts
+                        wanted[value.id] = f"{value.caption} ({name})"
                     continue
-                parent = by_id.get(value.parent) if value.parent else None
-                more = parent.caption if parent and _norm(parent.caption) != _norm(
-                    value.caption) else value.id.rstrip("/").rsplit("/", 1)[-1]
-                wanted[value.id] = f"{value.caption} ({name}, {more})"
+                # gleichnamig im selben Vokabular: die Ebene im Baum unterscheidet
+                wanted[value.id] = f"{value.caption} ({name}, {level(value, name)})"
             # was danach noch gleich heißt oder einem vorhandenen Namen gleicht, bekommt
             # das Ende seiner Kennung, zuletzt die ganze Kennung
             for attempt in (1, 2):

@@ -53,7 +53,7 @@ export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?:
           @if (value()) { <button type="button" (click)="setKind('')">Zurück zum Gesamtbestand</button> }
         }
         @if (choicesState() === 'failed') { <span class="error" role="alert">Die Liste ließ sich nicht laden. <button type="button" class="link" (click)="setKind(kind())">Noch einmal</button></span> }
-        <span class="muted hint">{{ value() ? 'Alle Kacheln zählen nur diesen Ausschnitt.' : 'Dieselbe Auswertung lässt sich auf eine Quelle einengen.' }}</span>
+        <span class="muted hint">{{ value() ? 'Alle Kacheln zählen nur diesen Ausschnitt.' : 'Dieselbe Auswertung lässt sich auf eine Quelle, ein Fach oder eine Bildungsstufe einengen.' }}</span>
       </div>
     }
     @if (current().snapshot; as instance) { <app-snapshot-panel [instance]="instance" (changed)="reload($event)" /> }
@@ -95,10 +95,12 @@ export class Quality {
   protected readonly confirming = signal(false);
   /** null: wird geladen */
   protected readonly choicesState = signal<'loading' | 'ready' | 'empty' | 'failed'>('ready');
-  /** Worauf sich eine Auswertung einengen lässt: die Quelle des Crawlers oder die Bezugsquelle */
+  /** Worauf sich eine Auswertung einengen lässt: Quelle, Bezugsquelle, Fach oder Bildungsstufe */
   protected readonly contexts = [
     { property: 'ccm:replicationsource', label: 'eine Quelle (Crawler)', short: 'Quelle' },
     { property: 'ccm:oeh_publisher_combined', label: 'eine Bezugsquelle', short: 'Bezugsquelle' },
+    { property: 'ccm:taxonid', label: 'ein Fach', short: 'Fach' },
+    { property: 'ccm:educationalcontext', label: 'eine Bildungsstufe', short: 'Bildungsstufe' },
   ];
   protected readonly kind = signal('');
   protected readonly value = signal('');

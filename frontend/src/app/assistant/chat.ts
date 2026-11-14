@@ -101,7 +101,8 @@ export class Chat {
         ...(about?.run_id ? { run_id: about.run_id } : {}), ...(about?.definition_id ? { definition_id: about.definition_id } : {}),
       }, (event) => {
         if (template && this.template() === template) this.template.set(null);
-        if (event?.type === 'step') this.update((t) => ({ ...t, steps: [...t.steps, String(event.text ?? '')] }));
+        if (event?.type === 'step_failed') this.update((t) => ({ ...t, steps: [...t.steps, 'Ohne Ergebnis: ' + String(event.text ?? '').slice(0, 300)] }));
+        else if (event?.type === 'step') this.update((t) => ({ ...t, steps: [...t.steps, String(event.text ?? '')] }));
         else if (event?.type === 'proposal') this.update((t) => ({ ...t, proposals: [...t.proposals, { ...(event as Shown), widths: tileWidths(event as Shown) }] }));
         else if (event?.type === 'choices' && Array.isArray(event.options)) this.update((t) => ({ ...t, choices: { question: String(event.question ?? ''), options: event.options.map(String).slice(0, 4) } }));
         else if (event?.type === 'final') { done = true; this.update((t) => ({ ...t, text: String(event.text ?? ''), html: event.html, pending: false })); }
