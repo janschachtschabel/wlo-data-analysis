@@ -35,3 +35,11 @@
 4. `llm/tools.py`: `propose_template` mit Tests (`tests/test_llm.py`: Vorschlag trägt Bericht, nichts gespeichert, ungültige Eingabe kommt als Fehlertext zurück); Leitfaden.
 5. Karte im Chat (`assistant/assistant.ts`, `chat.ts`), Durchstich mit gespieltem Modell.
 6. README, Review durch frischen Reviewer, Befunde, „Stand nach Review“, Probe mit echtem Modell auf Jans Rechner (Vorlage: eine Statistik als docx und als PDF).
+
+## Nebenbefunde aus der Liveprobe (Jans Rechner, e6ad250)
+
+- `POST /api/check` meldet ein Template als gültig, dessen Vorschau scheitert, weil weder am Template noch beim Lauf eine Instanz steht. Die Prüfung soll das als Hinweis nennen. Gehört in Task 2.
+- Ein neu angelegtes Template hat keinen Abschnitt; der Baukasten soll dafür einen Einstieg bieten (leere gegliederte Tabelle, Text, Tabelle).
+- Der Leitfaden des Assistenten erklärt Gruppen (`rows.groups`) nicht; im Versuch baute er 41 Fächer nach Alphabet statt der verlangten Fächergruppen. Gehört in Task 4.
+- Geprüft und kein Fehler: „ohne Wert“ zeigt in „A: OER“ für Primarstufe und Sekundarstufe I dieselbe Zahl (2.090). 1.994 davon sind Klexikon-Artikel ohne Fach, die beide Stufen tragen.
+
