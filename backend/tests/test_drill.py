@@ -1,0 +1,208 @@
+"""Von der Zelle zur Abfrage: Jede Tabelle sagt, mit welchen Filtern ihre Zellen gezählt sind.
+Die Oberfläche öffnet damit den Explorer; Datensätze verlassen die App weiterhin nicht."""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from wda.main import create_app
+
+from .conftest import ADMIN_PASSWORD
+from .esdata import DISC, EC, DataRepo, make_docs
+from .test_engine import LIC, LVL, TAX
+
+
+@pytest.fixture
+def api(settings):
+    with TestClient(create_app(settings, transport=DataRepo().transport())) as client:
+        assert client.post("/api/auth/login",
+                           json={"password": ADMIN_PASSWORD}).status_code == 204
+        yield client
+
+
+def table(api, query):
+    out = api.post("/api/preview", json={"kind": "metric", "name": "M", "spec": {
+        "query": {"instance": "wlo-prod", **query}}})
+    assert out.status_code == 200, out.text
+    [block] = out.json()["report"]["blocks"]
+    assert block["type"] == "table", block
+    return block
+
+
+def count(api, filters):
+    out = api.post("/api/query", json={"instance": "wlo-prod", "filters": filters})
+    assert out.status_code == 200, out.text
+    return out.json()["rows"][0]["values"][0] if out.json()["rows"] else out.json()[
+        "columns"][0]["total"]
+
+
+def cell_filters(drill, row, column):
+    """So setzt die Oberfläche die Filter einer Zelle zusammen."""
+    merged = {f["property"]: f for f in drill["filters"]}
+    for flt in drill["columns"].get(column) or []:
+        merged[flt["property"]] = flt
+    if row["kind"] == "value":
+        merged[drill["rows"]] = {"property": drill["rows"],
+                                 "values": [{"value": row["key"], "literal": True}]}
+    elif row["kind"] == "group":
+        merged[drill["rows"]] = {"property": drill["rows"], "values": [
+            {"value": v, "literal": True} for v in drill["groups"][row["key"]]]}
+    return list(merged.values())
+
+
+def test_cells_of_a_matrix_can_be_counted_again_from_their_drill(api):
+    block = table(api, {"filters": [{"property": LIC, "values": ["CC_0"]}],
+                        "rows": {"property": TAX, "match": DISC},
+                        "columns": {"property": LVL, "match": EC}})
+    drill = block["drill"]
+    assert drill["instance"] == "wlo-prod" and drill["rows"] == TAX
+    assert drill["filters"] == [{"property": LIC, "values": ["CC_0"]}]
+    checked = 0
+    for row in block["rows"][:3] + block["rows"][-1:]:
+        for pos, column in enumerate(block["columns"][:2]):
+            if row["values"][pos]:
+                assert count(api, cell_filters(drill, row, column["id"])) == row["values"][pos]
+                checked += 1
+    assert checked >= 6
+
+
+def test_series_and_groups_carry_their_filters_and_formulas_do_not_drill(api):
+    block = table(api, {"rows": {"property": TAX, "groups": [
+        {"label": "MINT", "values": [DISC + "380", DISC + "460"]},
+        {"label": "Deutsch", "values": [DISC + "120"]}]},
+        "series": [{"id": "gesamt", "label": "Gesamt"},
+                   {"id": "frei", "label": "Frei", "filters": [
+                       {"property": LIC, "values": ["CC_0"]}]},
+                   {"id": "anteil", "label": "%", "formula": "round(100 * frei / gesamt, 1)"}]})
+    drill = block["drill"]
+    assert set(drill["columns"]) == {"gesamt", "frei"}
+    mint = block["rows"][0]
+    assert mint["kind"] == "group" and len(drill["groups"][mint["key"]]) == 2
+    assert count(api, cell_filters(drill, mint, "frei")) == mint["values"][1]
+    assert count(api, cell_filters(drill, mint, "gesamt")) == mint["values"][0]
+
+
+@pytest.mark.parametrize("query", [
+    {"fill": {"fields": [{"property": TAX}]}},
+    {"rows": {"property": TAX, "rollup": "top"}},
+    {"vocab_check": {"fields": [{"property": TAX}]}},
+    {"sizes": {"property": "ccm:replicationsource"}},
+])
+def test_tables_whose_cells_are_no_plain_filter_have_no_drill(api, query):
+    assert table(api, query).get("drill") is None
+
+
+def test_no_drill_where_the_explorer_would_count_something_else(api):
+    """Der Link einer Zelle gilt nur, wenn die Abfrage dahinter dasselbe zählt."""
+    # Präfix-Feld: „CC_BY“ als Filter zählt auch „CC_BY_SA“
+    assert table(api, {"rows": {"property": LIC}})["drill"] is None
+    # Feld, das das Repositorium nur als Facette zählt
+    assert table(api, {"rows": {"property": "ccm:price"}})["drill"] is None
+    # Gruppen als Summe der Einzelwerte zählen Materialien mehrfach
+    grouped = {"property": TAX, "group_mode": "sum", "groups": [
+        {"label": "MINT", "values": [DISC + "380", DISC + "460"]}]}
+    assert table(api, {"rows": grouped})["drill"] is None
+    # Themen je Fach und Stufe: die Spalte trägt hier keinen Filter
+    topics = {"rows": {"property": TAX, "top": 3}, "columns": {"property": LVL, "top": 2},
+              "topics": {"property": "cclom:general_keyword"}}
+    assert table(api, topics)["drill"] is None
+    # ein Feld, das genau zählt, behält den Link
+    assert table(api, {"rows": {"property": TAX}})["drill"]["rows"] == TAX
+    # auch auf die Werte der Werteliste beschränkt: jede Zeile ist ein Wert
+    inside = table(api, {"rows": {"property": TAX, "vocab": "inside"}})
+    assert inside["drill"]["rows"] == TAX and inside["drill"]["skip"] == []
+    for row in inside["rows"]:
+        if row["kind"] == "value":
+            assert count(api, cell_filters(inside["drill"], row, "anzahl")) == row["values"][0]
+    assert table(api, {"rows": {"property": TAX, "vocab": "outside"}})["drill"] is None
+
+
+def test_values_that_begin_another_value_have_no_link(settings):
+    """Live gemessen: „en“ als Filter trifft auch „en_US“. Solche Zeilen bekämen eine andere
+    Zahl; die übrigen Zeilen behalten ihren Link."""
+    docs = make_docs()
+    lang = "cclom:general_language"
+    changed = 0
+    for doc in docs:
+        if doc[lang] == ["en"] and changed < 7:
+            doc[lang] = ["en_US"]
+            changed += 1
+    assert changed == 7
+    next(doc for doc in docs if doc[lang] == ["fr"])[lang] = ["es_FR"]
+    with TestClient(create_app(settings, transport=DataRepo(docs).transport())) as client:
+        assert client.post("/api/auth/login",
+                           json={"password": ADMIN_PASSWORD}).status_code == 204
+        block = table(client, {"rows": {"property": lang}})
+        # „fr“ steht in „es_FR“ als Wortteil: live gemessen trifft „ar“ auch „es_AR“
+        assert block["drill"]["skip"] == ["en", "fr"]
+        for row in block["rows"]:
+            if row["kind"] == "value" and row["key"] not in block["drill"]["skip"]:
+                assert count(client, cell_filters(block["drill"], row, "anzahl")) == (
+                    row["values"][0])
+        # ein Feld, das genau vergleicht, verliert keinen Link, auch wenn ein Wert so beginnt
+        assert table(client, {"rows": {"property": TAX}})["drill"]["skip"] == []
+
+
+def target_table(api, query, view):
+    out = api.post("/api/preview", json={"kind": "metric", "name": "M", "spec": {
+        "query": {"instance": "wlo-prod", **query}, "view": view}})
+    assert out.status_code == 200, out.text
+    [block] = out.json()["report"]["blocks"]
+    return block
+
+
+def test_target_says_which_rows_reach_it(api):
+    """Soll und Ist: ein Zielwert an der Darstellung, das Ergebnis als Satz im Bericht."""
+    fields = [{"property": TAX, "label": "Fach"}, {"property": LVL, "label": "Stufe"},
+              {"property": "ccm:educationalintendedenduserrole", "label": "Zielgruppe"}]
+    block = target_table(api, {"fill": {"fields": fields}},
+                         {"type": "heatmap", "options": {"scale": "rate", "target": 80}})
+    rates = {r["label"]: r["values"][2] for r in block["rows"]}
+    reached = sum(1 for v in rates.values() if v >= 80)
+    missed = [r["key"] for r in block["rows"] if r["values"][2] < 80]
+    assert block["target"] == {"column": "rate", "value": 80, "mode": "min",
+                               "reached": reached, "of": 3, "missed": missed}
+    note = next(n["text"] for n in block["notes"] if n["code"] == "target")
+    assert note.startswith("Ziel: mindestens 80 bei „Füllgrad %“. Erreicht von "
+                           f"{reached} der 3 Zeilen.")
+    for label, rate in rates.items():
+        assert (label in note) == (rate < 80)
+    # höchstens, andere Spalte; ohne Zeilen zählt die Gesamtzahl
+    most = target_table(api, {"fill": {"fields": fields}}, {"type": "table", "options": {
+        "target": 50, "target_column": "missing", "target_mode": "max"}})
+    assert most["target"]["column"] == "missing" and most["target"]["mode"] == "max"
+    assert "höchstens 50 bei „ohne Wert“" in most["notes"][-1]["text"]
+    total = target_table(api, {}, {"type": "number", "options": {"target": 1000000}})
+    assert "Nicht erreicht: 400, es fehlen 999" in total["notes"][-1]["text"]
+    assert total["target"]["reached"] == 0
+    # ohne Zielwert bleibt alles, wie es war
+    plain = target_table(api, {"fill": {"fields": fields}}, {"type": "table", "options": {}})
+    assert plain["target"] is None and all(n["code"] != "target" for n in plain["notes"])
+
+
+def test_target_at_the_edges(api):
+    fields = [{"property": TAX, "label": "Fach"}, {"property": LVL, "label": "Stufe"}]
+    # eine Spalte oder Richtung, die es nicht gibt: kein Ziel, dafür ein Satz
+    for options in ({"target": 50, "target_column": "gibtsnicht"},
+                    {"target": 50, "target_mode": "hoechstens"}):
+        block = target_table(api, {"fill": {"fields": fields}},
+                             {"type": "table", "options": options})
+        assert block["target"] is None
+        assert any(n["code"] == "target_invalid" for n in block["notes"])
+    # höchstens bei einer Gesamtzahl: „zu viel“, nicht „es fehlen“
+    over = target_table(api, {}, {"type": "number", "options": {
+        "target": 100, "target_mode": "max"}})
+    assert "Überschritten: 400, das sind 300 zu viel." in over["notes"][-1]["text"]
+    assert over["target"]["missed"] == ["__total__"]
+    # der Zielwert steht ungerundet da
+    fine = target_table(api, {}, {"type": "number", "options": {"target": 399.97}})
+    assert "mindestens 399,97" in fine["notes"][-1]["text"]
+    # keine Zahl: abgelehnt statt eines Absturzes beim Lauf
+    for bad in ("NaN", "Infinity"):
+        out = api.post("/api/preview", content=(
+            '{"kind": "metric", "name": "M", "spec": {"query": {"instance": "wlo-prod"},'
+            ' "view": {"type": "number", "options": {"target": ' + bad + "}}}}"),
+            headers={"content-type": "application/json"})
+        assert out.status_code in (200, 422), out.text
+        if out.status_code == 200:
+            [block] = out.json()["report"]["blocks"]
+            assert block["target"] is None

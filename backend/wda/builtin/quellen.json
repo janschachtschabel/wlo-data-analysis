@@ -1,0 +1,1143 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "quellen",
+  "title": "Quellen",
+  "description": "Datenprobleme und Merkmale mit Bezug zu den Quellen, nach dem Vorbild des Quellenpanels: Datenströme (Bestand, Zufluss, Pflege), Größe und Bindung der Quellen, dünne Metadaten, Kosten, Werbung, Zugang, Datenschutz und Erschließung je Bezugsquelle, Vollständigkeit der Quelldatensätze."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-quellen",
+   "kind": "dashboard",
+   "name": "Quellen",
+   "description": "Quellen im Blick, allein aus Zählungen. „Quelle“ ist der Crawler (ccm:replicationsource), „Bezugsquelle“ der Anbieter (ccm:oeh_publisher_combined). Anteile je Bezugsquelle beziehen sich auf deren Materialien. Einzelne Materialien oder Quelldatensätze werden nicht gezeigt.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "strom-quellen",
+      "title": "Datenströme der Quellen (Crawler): Bestand, Zufluss und Pflege (30 größte). Kein Zufluss und alles unberührt heißt: der Strom ist versiegt",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 30
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Bestand"
+        },
+        {
+         "id": "neu30",
+         "label": "neu in 30 Tagen",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "30d"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "neu12",
+         "label": "neu in 12 Monaten",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "zufluss",
+         "label": "Zufluss 12 Monate %",
+         "formula": "round(neu12 / gesamt * 100, 2)"
+        },
+        {
+         "id": "gepflegt",
+         "label": "in 12 Monaten geändert",
+         "filters": [
+          {
+           "property": "virtual:time_after_modified",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "ruhend",
+         "label": "seit 12 Monaten unberührt",
+         "formula": "gesamt - gepflegt"
+        },
+        {
+         "id": "ruhend_anteil",
+         "label": "unberührt %",
+         "formula": "round((gesamt - gepflegt) / gesamt * 100, 1)"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
+      "id": "zufluss-quellen",
+      "title": "Wo fließt etwas? Neue Materialien der letzten 12 Monate nach Quelle (Crawler), auch ohne Quelle",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "virtual:time_after_created",
+         "values": [
+          {
+           "since": "12m"
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 20,
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 11,
+       "w": 6,
+       "h": 9
+      }
+     },
+     {
+      "id": "zufluss-bezugsquellen",
+      "title": "Neue Materialien der letzten 12 Monate nach Bezugsquelle",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "virtual:time_after_created",
+         "values": [
+          {
+           "since": "12m"
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 20
+       }
+      },
+      "view": {
+       "type": "bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 6,
+       "y": 11,
+       "w": 6,
+       "h": 9
+      }
+     },
+     {
+      "id": "zufluss-jahre",
+      "title": "Wann kam der Bestand herein? Zufluss je Quelle (Crawler) nach Alter (15 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 15
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Bestand",
+         "hidden": true
+        },
+        {
+         "id": "s1",
+         "label": "seit 1 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "1y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s2",
+         "label": "seit 2 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "2y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s3",
+         "label": "seit 3 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "3y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s4",
+         "label": "seit 4 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "4y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s5",
+         "label": "seit 5 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "5y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "j1",
+         "label": "letzte 12 Monate",
+         "formula": "s1"
+        },
+        {
+         "id": "j2",
+         "label": "vor 1 bis 2 Jahren",
+         "formula": "s2 - s1"
+        },
+        {
+         "id": "j3",
+         "label": "vor 2 bis 3 Jahren",
+         "formula": "s3 - s2"
+        },
+        {
+         "id": "j4",
+         "label": "vor 3 bis 4 Jahren",
+         "formula": "s4 - s3"
+        },
+        {
+         "id": "j5",
+         "label": "vor 4 bis 5 Jahren",
+         "formula": "s5 - s4"
+        },
+        {
+         "id": "alt",
+         "label": "älter als 5 Jahre",
+         "formula": "gesamt - s5"
+        }
+       ]
+      },
+      "view": {
+       "type": "stacked_bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 20,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "strom-bezugsquellen",
+      "title": "Datenströme der Bezugsquellen: Bestand, Zufluss und Pflege (40 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 40
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Bestand"
+        },
+        {
+         "id": "neu30",
+         "label": "neu in 30 Tagen",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "30d"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "neu12",
+         "label": "neu in 12 Monaten",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "zufluss",
+         "label": "Zufluss 12 Monate %",
+         "formula": "round(neu12 / gesamt * 100, 2)"
+        },
+        {
+         "id": "gepflegt",
+         "label": "in 12 Monaten geändert",
+         "filters": [
+          {
+           "property": "virtual:time_after_modified",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "ruhend",
+         "label": "seit 12 Monaten unberührt",
+         "formula": "gesamt - gepflegt"
+        },
+        {
+         "id": "ruhend_anteil",
+         "label": "unberührt %",
+         "formula": "round((gesamt - gepflegt) / gesamt * 100, 1)"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 30,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
+      "id": "groessen-bezugsquellen",
+      "title": "Bezugsquellen nach Größe: wie viele haben nur ein Material, wie viele unter 5?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "sizes": {
+        "property": "ccm:oeh_publisher_combined"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 41,
+       "w": 6,
+       "h": 7
+      }
+     },
+     {
+      "id": "groessen-quellen",
+      "title": "Quellen (Crawler) nach Größe",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "sizes": {
+        "property": "ccm:replicationsource"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 6,
+       "y": 41,
+       "w": 6,
+       "h": 7
+      }
+     },
+     {
+      "id": "bindung",
+      "title": "Bindung: Wie viele Materialien haben eine Quelle (Crawler) und eine Bezugsquelle?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:replicationsource",
+          "label": "Quelle (Crawler)"
+         },
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "rate"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 48,
+       "w": 12,
+       "h": 4
+      }
+     },
+     {
+      "id": "quelle-bezugsquelle",
+      "title": "Welche Quelle liefert welche Bezugsquelle? Mehrere Zellen in einer Spalte: dieselbe Bezugsquelle kommt über mehrere Wege (Verdacht auf Dubletten)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 20
+       },
+       "columns": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 12
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 52,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "ohne-bezugsquelle",
+      "title": "Materialien ohne Bezugsquelle je Quelle (30 größte Quellen)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 30
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         }
+        ],
+        "show": "missing"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 62,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
+      "id": "duenn-je-bezugsquelle",
+      "title": "Dünne Metadaten: Füllgrad je Bezugsquelle in Prozent (40 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 40
+       },
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "ccm:oeh_lrt_aggregated",
+          "label": "Materialart"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:educationalintendedenduserrole",
+          "label": "Zielgruppe"
+         }
+        ],
+        "show": "rate"
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 73,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "offenheit-je-bezugsquelle",
+      "title": "Offenheit je Bezugsquelle (30 größte): Anteil offener Lizenzen und Materialien ohne Lizenzangabe",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 30
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Gesamt"
+        },
+        {
+         "id": "offen",
+         "label": "offen (PD, CC0, CC BY, CC BY-SA)",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "OPEN",
+            "CC_BY_OPEN"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "anteil",
+         "label": "Anteil offen %",
+         "formula": "round(offen / gesamt * 100, 1)"
+        },
+        {
+         "id": "mit",
+         "label": "mit Lizenzangabe",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "ohne",
+         "label": "ohne Lizenzangabe",
+         "formula": "gesamt - mit"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 87,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
+      "id": "kosten-je-bezugsquelle",
+      "title": "Kosten je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:price",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 98,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "werbung-je-bezugsquelle",
+      "title": "Werbung je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:containsAdvertisement",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 98,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "zugang-je-bezugsquelle",
+      "title": "Zugang (Anmeldung) je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:conditionsOfAccess",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 108,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "erschliessung-je-bezugsquelle",
+      "title": "Erschließungsstatus der Redaktion je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:editorial_checklist",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 108,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "materialart-je-bezugsquelle",
+      "title": "Materialart je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 118,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "sprache-je-bezugsquelle",
+      "title": "Sprache je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 25
+       },
+       "profile": {
+        "property": "cclom:general_language",
+        "top": 6
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 6,
+       "y": 118,
+       "w": 6,
+       "h": 10
+      }
+     },
+     {
+      "id": "quelldatensaetze",
+      "title": "Quelldatensätze (Materialart „Quelle“): wie vollständig sind die Quellen selbst beschrieben?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "fill": {
+        "fields": [
+         {
+          "property": "ccm:oeh_publisher_combined",
+          "label": "Bezugsquelle"
+         },
+         {
+          "property": "ccm:taxonid",
+          "label": "Fach"
+         },
+         {
+          "property": "ccm:educationalcontext",
+          "label": "Bildungsstufe"
+         },
+         {
+          "property": "cclom:general_language",
+          "label": "Sprache"
+         },
+         {
+          "property": "ccm:commonlicense_key",
+          "label": "Lizenz"
+         },
+         {
+          "property": "ccm:editorial_checklist",
+          "label": "Erschließungsstatus"
+         },
+         {
+          "property": "ccm:price",
+          "label": "Kosten"
+         },
+         {
+          "property": "ccm:containsAdvertisement",
+          "label": "Werbung"
+         },
+         {
+          "property": "ccm:conditionsOfAccess",
+          "label": "Zugang (Anmeldung)"
+         },
+         {
+          "property": "ccm:dataProtectionConformity",
+          "label": "DSGVO"
+         },
+         {
+          "property": "ccm:accessibilitySummary",
+          "label": "Barrierefreiheit"
+         },
+         {
+          "property": "ccm:oeh_quality_protection_of_minors",
+          "label": "Jugendschutz"
+         },
+         {
+          "property": "ccm:oeh_quality_personal_law",
+          "label": "Persönlichkeitsrechte"
+         },
+         {
+          "property": "ccm:oeh_quality_criminal_law",
+          "label": "Strafrecht"
+         },
+         {
+          "property": "ccm:oeh_quality_copyright_law",
+          "label": "Urheberrecht"
+         },
+         {
+          "property": "ccm:oeh_quality_data_privacy",
+          "label": "Datenschutz (rechtlich)"
+         },
+         {
+          "property": "ccm:oeh_quality_relevancy_for_education",
+          "label": "Für Bildung geeignet"
+         },
+         {
+          "property": "ccm:oeh_quality_currentness",
+          "label": "Aktualität"
+         },
+         {
+          "property": "ccm:oeh_quality_correctness",
+          "label": "Sachrichtigkeit"
+         },
+         {
+          "property": "ccm:oeh_quality_neutralness",
+          "label": "Neutralität"
+         },
+         {
+          "property": "ccm:oeh_quality_transparentness",
+          "label": "Transparenz"
+         },
+         {
+          "property": "ccm:oeh_quality_didactics",
+          "label": "Didaktik und Methodik"
+         },
+         {
+          "property": "ccm:oeh_quality_medial",
+          "label": "Medial passend"
+         },
+         {
+          "property": "ccm:oeh_quality_language",
+          "label": "Sprachliche Angemessenheit"
+         }
+        ]
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "rate"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 128,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "quelldatensaetze-status",
+      "title": "Quelldatensätze: Erschließungsstatus",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:editorial_checklist",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 142,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-kosten",
+      "title": "Quelldatensätze: Kosten",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:price",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 142,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-werbung",
+      "title": "Quelldatensätze: Werbung",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:containsAdvertisement",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 150,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-zugang",
+      "title": "Quelldatensätze: Zugang (Anmeldung)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:conditionsOfAccess",
+        "missing": true
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 150,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-dsgvo",
+      "title": "Quelldatensätze: Datenschutz (DSGVO)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:dataProtectionConformity",
+        "missing": false
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 158,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-barrierefreiheit",
+      "title": "Quelldatensätze: Barrierefreiheit",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:accessibilitySummary",
+        "missing": false
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 158,
+       "w": 6,
+       "h": 8
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

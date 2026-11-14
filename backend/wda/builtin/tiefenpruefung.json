@@ -1,0 +1,440 @@
+{
+ "format": "wda-definitions",
+ "version": 1,
+ "builtin": {
+  "id": "tiefenpruefung",
+  "title": "Tiefenprüfung",
+  "description": "Was sich nur am einzelnen Material prüfen lässt, gezählt aus dem lokalen Abzug: Füllgrade von Titel, Beschreibung und Schlagwörtern, dünne Metadaten, Verdacht auf Dubletten, Längen, Alter. Braucht einen Abzug der Instanz."
+ },
+ "groups": [
+  {
+   "id": "builtin-berichte",
+   "name": "Mitgelieferte Berichte"
+  }
+ ],
+ "definitions": [
+  {
+   "id": "builtin-tiefenpruefung",
+   "kind": "dashboard",
+   "name": "Tiefenprüfung",
+   "description": "Gezählt aus dem lokalen Abzug der Instanz. Der Abzug enthält je Material nur Merkmale (Längen, Anzahlen, Zeitpunkte, nicht umkehrbare Schlüssel für gleiche Adressen und Titel), keine Inhalte. „Dünn“ wie im Quellenpanel: weder Beschreibung noch Fach noch Bildungsstufe.",
+   "group_id": "builtin-berichte",
+   "spec": {
+    "instance": "wlo-prod",
+    "tiles": [
+     {
+      "id": "freitext",
+      "title": "Füllgrade der Freitextfelder: Titel, Beschreibung, Schlagwörter, Web-Adresse, Autor",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "freitext"
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "rate"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 6
+      }
+     },
+     {
+      "id": "freitext-je-bezugsquelle",
+      "title": "Freitextfelder je Bezugsquelle: Füllgrad in Prozent (40 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "freitext",
+        "by": "publisher",
+        "top": 40
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 6,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "duenn",
+      "title": "Dünne Metadaten: was fehlt wie oft?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "duenn",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 20,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "vollstaendigkeit",
+      "title": "Vollständigkeit: wie viele der 8 Kernangaben sind vorhanden?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "vollstaendigkeit",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 20,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "duenn-je-bezugsquelle",
+      "title": "Dünne Metadaten je Bezugsquelle: Anteil der Materialien in Prozent (40 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "duenn",
+        "by": "publisher",
+        "top": 40
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 28,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "vollstaendigkeit-je-quelle",
+      "title": "Vollständigkeit je Quelle (Crawler): Anteil der Materialien in Prozent (30 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "vollstaendigkeit",
+        "by": "source",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 42,
+       "w": 12,
+       "h": 12
+      }
+     },
+     {
+      "id": "dubletten",
+      "title": "Verdacht auf Dubletten: gleiche Web-Adresse, gleicher Titel",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "dubletten"
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 54,
+       "w": 12,
+       "h": 5
+      }
+     },
+     {
+      "id": "dubletten-je-bezugsquelle",
+      "title": "Dubletten-Verdacht je Bezugsquelle: betroffene Materialien (40 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "dubletten",
+        "by": "publisher",
+        "top": 40,
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 59,
+       "w": 12,
+       "h": 14
+      }
+     },
+     {
+      "id": "dubletten-je-quelle",
+      "title": "Dubletten-Verdacht je Quelle (Crawler): Anteil der Materialien in Prozent (30 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "dubletten",
+        "by": "source",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 73,
+       "w": 12,
+       "h": 12
+      }
+     },
+     {
+      "id": "beschreibung",
+      "title": "Länge der Beschreibung",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "beschreibung",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 85,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "titel",
+      "title": "Länge des Titels",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "titel",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 85,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "beschreibung-je-bezugsquelle",
+      "title": "Länge der Beschreibung je Bezugsquelle: Anteil in Prozent (30 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "beschreibung",
+        "by": "publisher",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 93,
+       "w": 12,
+       "h": 12
+      }
+     },
+     {
+      "id": "schlagwoerter",
+      "title": "Anzahl der Schlagwörter",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "schlagwoerter",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 105,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "adressen",
+      "title": "Web-Adressen: https, nur http, keine",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "adressen",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 105,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "jahrgang",
+      "title": "Materialien nach Jahr der Erfassung",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "jahrgang",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 113,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "alter",
+      "title": "Letzte Änderung",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "alter",
+        "show": "count"
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 113,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "alter-je-bezugsquelle",
+      "title": "Letzte Änderung je Bezugsquelle: Anteil in Prozent (30 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "alter",
+        "by": "publisher",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "scale": "count",
+        "zero": "plain"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 121,
+       "w": 12,
+       "h": 12
+      }
+     },
+     {
+      "id": "rechner",
+      "title": "Wohin zeigen die Web-Adressen? Die 30 häufigsten Rechner",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "snapshot": {
+        "analysis": "rechner",
+        "top": 30
+       }
+      },
+      "view": {
+       "type": "table"
+      },
+      "layout": {
+       "x": 0,
+       "y": 133,
+       "w": 12,
+       "h": 12
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

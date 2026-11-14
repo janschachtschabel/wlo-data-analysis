@@ -1,0 +1,60 @@
+# Produktiv-Stack für den Docker Manager von Hostinger ("Compose from URL") und jeden Host
+# mit Traefik. Der erste Start gelingt ohne jede Variable: Das Admin-Passwort entsteht im
+# Datenvolume (anzeigen: docker compose exec app cat /data/admin.password).
+# Lokal bauen und ohne Traefik starten: docker compose -f docker-compose.build.yml up
+services:
+  init:
+    image: ${WDA_IMAGE:-ghcr.io/janschachtschabel/wlo-data-analysis:latest}
+    command: ["python", "-m", "wda.init"]
+    restart: "no"
+    environment:
+      DOMAIN: ${DOMAIN:-}
+      WDA_ADMIN_PASSWORD: ${WDA_ADMIN_PASSWORD:-}
+    volumes:
+      - wda-data:/data
+
+  app:
+    image: ${WDA_IMAGE:-ghcr.io/janschachtschabel/wlo-data-analysis:latest}
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+        restart: true
+    environment:
+      WDA_ADMIN_PASSWORD: ${WDA_ADMIN_PASSWORD:-}
+      WDA_ADMIN_PASSWORD_FILE: /data/admin.password
+      WDA_VIEWER_PASSWORD: ${WDA_VIEWER_PASSWORD:-}
+      WDA_COOKIE_SECURE: ${WDA_COOKIE_SECURE:-true}
+      WDA_PUBLIC_URL: ${WDA_PUBLIC_URL:-}
+      WDA_TIMEZONE: ${WDA_TIMEZONE:-Europe/Berlin}
+      WDA_LLM_BASE_URL: ${WDA_LLM_BASE_URL:-https://api.openai.com/v1}
+      WDA_LLM_MODEL: ${WDA_LLM_MODEL:-}
+      WDA_LLM_API_KEY: ${WDA_LLM_API_KEY:-}
+      WDA_LLM_SETTINGS_UI: ${WDA_LLM_SETTINGS_UI:-true}
+      WDA_INSTANCES: ${WDA_INSTANCES:-}
+      WDA_SNAPSHOT_NIGHTLY: ${WDA_SNAPSHOT_NIGHTLY:-03:30}
+      WDA_PRECOMPUTE: ${WDA_PRECOMPUTE:-builtin-themen}
+      WDA_SMTP_HOST: ${WDA_SMTP_HOST:-}
+      WDA_SMTP_PORT: ${WDA_SMTP_PORT:-587}
+      WDA_SMTP_USER: ${WDA_SMTP_USER:-}
+      WDA_SMTP_PASSWORD: ${WDA_SMTP_PASSWORD:-}
+      WDA_SMTP_FROM: ${WDA_SMTP_FROM:-}
+      WDA_SMTP_SECURITY: ${WDA_SMTP_SECURITY:-starttls}
+      FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - wda-data:/data
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-wlo-data-analysis-web}
+      - traefik.http.routers.wlo-data-analysis.rule=Host(`${DOMAIN:-}`)
+      - traefik.http.routers.wlo-data-analysis.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.wlo-data-analysis.tls=true
+      - traefik.http.routers.wlo-data-analysis.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.services.wlo-data-analysis.loadbalancer.server.port=8080
+
+networks:
+  default:
+    name: ${TRAEFIK_NETWORK:-wlo-data-analysis-web}
+
+volumes:
+  wda-data:
