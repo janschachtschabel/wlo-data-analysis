@@ -67,10 +67,17 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
             Row("__total__", "Gesamt", "total", [c.get("total") for c in result["columns"]]))
     prov = result.get("provenance", {})
     inst = prov.get("instance") or {}
+    view = view or {"type": "table", "options": {}}
+    notes = list(prov.get("notes") or [])
+    fill = result.get("fill") if isinstance(result.get("fill"), dict) else None
+    if fill is not None and view.get("type") not in _FILL_VIEWS[bool(fill.get("by_rows"))]:
+        # Zahl, Kreis oder Linie ergeben aus Füllgraden kein richtiges Bild
+        view = {**view, "type": "table"}
+        notes.append({"code": "view_changed",
+                      "text": "Die gewählte Darstellung passt nicht zu Füllgraden; gezeigt "
+                              "wird die Tabelle."})
     return _checked(Table(
-        key, title, columns, rows,
-        view=view or {"type": "table", "options": {}},
-        notes=list(prov.get("notes") or []),
+        key, title, columns, rows, view=view, notes=notes, fill=fill,
         sources=[{
             "label": inst.get("id") or result.get("instance"), "kind": "query",
             "instance": inst.get("id") or result.get("instance"),
@@ -79,6 +86,10 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
             "queries": prov.get("queries"),
             "filters": describe_filters(prov.get("filters") or []),
         }]))
+
+
+# Darstellungen für Füllgrade: je Feld (ohne Zeilenfeld) bzw. je Zeile
+_FILL_VIEWS = {False: {"table", "bar", "stacked_bar"}, True: {"table", "heatmap", "bar"}}
 
 
 def _checked(table: Table) -> Table:

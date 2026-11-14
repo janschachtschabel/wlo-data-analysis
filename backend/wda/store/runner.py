@@ -176,9 +176,10 @@ def backfill_instances(db: Database) -> int:
 
     def fn(con: sqlite3.Connection) -> int:
         usual: dict[str, set[str] | None] = {}
+        seen_own: set[str] = set()  # Definitionen, die schon gegen ihre heutige Instanz liefen
         changed = 0
-        for row in con.execute(
-                "SELECT id, definition_id FROM runs WHERE instance IS NULL").fetchall():
+        for row in con.execute("SELECT id, definition_id FROM runs WHERE instance IS NULL"
+                               " ORDER BY seq").fetchall():
             def_id = row["definition_id"]
             if def_id not in usual:
                 try:
@@ -195,7 +196,12 @@ def backfill_instances(db: Database) -> int:
                 if isinstance(query, dict) and isinstance(query.get("instance"), str):
                     ran.add(query["instance"])
             own = usual[def_id]
-            if own and len(ran) == 1 and len(own) == 1 and ran != own:
+            if own and ran == own:
+                seen_own.add(def_id)
+            # Abweichend ist ein Lauf nur, wenn die Definition vorher schon gegen ihre
+            # heutige Instanz lief. Sonst wurde sie später umgestellt, und die älteren Läufe
+            # waren zu ihrer Zeit die üblichen.
+            elif (own and len(ran) == 1 and len(own) == 1 and def_id in seen_own):
                 con.execute("UPDATE runs SET instance=? WHERE id=?", (next(iter(ran)), row["id"]))
                 changed += 1
         con.execute(

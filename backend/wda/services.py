@@ -100,9 +100,12 @@ class Services:
             self._db = Database(self._settings.data_dir / "store.sqlite3")
             try:  # ältere Läufe bekommen einmalig ihre Punkte für die Historie
                 backfill_points(self._db)
-                backfill_instances(self._db)
             except Exception:
                 log.exception("Punkte älterer Läufe ließen sich nicht nachtragen")
+            try:
+                backfill_instances(self._db)
+            except Exception:
+                log.exception("Instanzen älterer Läufe ließen sich nicht zuordnen")
         return self._db
 
     @property

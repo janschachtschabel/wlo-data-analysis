@@ -324,7 +324,9 @@ export class Explorer {
       return;
     }
     const rows = spec.rows ? { property: spec.rows.property, top: spec.rows.top ?? 25 } : null;
-    this.patch({ fill: { fields: fillDefaults(this.facetFields(), rows?.property), show: 'rate' }, rows, columns: null, percent: 'none' });
+    const fields = fillDefaults(this.facetFields(), rows?.property);
+    if (!fields.length) return; // kein Feld übrig, dessen Füllgrad sich zählen ließe
+    this.patch({ fill: { fields, show: 'rate' }, rows, columns: null, percent: 'none', series: [] });
     this.view.set(rows ? 'table' : 'stacked_bar');
   }
   protected toggleFill(property: string): void {

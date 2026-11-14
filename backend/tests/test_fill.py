@@ -43,8 +43,8 @@ def test_fill_per_field_matches_brute_count(repo, tmp_path):
     assert 0 < lic["values"][1] < total
     codes = [n["code"] for n in result["provenance"]["notes"]]
     assert "fill_base" in codes and "fill_derived" in codes
-    # je Feld höchstens zwei Aufrufe und einer für die Grundgesamtheit
-    assert result["provenance"]["queries"] <= 1 + 2 * 4
+    # je Feld höchstens drei Aufrufe (Werteliste, Probe, Zählung), einer für die Gesamtzahl
+    assert result["provenance"]["queries"] <= 1 + 3 * 4
 
 
 def test_fill_respects_base_filters_and_own_label(repo, tmp_path):
@@ -252,3 +252,118 @@ def test_summed_field_has_no_value_per_row(repo, tmp_path):
     assert all(r["values"][1] is None for r in result["rows"])
     assert all(r["values"][2] is not None for r in result["rows"])
     assert "Je Zeile" in notes_of(result)["fill_summed"]
+
+
+# ---- aus dem Review ---------------------------------------------------------------------
+
+def test_inexact_filter_inside_the_plausible_range_is_caught_by_the_probe(repo, tmp_path):
+    """Liegt die Zählung eines ungenauen Kriteriums zufällig zwischen häufigstem Wert und
+    Summe, verrät es die Probe mit dem häufigsten Wert."""
+    for n, doc in enumerate(repo.docs):
+        doc[CHECK] = ["2", "9", "5"][: 1 + n % 3] if n % 2 == 0 else []
+    result = query(repo, tmp_path, fill=fields(CHECK))
+    filled = sum(1 for d in repo.docs if d[CHECK])
+    assert result["rows"][0]["values"][0] in (None, filled)
+    per_row = query(repo, tmp_path, rows={"property": SRC}, fill=fields(CHECK))
+    assert all(r["values"][1] is None for r in per_row["rows"])
+
+
+def test_sum_is_not_used_when_it_exceeds_the_total(repo, tmp_path):
+    """Einwertig laut Metadatenset, in den Daten aber mehrere Werte: nie 100 % aus der Summe."""
+    for doc in repo.docs:
+        doc[PRICE] = ["no", "yes"]
+    result = query(repo, tmp_path, fill=fields(PRICE))
+    assert result["rows"][0]["values"] == [None, None, None]
+    assert "fill_range" in notes_of(result) and "fill_summed" not in notes_of(result)
+    # die Annahme steht im Hinweis, wenn summiert wird
+    assert "höchstens einen Wert" in notes_of(query(DataRepo(), tmp_path, fill=fields(PRICE))
+                                              )["fill_summed"]
+
+
+def test_search_helper_license_is_unknown_not_zero(repo, tmp_path, monkeypatch):
+    from . import esdata
+    widgets = [*esdata.MDS["widgets"], {"id": "license", "caption": "Lizenzgruppe",
+                                        "type": "singleoption",
+                                        "values": [{"id": "OPEN", "caption": "offen"}]}]
+    monkeypatch.setitem(esdata.MDS, "widgets", widgets)
+    result = query(repo, tmp_path, fill=fields("license", LIC))
+    assert result["rows"][0]["values"] == [None, None, None]
+    assert "Lizenzgruppe" in notes_of(result)["fill_virtual"]
+
+
+def test_blank_values_do_not_count_as_filled(repo, tmp_path):
+    for n, doc in enumerate(repo.docs):
+        if n % 4 == 0:
+            doc[TAX] = [""]
+    result = query(repo, tmp_path, fill=fields(TAX))
+    filled = sum(1 for d in repo.docs if any(v.strip() for v in d[TAX]))
+    assert result["rows"][0]["values"][0] == filled
+    assert "Fach" in notes_of(result)["fill_blank"]
+
+
+def test_field_without_values_says_so(repo, tmp_path):
+    for doc in repo.docs:
+        doc[TAX] = []
+    result = query(repo, tmp_path, fill=fields(TAX))
+    assert result["rows"][0]["values"][0] == 0 and "Fach" in notes_of(result)["fill_empty"]
+
+
+def test_filter_on_the_row_field_shows_only_the_filtered_rows(repo, tmp_path):
+    """Ein Dashboard-Filter „Quelle = …“ darf die Kacheln „je Quelle“ nicht scheitern lassen."""
+    result = query(repo, tmp_path, filters=[{"property": SRC, "values": ["bpb_spider"]}],
+                   rows={"property": SRC}, fill=fields(LIC, TAX))
+    assert [r["key"] for r in result["rows"]] == ["bpb_spider"]
+    docs = [d for d in repo.docs if "bpb_spider" in d[SRC]]
+    row = result["rows"][0]["values"]
+    assert row[0] == len(docs) == result["columns"][0]["total"]
+    assert row[1] == round(100 * sum(1 for d in docs if has(d, LIC)) / len(docs), 1)
+    assert "rows_filtered" in notes_of(result)
+
+
+def test_access_error_on_the_count_is_not_taken_for_a_field_problem(repo, tmp_path):
+    import httpx
+    inner = repo.handler
+
+    def handler(request):
+        body = json.loads(request.content) if request.content else {}
+        if any(c["property"] == TAX for c in body.get("criteria", [])):
+            return httpx.Response(403, json={"error": "x", "message": "denied"})
+        return inner(request)
+
+    repo.handler = handler
+    repo.transport = lambda: httpx.MockTransport(handler)
+    with pytest.raises(EduSharingError):
+        query(repo, tmp_path, fill=fields(TAX))
+
+
+def test_result_says_what_charts_may_show(repo, tmp_path):
+    assert query(repo, tmp_path, fill=fields(TAX))["fill"] == {"show": "rate", "by_rows": False}
+    assert query(repo, tmp_path, rows={"property": SRC}, fill={**fields(TAX), "show": "filled"}
+                 )["fill"] == {"show": "filled", "by_rows": True}
+
+
+def test_report_keeps_charts_of_fill_tables_honest(repo, tmp_path):
+    from wda.report.build import table_from_result
+    from wda.report.charts import _data, chart_for
+
+    per_field = query(repo, tmp_path, fill=fields(TAX, LIC, BUFFET))
+    stacked = table_from_result("k", "T", per_field, {"type": "stacked_bar", "options": {}})
+    labels, values, series = _data(stacked)
+    assert series == ["mit Wert", "ohne Wert"] and "Buffet-Kriterien" not in labels
+    total = len(repo.docs)
+    assert all(sum(row) == total for row in values)
+    bar = table_from_result("k", "T", per_field, {"type": "bar", "options": {}})
+    assert _data(bar)[2] == ["Füllgrad %"]
+    # Zahl, Kreis und Linie werden zur Tabelle, mit Hinweis
+    for kind in ("number", "pie", "line", "heatmap"):
+        table = table_from_result("k", "T", per_field, {"type": kind, "options": {}})
+        assert table.view["type"] == "table" and chart_for(table) is None
+        assert "view_changed" in [n["code"] for n in table.notes]
+
+    per_row = query(repo, tmp_path, rows={"property": SRC}, fill=fields(TAX, LIC))
+    table = table_from_result("k", "T", per_row, {"type": "bar", "options": {}})
+    assert _data(table)[2] == ["Fach %", "Lizenz %"]  # nie die Anzahl unter „Füllgrad“
+    assert table_from_result("k", "T", per_row, {"type": "stacked_bar", "options": {}}
+                             ).view["type"] == "table"
+    assert table_from_result("k", "T", per_row, {"type": "heatmap", "options": {}}
+                             ).view["type"] == "heatmap"

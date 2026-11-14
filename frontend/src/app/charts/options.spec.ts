@@ -1,5 +1,5 @@
 import { ResultRow } from '../core/types';
-import { MAX_BARS, MAX_SERIES, MAX_SLICES, Palette, chartPlan, fillChartData, isFillTable } from './options';
+import { MAX_BARS, MAX_SERIES, MAX_SLICES, Palette, chartPlan, fillChartData } from './options';
 
 const palette: Palette = {
   series: ['#1', '#2', '#3', '#4', '#5', '#6', '#7', '#8'], surface: '#fff', text: '#000', muted: '#666', grid: '#ddd',
@@ -92,8 +92,8 @@ describe('Grafik aus Füllgraden', () => {
   const row = (key: string, values: (number | null)[]) => ({ key, label: key, kind: 'value', values, percent: [1] }) as any;
 
   it('zeigt je Feld den Füllgrad, gestapelt mit und ohne Wert', () => {
-    const input = { columns: [col('filled'), col('missing', true), col('rate', true)], rows: [row('a', [30, 70, 30]), row('b', [null, null, null])] };
-    expect(isFillTable(input.columns)).toBe(true);
+    const input = { columns: [col('filled'), col('missing', true), col('rate', true)], rows: [row('a', [30, 70, 30]), row('b', [null, null, null])],
+      fill: { show: 'rate' as const, by_rows: false } };
     const bar = fillChartData(input, 'bar');
     expect(bar.columns.map((c) => c.id)).toEqual(['rate']);
     expect(bar.rows.map((r) => r.values)).toEqual([[30], [null]]);
@@ -103,13 +103,15 @@ describe('Grafik aus Füllgraden', () => {
     expect(stacked.rows[0].percent).toBeNull();
   });
 
-  it('lässt je Zeile die Anzahl weg und alles andere, wie es ist', () => {
-    const input = { columns: [col('count'), col('f_a', true), col('f_b', true)], rows: [row('q', [10, 50, 80])] };
+  it('lässt je Zeile die Anzahl weg, auch wenn die Spalten gezählt sind', () => {
+    const input = { columns: [col('count'), col('f_a'), col('f_b')], rows: [row('q', [10, 5, 8])], fill: { show: 'filled' as const, by_rows: true } };
     const out = fillChartData(input, 'bar');
     expect(out.columns.map((c) => c.id)).toEqual(['f_a', 'f_b']);
-    expect(out.rows[0].values).toEqual([50, 80]);
-    const usual = { columns: [col('count'), col('x')], rows: [row('q', [1, 2])] };
+    expect(out.rows[0].values).toEqual([5, 8]);
+  });
+
+  it('rät nicht: ohne Kennzeichen bleibt jede Tabelle, wie sie ist', () => {
+    const usual = { columns: [col('count'), col('anteil', true)], rows: [row('q', [1, 2])] };
     expect(fillChartData(usual, 'bar')).toBe(usual);
-    expect(isFillTable(usual.columns)).toBe(false);
   });
 });

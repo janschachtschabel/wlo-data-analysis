@@ -168,3 +168,18 @@ def test_older_runs_against_another_instance_get_it_noted_once(world):  # noqa: 
     got = db.read_now(lambda c: dict(c.execute("SELECT id, instance FROM runs").fetchall()))
     assert got == {own["id"]: None, other["id"]: "anderswo"}
     assert backfill_instances(db) == 0  # nur einmal
+
+
+def test_runs_from_before_a_definition_moved_stay_in_its_history(world):  # noqa: F811
+    """Wurde die Definition später auf eine andere Instanz umgestellt, waren die älteren
+    Läufe zu ihrer Zeit die üblichen und bleiben, wie sie sind."""
+    from wda.store.runner import backfill_instances
+
+    m = world.go(world.store.create("metric", "M", {"query": QUERY}))
+    world.go(world.runner.run(m.id))
+    world.go(world.runner.run(m.id))
+    world.go(world.store.update(m.id, None, spec={"query": {**QUERY, "instance": "b"}}))
+    world.go(world.runner.run(m.id))
+    db = world.services.db
+    db.write_now(lambda con: con.execute("DELETE FROM meta WHERE key='instances_backfilled'"))
+    assert backfill_instances(db) == 0

@@ -82,3 +82,10 @@ Welche Felder WLO Produktion tatsächlich als Facette und Kriterium annimmt und 
 **Files:** Create `backend/wda/builtin/datenqualitaet.json`; Modify `backend/wda/api/builtin.py` falls nötig; Test `backend/tests/test_builtin.py`
 
 ### Task 5: Review, Befundbehebung, Live-Probe; danach übergreifendes Review 6 bis 8
+
+## Stand nach Umsetzung, Live-Messung und Review (2026-11-14)
+
+- Live gemessen (`docs/edu-sharing-api-erkenntnisse.md`): 39 Felder zählt das Repositorium nur als Facette, `ccm:editorial_checklist` vergleicht als Kriterium nicht exakt. Deshalb: Probe mit dem häufigsten Wert (Zählung muss dem Facettenwert gleichen) und Schranke häufigster Wert ≤ Zählung ≤ Summe; sonst Summe (nur bei laut Metadatenset einwertigen Feldern und nur, wenn sie die Gesamtzahl nicht übersteigt) oder unbekannt mit Spanne. Je Feld damit höchstens drei Aufrufe.
+- Abweichend vom Plan: Ein nicht freigegebenes Füllgrad-Feld bricht nicht ab, sondern bleibt leer mit Hinweis (`fill_closed`), ohne dass danach gefragt wird; ein Filter auf dem Zeilenfeld zeigt nur die gefilterten Zeilen.
+- Review: K1 (ungenaues Kriterium innerhalb der Schranke), K2 (Summe bei tatsächlich mehrwertigen Daten), W1 bis W7, G3, G5, G7, G9 behoben, jeweils mit Test.
+- Offen und bewusst so: `MAX_CALLS` wird für Füllgrade nicht eigens geprüft (höchstens 1 + 3 × 30 Aufrufe); nach einem Fehler können einzelne schon geplante Zählungen noch starten (G2); abgelehnte Kriterien werden je Lauf erneut gefragt (G4); der Verlauf wählt ohne Gesamtzeile die erste Zeile (G8); Feinheiten der Feldauswahl (G10, G11).

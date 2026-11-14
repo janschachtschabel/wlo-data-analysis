@@ -47,6 +47,13 @@ def _data(table: Table) -> tuple[list[str], list[list[float]], list[str]]:
     """Zeilen mit Zahlen (ohne Gesamt- und Gruppenzeilen), gezählte Spalten."""
     cols = [pos for pos, c in enumerate(table.columns) if not c.derived] or list(
         range(len(table.columns)))
+    if table.fill:  # dieselbe Auswahl wie in der Oberfläche (charts/options.ts)
+        if table.fill.get("by_rows"):
+            cols = list(range(1, len(table.columns)))  # je Feld, ohne die Anzahl
+        elif (table.view or {}).get("type") == "stacked_bar":
+            cols = [0, 1]  # mit Wert, ohne Wert
+        else:
+            cols = [2]  # Füllgrad
     rows = [r for r in table.rows if r.kind in ("value", "other", "missing")
             or (r.kind == "group" and not any(x.level for x in table.rows))]
     rows = [r for r in rows if any(isinstance(r.values[c], int | float) for c in cols)]

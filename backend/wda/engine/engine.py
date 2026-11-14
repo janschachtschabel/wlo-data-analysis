@@ -290,8 +290,19 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         if one_valued:
             # Einwertig: Die Facettenwerte summieren sich zur Zahl der Dokumente mit Wert.
             with_value: list[int | None] = [
-                None if col.id in cut else sum(facet_counts[col.id].values())
+                None if col.id in cut else sum(
+                    n for value, n in facet_counts[col.id].items() if value.strip())
                 for col in data_columns]
+            if not single:
+                # Einwertig nur laut Metadatenset: Übersteigt die Summe die Gesamtzahl,
+                # tragen Materialien doch mehrere Werte.
+                with_value = [None if n is not None and col.total is not None
+                              and n > col.total else n
+                              for n, col in zip(with_value, data_columns, strict=True)]
+                notes.add("missing_summed",
+                          "„Ohne Wert“ ist die Gesamtzahl minus der Summe der Werte. Das "
+                          "stimmt, solange jedes Material höchstens einen Wert trägt (laut "
+                          "Metadatenset einwertig); sonst ist die Zahl zu niedrig.")
         else:
             with_value = await asyncio.gather(*[
                 _count_with_any_value(run, base + col.criteria, rows_spec.property,
@@ -404,7 +415,7 @@ async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab:
         try:
             return (await run.call(base, prop)).facets[prop]
         except EduSharingError as exc:
-            if exc.kind not in _REFUSED:
+            if not _refused(exc):
                 raise
             await main_task
             return None
@@ -457,18 +468,25 @@ async def _execute_vocab_check(spec: QuerySpec, client: EduSharingClient, vocab:
             "oldest_fetched_at": min(fetched) if fetched else None,
             "cached": bool(run.results) and all(r.cached for r in run.results),
             "queries": len(run.results), "notes": list(notes),
-            "instance": {"id": inst.id, "name": inst.name, "base_url": inst.base_url,
-                         "repository": inst.repository, "metadataset": inst.metadataset},
+            "instance": {"id": inst.id, "base_url": inst.base_url, "repository": inst.repository,
+                         "metadataset": inst.metadataset, "query": inst.query},
             "spec": spec.model_dump(mode="json", exclude={"refresh"}),
-            "resolved": {"filters": base_described, "rows": None,
-                         "columns": [{"id": c["id"], "filters": [], "formula": None}
-                                     for c in columns]},
+            "rows": None, "filters": base_described,
+            "columns": [{"id": c["id"], "filters": [], "formula": None} for c in columns],
         },
     }
 
 
 # Ablehnungen des Repositoriums, die nur das eine Feld betreffen
-_REFUSED = frozenset({"rejected", "unknown_property"})
+def _refused(exc: EduSharingError) -> bool:
+    """Das Repositorium kennt das Feld nicht oder lehnt die Abfrage als ungültig ab (400).
+    Zugriffsfehler (401, 403, 404) betreffen die Instanz, nicht das Feld."""
+    return exc.kind == "unknown_property" or (exc.kind == "rejected" and exc.status == 400)
+
+
+# Suchhilfen des Repositoriums: keine gespeicherten Felder, ihre Facette ist immer leer
+def _helper(prop: str) -> bool:
+    return prop.startswith("virtual:") or prop == "license"
 # Widget-Arten, bei denen ein Material höchstens einen Wert trägt
 SINGLE_TYPES = frozenset({"singleoption", "radioHorizontal", "radioVertical",
                           "singlevalueTree", "slider", "checkbox"})
@@ -495,9 +513,10 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
                 "Zeile „ohne Wert“.")
         await vocab.check_facet(rows_spec.property)
         if row_prop in base_props:
-            raise QueryError(
-                f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern; für Füllgrade bitte "
-                "eines von beiden weglassen.")
+            # Die Facette ignoriert den Filter auf dem eigenen Feld.
+            notes.add("rows_filtered",
+                      f"Das Zeilenfeld '{row_prop}' steht auch in den Filtern: Die Zeilen "
+                      "zeigen nur die gefilterten Werte.")
     # Erst alles prüfen, dann fragen: Kein Aufruf für ein Feld, das nicht freigegeben ist.
     # Ein solches Feld bleibt unbekannt, damit eine gespeicherte Definition auch auf einer
     # Instanz läuft, die nicht jedes ihrer Felder kennt.
@@ -513,8 +532,11 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
                 raise
             closed.add(item.property)
     ids = [_field_id(f.property) for f in fill.fields]
-    if len(set(ids)) != len(ids) or "count" in ids:
-        raise QueryError("Zwei der Felder unterscheiden sich nur in Sonderzeichen.")
+    if rows_spec and (len(set(ids)) != len(ids) or "count" in ids):
+        raise QueryError(
+            "Zwei der Felder ergeben dieselbe Spalte (ihre Namen unterscheiden sich nur in "
+            "Sonderzeichen oder erst nach 40 Zeichen, oder eines heißt wie die Spalte "
+            "„Anzahl“).")
     check_prefix_shape(base, prefix_fields)
 
     async def occurring(prop: str):
@@ -537,13 +559,13 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
             return True
         if prop in prefix_fields:
             return await run.call(base + (Criterion(prop, ("",)),), row_prop)
-        if prop.startswith("virtual:"):
+        if _helper(prop):
             reasons[prop] = "virtual"  # kein gespeichertes Feld, nur eine Suchhilfe
             return None
         try:
             facet = (await run.call(base, prop)).facets[prop]
         except EduSharingError as exc:
-            if exc.kind not in _REFUSED:
+            if not _refused(exc):
                 raise
             await main_task  # liegt es an den Filtern, scheitert die Abfrage hier
             reasons[prop] = "refused"
@@ -551,28 +573,40 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
         if facet.truncated or len(facet.values) > MAX_VALUES:
             reasons[prop] = "many"
             return None
-        if not facet.values:
-            return False
+        # Ein leerer Wert ist kein Wert: Er zählt weder im Kriterium noch in der Summe.
+        values = [v for v in facet.values if v.value.strip()]
+        if len(values) < len(facet.values):
+            blank.add(prop)
         total = (await main_task).total
-        low, high = max(v.count for v in facet.values), sum(v.count for v in facet.values)
+        if not values:
+            if total:
+                empty.add(prop)
+            return False
+        best = max(values, key=lambda v: (v.count, v.value))
+        low, high = best.count, sum(v.count for v in values)
         try:
-            counted = await run.call(
-                base + (Criterion(prop, tuple(v.value for v in facet.values)),), row_prop)
+            # Probe: Zählt das Kriterium genau wie die Facette? Ein Kriterium, das anders
+            # vergleicht (Textsuche, Teiltreffer), fällt beim häufigsten Wert auf.
+            probe, counted = await asyncio.gather(
+                run.call(base + (Criterion(prop, (best.value,)),)),
+                run.call(base + (Criterion(prop, tuple(v.value for v in values)),), row_prop))
         except EduSharingError as exc:
-            if exc.kind not in _REFUSED:
+            if not _refused(exc):
                 raise
-            counted = None
-        # Die Zählung muss zu den Facetten passen: mindestens der häufigste Wert, höchstens
-        # die Summe. Sonst vergleicht das Kriterium nicht exakt (z. B. Textsuche).
-        if counted is not None and low <= counted.total <= high:
+            probe = counted = None
+        if (probe is not None and counted is not None and probe.total == best.count
+                and low <= counted.total <= high):
             return counted
         field = await vocab.field(prop)
-        if low == high or (field is not None and field.type in SINGLE_TYPES):
+        if high <= total and (low == high
+                              or (field is not None and field.type in SINGLE_TYPES)):
             summed.add(prop)
-            return min(high, total)
+            return high
         ranges[prop] = (low, min(high, total))
         return None
 
+    blank: set[str] = set()
+    empty: set[str] = set()
     by_field: list[Aggregate | int | bool | None] = list(await asyncio.gather(
         *[measure(f.property) for f in fill.fields]))
     main = await main_task
@@ -610,11 +644,21 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
                   "zählt und ein Material mehrere Werte tragen kann. Materialien mit Wert "
                   f"insgesamt: {parts}.")
     if summed:
-        text = ("Aus der Summe der einzelnen Werte gerechnet (das Feld trägt je Material "
-                f"einen Wert): {', '.join(name[p] for p in name if p in summed)}.")
+        text = ("Aus der Summe der einzelnen Werte gerechnet, weil das Repositorium das "
+                "Feld nicht als Filter zählt. Das stimmt, solange jedes Material höchstens "
+                "einen Wert trägt (laut Metadatenset einwertig); sonst ist die Zahl zu "
+                f"hoch: {', '.join(name[p] for p in name if p in summed)}.")
         if rows_spec:
             text += " Je Zeile ist das nicht möglich."
         notes.add("fill_summed", text)
+    if empty:
+        notes.add("fill_empty",
+                  "Kein einziger Wert kommt vor: "
+                  f"{', '.join(name[p] for p in name if p in empty)}.")
+    if blank:
+        notes.add("fill_blank",
+                  "Leere Werte zählen nicht als Wert: "
+                  f"{', '.join(name[p] for p in name if p in blank)}.")
     filtered = [label for label, got in zip(labels, by_field, strict=True) if got is True]
     if filtered:
         notes.add("fill_filtered",
@@ -677,6 +721,9 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
             keys = [item["value"] for item in include]
         else:
             keys = list(counts)
+        restrict = next((set(c.values) for c in base if c.property == row_prop), None)
+        if restrict is not None:
+            keys = [k for k in keys if k in restrict]
         rows = [_Row(k, await vocab.label(rows_spec.property, k), "value") for k in keys]
         count_column = _Column("count", "Anzahl")
         for row in rows:
@@ -700,7 +747,10 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
                 "key": row.key, "label": row.label, "kind": "value",
                 "values": [total, *[shown(filled_of(got, total, row.key, facet.truncated), total)
                                     for got in by_field]]})
-        if len(rows) > 1:
+        row_field = await vocab.field(row_prop)
+        one_valued = row_prop in prefix_fields or (
+            row_field is not None and row_field.type in SINGLE_TYPES)
+        if len(rows) > 1 and not one_valued:
             notes.add("rows_overlap",
                       f"Ein Dokument kann mehrere Werte von '{row_prop}' tragen und steht dann "
                       "in mehreren Zeilen.")
@@ -731,6 +781,8 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
             "rows": provenance_rows, "filters": base_described, "columns": column_notes,
         },
     }
+    # woran Grafiken erkennen, was sie zeigen dürfen (nie Anzahl und Anteil gemischt)
+    result["fill"] = {"show": fill.show, "by_rows": rows_spec is not None}
     if rows_spec is None:
         result["total_row"] = False
         result["base_total"] = main.total
@@ -941,7 +993,7 @@ async def _count_with_any_value(run: _Run, criteria: tuple[Criterion, ...], prop
     try:
         return (await run.call(criteria + (Criterion(prop, values),))).total
     except EduSharingError as exc:
-        if exc.kind != "unknown_property" and exc.status != 400:
+        if not _refused(exc):
             raise
         return None  # das Repositorium zählt dieses Feld nicht als Filter
 

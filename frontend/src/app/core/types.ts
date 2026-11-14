@@ -26,7 +26,7 @@ export interface ResultRow {
 export interface QueryResult {
   schema_version: number; instance: string; columns: ResultColumn[]; rows: ResultRow[];
   /** Füllgrade ohne Zeilenfeld: keine Gesamtzeile, dafür die Grundgesamtheit */
-  total_row?: boolean; base_total?: number | null;
+  total_row?: boolean; base_total?: number | null; fill?: FillInfo | null;
   provenance: {
     fetched_at: number | null; oldest_fetched_at: number | null; cached: boolean;
     queries: number; notes: Note[];
@@ -42,6 +42,7 @@ export interface Instance {
 export interface FieldInfo { property: string; caption: string; type: string; value_count: number }
 export interface VocabValue { id: string; caption: string; parent?: string | null }
 export interface VocabPage { property: string; caption: string; total: number; values: VocabValue[] }
+export interface FillInfo { show: FillShow; by_rows: boolean }
 export type ViewType = 'table' | 'number' | 'bar' | 'stacked_bar' | 'line' | 'pie' | 'heatmap';
 export interface View { type: ViewType; options?: Record<string, string | number | boolean | null> }
 export type Kind = 'filter' | 'metric' | 'dashboard' | 'template';
@@ -57,7 +58,7 @@ export interface RunHead {
   origin?: 'manual' | 'schedule'; instance?: string | null;
 }
 export interface ReportTable {
-  type: 'table'; key: string; title: string;
+  type: 'table'; key: string; title: string; fill?: FillInfo | null;
   columns: { id: string; label: string; derived: boolean }[]; rows: ResultRow[];
   header_groups?: [string, number][] | null; view: View; notes: Note[];
   sources: Record<string, any>[];

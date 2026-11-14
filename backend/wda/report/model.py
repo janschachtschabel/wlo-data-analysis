@@ -38,6 +38,8 @@ class Table:
     header_groups: list[tuple[str, int]] | None = None  # (Beschriftung, Zahl der Spalten)
     notes: list[dict[str, str]] = field(default_factory=list)
     sources: list[dict[str, Any]] = field(default_factory=list)
+    # Füllgrade: {"show": rate|missing|filled, "by_rows": bool}; sagt Grafiken, was sie zeigen
+    fill: dict[str, Any] | None = None
 
 
 @dataclass

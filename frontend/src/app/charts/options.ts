@@ -1,9 +1,11 @@
 import { formatNumber } from '../core/format';
-import { ResultRow, ViewType } from '../core/types';
+import { FillInfo, ResultRow, ViewType } from '../core/types';
 
 export interface ChartInput {
   columns: { id: string; label: string; derived?: boolean }[];
   rows: ResultRow[];
+  /** Füllgrade: sagt, welche Spalten in eine Grafik dürfen */
+  fill?: FillInfo | null;
 }
 export interface Palette { series: string[]; surface: string; text: string; muted: string; grid: string }
 
@@ -190,29 +192,17 @@ export function historyPlan(input: HistoryInput, palette: Palette): ChartPlan {
   };
 }
 
-/** Tabelle der Füllgrade je Feld (Spalten „mit Wert“, „ohne Wert“, „Füllgrad %“)? */
-export function isFillTable(columns: { id: string }[]): boolean {
-  return columns.length === 3 && columns[0].id === 'filled' && columns[1].id === 'missing' && columns[2].id === 'rate';
-}
-
 /**
- * Was eine Grafik aus einer Füllgrad-Tabelle zeigt: gestapelt „mit Wert / ohne Wert“ (zusammen
- * die Grundgesamtheit), sonst nur den Füllgrad. Anzahl und Prozent kommen nie in eine Grafik.
+ * Was eine Grafik aus Füllgraden zeigt (dieselbe Auswahl wie backend/wda/report/charts.py):
+ * je Feld gestapelt „mit Wert / ohne Wert“, sonst nur den Füllgrad; je Zeile die Spalten der
+ * Felder ohne die Anzahl. Anzahl und Anteil kommen nie zusammen in eine Grafik.
  */
 export function fillChartData(input: ChartInput, view: ViewType): ChartInput {
-  if (isFillTable(input.columns)) {
-    const keep = view === 'stacked_bar' ? [0, 1] : [2];
-    return {
-      // „ohne Wert“ ist zwar berechnet, ergänzt „mit Wert“ aber genau zur Gesamtzahl
-      columns: keep.map((n) => ({ ...input.columns[n], derived: false })),
-      rows: input.rows.map((r) => ({ ...r, values: keep.map((n) => r.values[n]), percent: null })),
-    };
-  }
-  if (input.columns.length > 1 && input.columns[0].id === 'count' && input.columns.slice(1).every((c) => c.derived)) {
-    return {
-      columns: input.columns.slice(1),
-      rows: input.rows.map((r) => ({ ...r, values: r.values.slice(1), percent: null })),
-    };
-  }
-  return input;
+  if (!input.fill) return input;
+  const keep = input.fill.by_rows ? input.columns.map((_, n) => n).slice(1) : view === 'stacked_bar' ? [0, 1] : [2];
+  return {
+    // „ohne Wert“ ist zwar berechnet, ergänzt „mit Wert“ aber genau zur Gesamtzahl
+    columns: keep.map((n) => ({ ...input.columns[n], derived: false })),
+    rows: input.rows.map((r) => ({ ...r, values: keep.map((n) => r.values[n]), percent: null })),
+  };
 }
