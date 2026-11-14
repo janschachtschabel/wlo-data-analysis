@@ -8,7 +8,7 @@ import { SnapshotPanel } from './snapshot-panel';
 /** die mitgelieferten Auswertungen zählen gegen WLO */
 const INSTANCE = 'wlo-prod';
 
-interface Builtin { id: string; definitions: { id: string; installed: boolean }[] }
+interface Builtin { id: string; definitions: { id: string; installed: boolean; changed?: boolean }[] }
 
 export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?: string }[] = [
   { id: 'datenqualitaet', label: 'Füllgrade', hint: 'Wie oft sind die Felder ausgefüllt?' },
@@ -54,6 +54,12 @@ export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?:
       </div>
     }
     @if (current().snapshot; as instance) { <app-snapshot-panel [instance]="instance" (changed)="reload($event)" /> }
+    @if (outdated()) {
+      <p class="notice row" role="status">
+        <span class="grow">Diese Auswertung weicht von der mitgelieferten Fassung ab: Es gibt eine neuere, oder du hast sie selbst geändert.</span>
+        <button type="button" (click)="renew()" title="Eigene Änderungen an dieser Auswertung gehen dabei verloren">Mitgelieferte Fassung übernehmen</button>
+      </p>
+    }
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @else if (current().snapshot && !complete()) { <p class="muted">Sobald der Abzug vollständig ist, erscheinen hier die Auswertungen.</p> }
     @else if (ready() && shown()) { <app-run-page [defId]="'builtin-' + current().id" [scope]="scope()" /> }
@@ -75,6 +81,8 @@ export class Quality {
   protected readonly complete = signal(false);
   protected readonly shown = signal(true);
   protected readonly error = signal('');
+  /** die installierte Auswertung ist nicht (mehr) die mitgelieferte */
+  protected readonly outdated = signal(false);
   /** Worauf sich eine Auswertung einengen lässt: die Quelle des Crawlers oder die Bezugsquelle */
   protected readonly contexts = [
     { property: 'ccm:replicationsource', label: 'eine Quelle (Crawler)', short: 'Quelle' },
@@ -113,14 +121,29 @@ export class Quality {
     setTimeout(() => this.shown.set(true));
   }
 
+  protected async renew(): Promise<void> {
+    const id = this.current().id;
+    try {
+      await this.api.post(`/builtin/${encodeURIComponent(id)}/install?mode=replace`);
+      this.outdated.set(false);
+      this.reload(this.complete());
+    } catch (error) {
+      this.error.set(error instanceof ApiError ? error.message : 'Die Fassung ließ sich nicht übernehmen.');
+    }
+  }
+
   private async prepare(id: string): Promise<void> {
     this.ready.set(false);
+    this.outdated.set(false);
     this.error.set('');
     try {
       const bundles = await this.api.get<Builtin[]>('/builtin');
       const bundle = bundles.find((b) => b.id === id);
       if (bundle && bundle.definitions.some((d) => !d.installed)) await this.api.post(`/builtin/${encodeURIComponent(id)}/install`);
-      if (this.current().id === id) this.ready.set(true);
+      if (this.current().id === id) {
+        this.outdated.set(!!bundle?.definitions.some((d) => d.installed && d.changed));
+        this.ready.set(true);
+      }
     } catch (error) {
       if (this.current().id === id) this.error.set(error instanceof ApiError ? error.message : 'Die Auswertung ließ sich nicht vorbereiten.');
     }

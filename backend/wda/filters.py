@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from calendar import monthrange
+from collections.abc import Awaitable, Callable, Sequence
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
@@ -27,18 +29,60 @@ class LiteralValue(BaseModel):
 ValueIn = Value | LiteralValue
 
 
+class SinceValue(BaseModel):
+    """Zeitpunkt relativ zu heute: ``30d``, ``12m`` oder ``5y`` (Tage, Monate, Jahre). Nur
+    für die beiden Zeitkriterien; so lassen sich Zufluss und Pflege eines Bestands zählen."""
+
+    model_config = ConfigDict(extra="forbid")
+    since: Annotated[StrictStr, Field(pattern=r"^[1-9]\d{0,3}[dmy]$")]
+
+
+TIME_CRITERIA = ("virtual:time_after_created", "virtual:time_after_modified")
+
+
+def _today() -> date:
+    return datetime.now(UTC).date()
+
+
+def since_day(text: str) -> date:
+    """Der Tag, der so weit vor heute liegt. Gibt es ihn nicht (31. Februar), gilt der
+    letzte Tag des Monats."""
+    today, count, unit = _today(), int(text[:-1]), text[-1]
+    if unit == "d":
+        return today - timedelta(days=count)
+    months = today.year * 12 + today.month - 1 - (count if unit == "m" else count * 12)
+    year, month = divmod(months, 12)
+    return date(year, month + 1, min(today.day, monthrange(year, month + 1)[1]))
+
+
+def _since(property: str, item: SinceValue) -> dict[str, str]:
+    if property not in TIME_CRITERIA:
+        raise EduSharingError(
+            "invalid_query",
+            f"Ein Zeitraum (since) passt nur zu {' und '.join(TIME_CRITERIA)}, nicht zu "
+            f"'{property}'.")
+    day = since_day(item.since)
+    # ganze Tage in UTC: so bleibt die Abfrage einen Tag lang dieselbe (Zwischenspeicher)
+    millis = int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp() * 1000)
+    return {"value": str(millis), "label": f"seit {day:%d.%m.%Y}", "how": "since"}
+
+
 class FilterIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     property: Name
-    values: list[ValueIn] = Field(min_length=1, max_length=2000)
+    values: list[ValueIn | SinceValue] = Field(min_length=1, max_length=2000)
 
 
 async def resolve_values(
-    vocab: VocabStore, property: str, values: list[ValueIn]
+    vocab: VocabStore, property: str, values: Sequence[ValueIn | SinceValue]
 ) -> list[dict[str, str]]:
     """Löst Labels und URIs auf; doppelte Treffer fallen zusammen, die Reihenfolge bleibt."""
     resolved: dict[str, dict[str, str]] = {}
     for item in values:
+        if isinstance(item, SinceValue):
+            found = _since(property, item)
+            resolved.setdefault(found["value"], found)
+            continue
         if isinstance(item, LiteralValue):
             res = await vocab.resolve(property, item.value, literal=True)
         else:

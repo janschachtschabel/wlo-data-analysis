@@ -47,6 +47,14 @@ describe('Grafik aus einer Ergebnistabelle', () => {
     expect(single.option!['series'][0].stack).toBeUndefined();
   });
 
+  it('stapelt auch, wenn alle Spalten berechnet sind (Zeiträume als Differenzen)', () => {
+    const rows = [row('A', [1, 2]), row('B', [3, 4])];
+    const derived = cols(2).map((c) => ({ ...c, derived: true }));
+    const plan = chartPlan({ columns: derived, rows }, 'stacked_bar', palette);
+    expect(plan.option!['series'].map((s: any) => s.stack)).toEqual(['gesamt', 'gesamt']);
+    expect(plan.notes).toEqual([]);
+  });
+
   it('zeigt im Kreis eine Spalte, nur positive Werte, die größten zuerst, und erfindet kein „Übrige“', () => {
     const rows = Array.from({ length: MAX_SLICES + 3 }, (_, i) => row('R' + i, [i, 100]));
     rows.push(row('leer', [null, 1]));

@@ -115,7 +115,8 @@ export function chartPlan(input: ChartInput, view: ViewType, palette: Palette): 
       },
     };
   }
-  const stacked = view === 'stacked_bar' && columns.length > 1 && !columns.some((c) => c.derived);
+  // Nur berechnete Spalten (etwa Zeiträume als Differenzen): Wer dafür gestapelte Balken wählt, meint Teile eines Ganzen.
+  const stacked = view === 'stacked_bar' && columns.length > 1 && (!columns.some((c) => c.derived) || columns.every((c) => c.derived));
   return {
     notes,
     height: Math.max(220, 60 + rows.length * (stacked || columns.length === 1 ? 30 : 14 + columns.length * 12)),

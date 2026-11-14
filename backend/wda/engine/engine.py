@@ -452,6 +452,15 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                                 for v, col in zip(values, columns, strict=True)]
         out_rows.append(entry)
 
+    hidden = {s.id for s in spec.series or [] if s.hidden}
+    if hidden:
+        keep = [n for n, col in enumerate(columns) if col.id not in hidden]
+        columns = [columns[n] for n in keep]
+        for entry in out_rows:
+            for name in ("values", "percent"):
+                if name in entry:
+                    entry[name] = [entry[name][n] for n in keep]
+
     fetched = [r.fetched_at for r in run.results]
     inst = client.instance
     return {

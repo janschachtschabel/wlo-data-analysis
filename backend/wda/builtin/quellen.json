@@ -4,7 +4,7 @@
  "builtin": {
   "id": "quellen",
   "title": "Quellen",
-  "description": "Datenprobleme und Merkmale mit Bezug zu den Quellen, nach dem Vorbild des Quellenpanels: Größe und Bindung der Quellen, dünne Metadaten, Kosten, Werbung, Zugang, Datenschutz und Erschließung je Bezugsquelle, Vollständigkeit der Quelldatensätze."
+  "description": "Datenprobleme und Merkmale mit Bezug zu den Quellen, nach dem Vorbild des Quellenpanels: Datenströme (Bestand, Zufluss, Pflege), Größe und Bindung der Quellen, dünne Metadaten, Kosten, Werbung, Zugang, Datenschutz und Erschließung je Bezugsquelle, Vollständigkeit der Quelldatensätze."
  },
  "groups": [
   {
@@ -23,6 +23,318 @@
     "instance": "wlo-prod",
     "tiles": [
      {
+      "id": "strom-quellen",
+      "title": "Datenströme der Quellen (Crawler): Bestand, Zufluss und Pflege (30 größte). Kein Zufluss und alles unberührt heißt: der Strom ist versiegt",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 30
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Bestand"
+        },
+        {
+         "id": "neu30",
+         "label": "neu in 30 Tagen",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "30d"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "neu12",
+         "label": "neu in 12 Monaten",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "zufluss",
+         "label": "Zufluss 12 Monate %",
+         "formula": "round(neu12 / gesamt * 100, 1)"
+        },
+        {
+         "id": "gepflegt",
+         "label": "in 12 Monaten geändert",
+         "filters": [
+          {
+           "property": "virtual:time_after_modified",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "ruhend",
+         "label": "seit 12 Monaten unberührt",
+         "formula": "gesamt - gepflegt"
+        },
+        {
+         "id": "ruhend_anteil",
+         "label": "unberührt %",
+         "formula": "round((gesamt - gepflegt) / gesamt * 100, 1)"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 0,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
+      "id": "zufluss-jahre",
+      "title": "Wann kam der Bestand herein? Zufluss je Quelle (Crawler) nach Alter (15 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:replicationsource",
+        "top": 15
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Bestand",
+         "hidden": true
+        },
+        {
+         "id": "s1",
+         "label": "seit 1 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "1y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s2",
+         "label": "seit 2 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "2y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s3",
+         "label": "seit 3 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "3y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s4",
+         "label": "seit 4 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "4y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "s5",
+         "label": "seit 5 Jahren",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "5y"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "j1",
+         "label": "letzte 12 Monate",
+         "formula": "s1"
+        },
+        {
+         "id": "j2",
+         "label": "vor 1 bis 2 Jahren",
+         "formula": "s2 - s1"
+        },
+        {
+         "id": "j3",
+         "label": "vor 2 bis 3 Jahren",
+         "formula": "s3 - s2"
+        },
+        {
+         "id": "j4",
+         "label": "vor 3 bis 4 Jahren",
+         "formula": "s4 - s3"
+        },
+        {
+         "id": "j5",
+         "label": "vor 4 bis 5 Jahren",
+         "formula": "s5 - s4"
+        },
+        {
+         "id": "alt",
+         "label": "älter als 5 Jahre",
+         "formula": "gesamt - s5"
+        }
+       ]
+      },
+      "view": {
+       "type": "stacked_bar",
+       "options": {}
+      },
+      "layout": {
+       "x": 0,
+       "y": 11,
+       "w": 12,
+       "h": 10
+      }
+     },
+     {
+      "id": "strom-bezugsquellen",
+      "title": "Datenströme der Bezugsquellen: Bestand, Zufluss und Pflege (40 größte)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_publisher_combined",
+        "top": 40
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Bestand"
+        },
+        {
+         "id": "neu30",
+         "label": "neu in 30 Tagen",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "30d"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "neu12",
+         "label": "neu in 12 Monaten",
+         "filters": [
+          {
+           "property": "virtual:time_after_created",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "zufluss",
+         "label": "Zufluss 12 Monate %",
+         "formula": "round(neu12 / gesamt * 100, 1)"
+        },
+        {
+         "id": "gepflegt",
+         "label": "in 12 Monaten geändert",
+         "filters": [
+          {
+           "property": "virtual:time_after_modified",
+           "values": [
+            {
+             "since": "12m"
+            }
+           ]
+          }
+         ],
+         "hidden": true
+        },
+        {
+         "id": "ruhend",
+         "label": "seit 12 Monaten unberührt",
+         "formula": "gesamt - gepflegt"
+        },
+        {
+         "id": "ruhend_anteil",
+         "label": "unberührt %",
+         "formula": "round((gesamt - gepflegt) / gesamt * 100, 1)"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap",
+       "options": {
+        "zero": "plain",
+        "scale_by": "column"
+       }
+      },
+      "layout": {
+       "x": 0,
+       "y": 21,
+       "w": 12,
+       "h": 11
+      }
+     },
+     {
       "id": "groessen-bezugsquellen",
       "title": "Bezugsquellen nach Größe: wie viele haben nur ein Material, wie viele unter 5?",
       "query": {
@@ -37,7 +349,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 0,
+       "y": 32,
        "w": 6,
        "h": 7
       }
@@ -57,7 +369,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 0,
+       "y": 32,
        "w": 6,
        "h": 7
       }
@@ -89,7 +401,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 7,
+       "y": 39,
        "w": 12,
        "h": 4
       }
@@ -117,7 +429,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 11,
+       "y": 43,
        "w": 12,
        "h": 10
       }
@@ -147,7 +459,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 21,
+       "y": 53,
        "w": 12,
        "h": 11
       }
@@ -197,7 +509,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 32,
+       "y": 64,
        "w": 12,
        "h": 14
       }
@@ -266,7 +578,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 46,
+       "y": 78,
        "w": 12,
        "h": 11
       }
@@ -295,7 +607,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 57,
+       "y": 89,
        "w": 6,
        "h": 10
       }
@@ -324,7 +636,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 57,
+       "y": 89,
        "w": 6,
        "h": 10
       }
@@ -353,7 +665,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 67,
+       "y": 99,
        "w": 6,
        "h": 10
       }
@@ -382,7 +694,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 67,
+       "y": 99,
        "w": 6,
        "h": 10
       }
@@ -411,7 +723,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 77,
+       "y": 109,
        "w": 6,
        "h": 10
       }
@@ -440,7 +752,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 77,
+       "y": 109,
        "w": 6,
        "h": 10
       }
@@ -570,7 +882,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 87,
+       "y": 119,
        "w": 12,
        "h": 14
       }
@@ -601,7 +913,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 101,
+       "y": 133,
        "w": 6,
        "h": 8
       }
@@ -632,7 +944,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 101,
+       "y": 133,
        "w": 6,
        "h": 8
       }
@@ -663,7 +975,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 109,
+       "y": 141,
        "w": 6,
        "h": 8
       }
@@ -694,7 +1006,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 109,
+       "y": 141,
        "w": 6,
        "h": 8
       }
@@ -725,7 +1037,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 117,
+       "y": 149,
        "w": 6,
        "h": 8
       }
@@ -756,7 +1068,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 117,
+       "y": 149,
        "w": 6,
        "h": 8
       }

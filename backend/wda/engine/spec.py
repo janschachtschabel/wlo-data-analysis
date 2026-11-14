@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, model_validator
 
 from ..filters import FilterIn, Name, ValueIn
 from .formula import FUNCTIONS
@@ -67,6 +67,7 @@ class Series(_Model):
     label: Label
     filters: list[FilterIn] = Field(default_factory=list, max_length=10)
     formula: Annotated[StrictStr, Field(min_length=1, max_length=500)] | None = None
+    hidden: StrictBool = False  # zählt mit und speist Formeln, erscheint aber nicht
 
     @model_validator(mode="after")
     def _either(self) -> Series:
@@ -246,4 +247,8 @@ class QuerySpec(_Model):
             raise ValueError("Spalten-IDs müssen eindeutig sein")
         if set(ids) & set(FUNCTIONS):
             raise ValueError("round, max und min sind als Spalten-ID nicht erlaubt")
+        if self.series and all(s.hidden for s in self.series):
+            raise ValueError("mindestens eine Spalte muss sichtbar bleiben (hidden)")
+        if self.gaps and any(s.hidden for s in self.series):
+            raise ValueError("gaps geht nicht zusammen mit verborgenen Spalten (hidden)")
         return self

@@ -307,6 +307,19 @@ assert.ok(await page.locator('button:has-text("Lauf speichern")').isDisabled(), 
 await page.click('button:has-text("Zurück zum Gesamtbestand")');
 await page.click('.tabs >> text=Quellen');
 await page.waitForSelector('app-report-view :text("Kosten je Bezugsquelle")', { timeout: 60000 });
+await page.waitForSelector('app-report-view :text("Datenströme der Quellen")');
+// Chatfenster neben der Ansicht: bezieht sich auf die Auswertung, die Seite bleibt bedienbar
+await page.click('header button:has-text("Chat")');
+await page.waitForSelector('#chat-dock .context:has-text("Quellen")');
+await page.fill('#chat-dock #question', 'Wo fehlt Angebot?');
+await page.keyboard.press('Enter');
+await page.waitForSelector('#chat-dock .bubble.prose', { timeout: 30000 });
+await page.waitForSelector('#chat-dock .follow button');
+assert.ok(await page.locator('main app-report-view').first().isVisible(), 'die Ansicht bleibt neben dem Chat');
+await page.click('#chat-dock button:has-text("Neu beginnen")');
+await page.click('#chat-dock .context button:has-text("lösen")');
+await page.click('#chat-dock button:has-text("Schließen")');
+await page.waitForSelector('#chat-dock', { state: 'detached' });
 await page.waitForSelector('app-report-view td:has-text("2 bis 4")');
 assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, 'Merkmale je Bezugsquelle sind eingefärbt');
 await page.screenshot({ path: process.env.SHOT_QUELLEN ?? '/dev/null', fullPage: true }).catch(() => undefined);
