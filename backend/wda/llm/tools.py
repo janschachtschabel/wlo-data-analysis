@@ -233,8 +233,10 @@ class Toolbox:
         return spec
 
     async def _run_query(self, args: dict[str, Any]) -> Any:
-        return compact(await run_query(await self._query(args.get("spec")), self._client,
-                                       self._vocab))
+        spec = await self._query(args.get("spec"))
+        return compact(await run_query(
+            spec, self._client, self._vocab,
+            self._services.snapshot(self.instance) if spec.snapshot else None))
 
     async def _preview(self, kind: str, name: str, spec: dict[str, Any]) -> dict[str, Any]:
         run = await self._services.runner.preview(kind, name, spec, instance=self.instance)
@@ -345,6 +347,8 @@ def _about(spec: Any) -> str:
         parts.append("Werte außerhalb der Wertelisten")
     if isinstance(spec.get("profile"), dict):
         parts.append(f"Merkmal {str(spec['profile'].get('property'))[:60]} je Zeile")
+    if isinstance(spec.get("snapshot"), dict):
+        parts.append(f"aus dem lokalen Abzug ({str(spec['snapshot'].get('analysis'))[:40]})")
     if isinstance(spec.get("sizes"), dict):
         parts.append(f"Größenklassen von {str(spec['sizes'].get('property'))[:60]}")
     if isinstance(rows, dict) and rows.get("property"):

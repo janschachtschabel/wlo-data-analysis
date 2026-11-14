@@ -297,6 +297,16 @@ await page.waitForSelector('app-report-view :text("Kosten je Bezugsquelle")', { 
 await page.waitForSelector('app-report-view td:has-text("2 bis 4")');
 assert.ok((await page.locator('app-report-view td[class^="h"]').count()) > 20, 'Merkmale je Bezugsquelle sind eingefärbt');
 await page.screenshot({ path: process.env.SHOT_QUELLEN ?? '/dev/null', fullPage: true }).catch(() => undefined);
+// Tiefenprüfung: erst der lokale Abzug, dann Auswertungen daraus; kein Freitext in der Seite
+await page.click('.tabs >> text=Tiefenprüfung');
+await page.waitForSelector('app-snapshot-panel >> text=noch keiner vorhanden');
+await page.click('app-snapshot-panel button:has-text("Abzug starten")');
+await page.waitForSelector('app-snapshot-panel >> text=400 Materialien, Stand', { timeout: 60000 });
+await page.waitForSelector('app-report-view :text("Verdacht auf Dubletten")', { timeout: 60000 });
+await page.screenshot({ path: process.env.SHOT_TIEFE ?? '/dev/null', fullPage: true }).catch(() => undefined);
+await page.waitForSelector('app-report-view td.r-high, app-report-view td.r-mid, app-report-view td.r-low');
+assert.ok(!(await page.content()).includes('Material Nummer'), 'Titel aus dem Repositorium stehen in der Seite');
+await page.screenshot({ path: process.env.SHOT_TIEFE ?? '/dev/null', fullPage: true }).catch(() => undefined);
 await page.goto(base + '/bibliothek');
 await page.waitForSelector('section a:has-text("Abdeckung")');
 

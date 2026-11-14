@@ -209,6 +209,35 @@ class EduSharingClient:
         data = await self._request("POST", url, params=params, json=body)
         return self._parse(data, facets)
 
+    async def node_page(self, criteria: Sequence[Criterion], *, sort: str, max_items: int,
+                        skip: int = 0, properties: Sequence[str] = (),
+                        content_type: str = "FILES", timeout: float = 180.0
+                        ) -> tuple[int, list[Any]]:
+        """Eine Seite Knoten, aufsteigend sortiert: ``(Gesamtzahl, Knoten)``. Der einzige Weg,
+        auf dem Datensätze das Repositorium verlassen; nur der lokale Abzug ruft ihn und
+        macht aus jedem Knoten sofort Merkmale (``wda.snapshot``). Keine Route reicht
+        Knoten weiter, nichts davon wird gemerkt."""
+        inst = self.instance
+        url = (f"{inst.rest_url}/search/v1/queries/{quote(inst.repository, safe='')}/"
+               f"{quote(inst.metadataset, safe='')}/{quote(inst.query, safe='')}")
+        if not 1 <= max_items <= 2000 or skip < 0 or skip + max_items > 10000:
+            raise EduSharingError("invalid_query", "Seite außerhalb der Grenzen der Suche.")
+        params: list[tuple[str, str]] = [
+            ("contentType", content_type), ("maxItems", str(max_items)),
+            ("skipCount", str(skip)), ("sortProperties", sort), ("sortAscending", "true"),
+            *[("propertyFilter", name) for name in properties]]
+        body = {"criteria": [{"property": c.property, "values": list(c.values)}
+                             for c in criteria], "facets": []}
+        data = await self._request("POST", url, timeout=timeout, params=params, json=body)
+        bad = EduSharingError(
+            "bad_response", "Die Antwort der Suche hat ein unerwartetes Format.", 200)
+        if not isinstance(data, dict) or not isinstance(data.get("nodes"), list):
+            raise bad
+        pagination = data.get("pagination")
+        if not isinstance(pagination, dict) or not _is_count(pagination.get("total")):
+            raise bad
+        return pagination["total"], data["nodes"]
+
     def _parse(self, data: Any, wanted: tuple[str, ...]) -> Aggregate:
         bad = EduSharingError(
             "bad_response", "Die Antwort der Suche hat ein unerwartetes Format.", 200)
@@ -260,7 +289,8 @@ class EduSharingClient:
             fetched_at=self._clock(),
         )
 
-    async def _request(self, method: str, url: str, **kwargs: Any) -> Any:
+    async def _request(self, method: str, url: str, timeout: float | None = None,
+                       **kwargs: Any) -> Any:
         last: EduSharingError | None = None
         for attempt in range(self._retries + 1):
             if attempt:
@@ -268,7 +298,7 @@ class EduSharingClient:
             try:
                 async with self._semaphore:
                     response = await self._http.request(
-                        method, url, auth=self._auth, timeout=self._timeout,
+                        method, url, auth=self._auth, timeout=timeout or self._timeout,
                         headers={"Accept": "application/json"}, **kwargs)
             except httpx.TimeoutException:
                 # Nicht wiederholen: Ein zweiter Versuch würde nur noch einmal so lange warten.

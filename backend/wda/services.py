@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
+import os
+import secrets
 from datetime import UTC, datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -20,6 +24,7 @@ from .instances import Instance, InstanceRegistry
 from .jobs import Jobs
 from .llm import config as llm_config
 from .llm.client import LlmClient
+from .snapshot.store import Snapshot
 from .store.db import Database
 from .store.definitions import DefinitionStore
 from .store.history import History
@@ -51,6 +56,9 @@ class Services:
         self._db: Database | None = None
         self._stored_loaded = False
         self.jobs = Jobs()
+        self._snapshots: dict[str, Snapshot] = {}
+        self._snapshot_secret: bytes | None = None
+        self.syncs: dict[str, Any] = {}  # laufende Abzüge je Instanz
 
     @property
     def registry(self) -> InstanceRegistry:
@@ -96,6 +104,16 @@ class Services:
         self._clients.pop(instance_id, None)
         self._vocabs.pop(instance_id, None)
         self.cache.clear()
+        # der Abzug gehört zur alten Adresse
+        running = self.syncs.pop(instance_id, None)
+        if running is not None:
+            running.cancel()
+        old = self._snapshots.pop(instance_id, None)
+        if old is not None:
+            old.close()
+        for path in (self._settings.data_dir / "abzug").glob(f"{instance_id}.sqlite3*"):
+            with contextlib.suppress(OSError):
+                path.unlink()
         with contextlib.suppress(OSError):
             (self._settings.data_dir / "cache" / f"mds-{instance_id}.json").unlink()
 
@@ -194,6 +212,35 @@ class Services:
             )
         return self._clients[instance_id]
 
+    def snapshot(self, instance_id: str) -> Snapshot:
+        """Der lokale Abzug der Instanz (Merkmale, keine Inhalte). ``KeyError`` bei
+        unbekannter Instanz."""
+        self.registry.get(instance_id)
+        if instance_id not in self._snapshots:
+            self._snapshots[instance_id] = Snapshot(
+                self._settings.data_dir / "abzug" / f"{instance_id}.sqlite3")
+        return self._snapshots[instance_id]
+
+    @property
+    def snapshot_secret(self) -> bytes:
+        """Geheimnis für die Schlüssel gleicher Adressen und Titel; bleibt im
+        Datenverzeichnis. Geht es verloren, passt ein neuer Abzug nicht zum alten."""
+        if self._snapshot_secret is None:
+            path = self._settings.data_dir / "abzug" / "schluessel"
+            try:
+                existing = path.read_bytes()
+            except OSError:
+                existing = b""
+            if len(existing) < 32:
+                existing = secrets.token_bytes(32)
+                with contextlib.suppress(OSError):
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as handle:
+                        handle.write(existing)
+            self._snapshot_secret = existing
+        return self._snapshot_secret
+
     def vocab(self, instance_id: str) -> VocabStore:
         if instance_id not in self._vocabs:
             self._vocabs[instance_id] = VocabStore(
@@ -202,6 +249,15 @@ class Services:
 
     async def aclose(self) -> None:
         await self.jobs.aclose()
+        tasks = [t for t in self.syncs.values() if not t.done()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.syncs.clear()
+        for snap in self._snapshots.values():
+            snap.close()
+        self._snapshots.clear()
         if self._http is not None:
             await self._http.aclose()
             self._http = None

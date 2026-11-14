@@ -90,6 +90,13 @@ MDS = {"id": "oeh", "widgets": [
 ]}
 
 Doc = dict[str, list[str]]
+TIME_CRITERIA = {"virtual:time_after_created": "cm:created",
+                 "virtual:time_after_modified": "cm:modified"}
+
+
+def _iso(ms: int) -> str:
+    from datetime import UTC, datetime
+    return datetime.fromtimestamp(ms / 1000, UTC).isoformat().replace("+00:00", "Z")
 
 
 def make_docs(n: int = 400, seed: int = 7) -> list[Doc]:
@@ -142,6 +149,7 @@ class DataRepo:
     def __init__(self, docs: list[Doc] | None = None) -> None:
         self.docs = docs if docs is not None else make_docs()
         self.requests: list[httpx.Request] = []
+        self.node_requests = 0
 
     @property
     def searches(self) -> list[dict]:
@@ -161,6 +169,7 @@ class DataRepo:
             return httpx.Response(200, json={"version": {"repository": "11.0"}})
         body = json.loads(request.content)
         criteria = {c["property"]: c["values"] for c in body["criteria"]}  # letztes gewinnt
+        since = {p: int(criteria.pop(p)[0]) for p in list(criteria) if p in TIME_CRITERIA}
         for prop, values in criteria.items():
             if prop not in KNOWN:
                 return error_response(
@@ -170,8 +179,27 @@ class DataRepo:
                     400, "Trying to search for multiple values of a non-multivalue field x")
 
         def select(skip: str | None = None) -> list[Doc]:
-            return [d for d in self.docs
-                    if all(_matches(d, p, v) for p, v in criteria.items() if p != skip)]
+            return [d for n, d in enumerate(self.docs)
+                    if all(_matches(d, p, v) for p, v in criteria.items() if p != skip)
+                    and all(self.time_of(n, d, TIME_CRITERIA[p]) >= t
+                            for p, t in since.items())]
+
+        size = int(request.url.params.get("maxItems", "0"))
+        if size:  # Seiten mit Knoten: nur der lokale Abzug fragt so
+            self.node_requests += 1
+            start = int(request.url.params.get("skipCount", "0"))
+            if start + size > 10000:
+                return error_response(500, "all shards failed")
+            key = request.url.params.get("sortProperties", "cm:created")
+            wanted = set(request.url.params.get_list("propertyFilter"))
+            chosen = {id(d) for d in select()}
+            ranked = sorted(((self.time_of(n, d, key), n, d)
+                             for n, d in enumerate(self.docs) if id(d) in chosen),
+                            key=lambda item: item[:2])
+            nodes = [self.node(n, d, wanted) for _, n, d in ranked[start:start + size]]
+            return httpx.Response(200, json={
+                "pagination": {"total": len(ranked), "from": start, "count": len(nodes)},
+                "facets": [], "nodes": nodes})
 
         facets = []
         for spec in body.get("facets") or []:
@@ -189,6 +217,34 @@ class DataRepo:
         return httpx.Response(200, json={
             "pagination": {"total": len(select()), "from": 0, "count": 0},
             "facets": facets, "nodes": []})
+
+    # ---- Knoten für den lokalen Abzug ----------------------------------------------
+    T0 = 1_600_000_000_000  # Erstellzeit des ersten Materials in Millisekunden
+
+    def time_of(self, n: int, doc: Doc, key: str) -> int:
+        fixed = doc.get("_" + key)
+        if fixed:
+            return int(fixed[0])
+        step = 3_600_000 if key == "cm:created" else 7_200_000
+        return self.T0 + n * step
+
+    def node(self, n: int, doc: Doc, wanted: set[str]) -> dict:
+        props = {k: v for k, v in doc.items()
+                 if not k.startswith("_") and v and (not wanted or k in wanted)}
+        if n % 5:  # Freitext, den nur der Abzug sieht
+            props.setdefault("cclom:title", [f"Material Nummer {n % 37}"])
+        if n % 3:
+            props.setdefault("cclom:general_description", ["Beschreibung " * (n % 9 + 1)])
+        if n % 4:
+            props.setdefault("ccm:wwwurl", [f"https://seite{n % 11}.example/pfad/{n % 150}"])
+        props.setdefault("cclom:general_keyword", [f"wort{i}" for i in range(n % 4)])
+        created, modified = self.time_of(n, doc, "cm:created"), self.time_of(n, doc,
+                                                                             "cm:modified")
+        props["cm:created"], props["cm:modified"] = [str(created)], [str(modified)]
+        return {"ref": {"id": doc.get("_id", [f"node-{n}"])[0], "repo": "local"},
+                "title": props.get("cclom:title", [""])[0], "name": f"n{n}",
+                "createdAt": _iso(created), "modifiedAt": _iso(modified),
+                "properties": props, "preview": {"url": "https://r.example/preview"}}
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handler)

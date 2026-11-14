@@ -34,6 +34,7 @@ from .api import (
     schedules,
 )
 from .api import settings as settings_api
+from .api import snapshot as snapshot_api
 from .config import Settings, load_settings
 from .deps import AdminGate, require_admin
 from .instances import InstanceRegistry
@@ -125,6 +126,7 @@ def create_app(
     protected.include_router(report.router)
     protected.include_router(builtin.router)
     protected.include_router(assistant.router)
+    protected.include_router(snapshot_api.router)
     query.register_error_handlers(app)
     errors.register_error_handlers(app)
 

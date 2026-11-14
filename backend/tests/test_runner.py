@@ -269,10 +269,10 @@ def test_unexpected_error_in_one_tile_keeps_the_run(world, monkeypatch):
     import wda.store.runner as runner_module
     real = runner_module.run_query
 
-    async def flaky(spec, client, vocab):
+    async def flaky(spec, client, vocab, snapshot=None):
         if spec.rows is None:
             raise RuntimeError("streng-geheim: Programmfehler")
-        return await real(spec, client, vocab)
+        return await real(spec, client, vocab, snapshot)
 
     monkeypatch.setattr(runner_module, "run_query", flaky)
     d = world.go(world.store.create("dashboard", "D", {"tiles": [

@@ -28,6 +28,7 @@ from ..filters import (
     resolve_filters,
     resolve_values,
 )
+from ..snapshot.analyses import run_analysis
 from .formula import Formula, compile_formula
 from .spec import MAX_CALLS, MAX_GROUPS, MAX_SERIES, QuerySpec, Series
 
@@ -89,8 +90,13 @@ class _Run:
         await asyncio.gather(*self._tasks.values(), return_exceptions=True)
 
 
-async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore
-                    ) -> dict[str, Any]:
+async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
+                    snapshot: Any = None) -> dict[str, Any]:
+    if spec.snapshot is not None:
+        # aus dem lokalen Abzug, ohne Anfrage an das Repositorium
+        if snapshot is None:
+            raise QueryError("Der lokale Abzug steht hier nicht zur Verfügung.")
+        return await asyncio.to_thread(run_analysis, snapshot, spec, client.instance)
     run = _Run(client, spec.content_type, spec.refresh)
     try:
         return await _execute(spec, client, vocab, run)

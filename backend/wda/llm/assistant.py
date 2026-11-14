@@ -62,6 +62,14 @@ top bis 60): Ausprägungen eines Merkmals je Zeile, z. B. Kosten oder Werbung je
 Geht auch bei Feldern, die als Filter nicht zählbar sind. Darstellung heatmap.
 - sizes: {{"property": Feld}} ohne rows: Größenklassen, z. B. wie viele Bezugsquellen nur \
 ein Material haben.
+- snapshot: {{"analysis": Name, "by": "publisher"|"source", "top": n, "show": \
+"share"|"count"}} steht allein (keine filters, rows, columns): Zählung aus dem lokalen Abzug, \
+für das, was das Repositorium nicht zählen kann. Namen: freitext (Füllgrad von Titel, \
+Beschreibung, Schlagwörtern, Web-Adresse, Autor), beschreibung und titel (Längen), \
+schlagwoerter (Anzahl), duenn (fehlende Angaben), vollstaendigkeit, dubletten (gleiche \
+Web-Adresse, gleicher Titel), alter (letzte Änderung), adressen (https), jahrgang, rechner. \
+by gliedert nach Bezugsquelle oder Quelle; ohne by eignet sich bar mit show "count". Meldet \
+das Werkzeug, es gebe keinen Abzug, sag das und verweise auf „Qualität“, „Tiefenprüfung“.
 - match trennt Vokabulare in einem Feld. rollup "top" fasst einen Vokabularbaum auf der \
 obersten Ebene zusammen. vocab "outside" zeigt Werte, die die Werteliste nicht kennt \
 (Datenprobleme).

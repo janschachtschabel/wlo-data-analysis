@@ -155,6 +155,27 @@ class Sizes(_Model):
         return self
 
 
+SNAPSHOT_ANALYSES = ("freitext", "beschreibung", "titel", "schlagwoerter", "duenn",
+                     "vollstaendigkeit", "dubletten", "alter", "adressen", "jahrgang",
+                     "rechner")
+
+
+class SnapshotQuery(_Model):
+    """Auswertung über den lokalen Abzug (Merkmale je Material, keine Inhalte): Füllgrade
+    der Freitextfelder, Längen, Dubletten, Alter. Mit ``by`` je Quelle oder Bezugsquelle."""
+
+    analysis: Literal[SNAPSHOT_ANALYSES]  # type: ignore[valid-type]
+    by: Literal["source", "publisher"] | None = None
+    top: int = Field(default=25, ge=1, le=200)
+    show: Literal["share", "count"] = "share"
+
+    @model_validator(mode="after")
+    def _shape(self) -> SnapshotQuery:
+        if self.by and self.analysis in ("jahrgang", "rechner"):
+            raise ValueError(f"'{self.analysis}' gibt es nur für den ganzen Bestand (ohne by)")
+        return self
+
+
 class QuerySpec(_Model):
     instance: Annotated[StrictStr, Field(min_length=1, max_length=64)]
     content_type: StrictStr = "FILES"
@@ -166,6 +187,7 @@ class QuerySpec(_Model):
     vocab_check: VocabCheck | None = None
     profile: Profile | None = None
     sizes: Sizes | None = None
+    snapshot: SnapshotQuery | None = None
     percent: Literal["none", "column", "row"] = "none"
     refresh: bool = False
 
@@ -184,6 +206,10 @@ class QuerySpec(_Model):
                              "fill oder percent")
         other = (self.series or self.columns or self.fill or self.vocab_check
                  or self.percent != "none")
+        if self.snapshot and (other or self.rows or self.profile or self.sizes
+                              or self.filters):
+            raise ValueError("snapshot (lokaler Abzug) steht für sich: ohne filters, rows, "
+                             "series, columns, fill, vocab_check, profile, sizes, percent")
         if self.sizes and (other or self.rows or self.profile):
             raise ValueError("sizes geht nicht zusammen mit rows, series, columns, fill, "
                              "vocab_check, profile oder percent")

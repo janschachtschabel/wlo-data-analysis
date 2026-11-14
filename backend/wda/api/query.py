@@ -27,4 +27,5 @@ async def query(spec: QuerySpec, request: Request) -> dict[str, Any]:
         client, vocab = services.client(spec.instance), services.vocab(spec.instance)
     except KeyError:
         raise UnknownInstance(spec.instance) from None
-    return await run_query(spec, client, vocab)
+    return await run_query(spec, client, vocab,
+                           services.snapshot(spec.instance) if spec.snapshot else None)

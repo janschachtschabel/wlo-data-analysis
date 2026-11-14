@@ -148,3 +148,22 @@ und Ländervarianten, die zum Gruppieren normalisiert werden müssen.
 - Füllgrad je Quelle (25 größte): 0,34 s, 10 Abfragen. Auffällig: bpb ohne Bildungsstufe
   (1,2 %), GeoGebra ohne Fach (2,0 %), Tutory ohne Sprache (2,9 %).
 
+## Seitenweises Lesen aller Materialien (gemessen 2026-11-14, Produktion)
+
+Für den lokalen Abzug (`backend/wda/snapshot/`). `skipCount + maxItems` über 10.000
+beantwortet die Instanz mit 500; alles darüber geht nur mit einem wandernden Zeitkriterium.
+
+- `sortProperties=cm:created&sortAscending=true` sortiert verlässlich, ebenso
+  `cm:modified` und `sys:node-dbid`.
+- `propertyFilter` lässt sich wiederholen und begrenzt die gelieferten Eigenschaften;
+  der Rahmen des Knotens bleibt (7 bis 20 kB je Material).
+- Seitengrößen 100, 500, 1000 und 2000 gehen; 1000 war am schnellsten (rund 15 s je
+  Seite, 67 Materialien je Sekunde).
+- Fortsetzen: Kriterium `virtual:time_after_created` mit **Millisekunden seit 1970 als
+  Text**. Es gilt einschließlich (≥) und auf die Millisekunde genau. ISO-Schreibweisen
+  werden auf den Tag gekürzt und taugen dafür nicht. Dasselbe gilt für
+  `virtual:time_after_modified` mit `cm:modified`.
+- Im Knoten: `ref.id`, `createdAt` und `modifiedAt` als ISO-Text, in `properties`
+  `cm:created` und `cm:modified` als 13-stellige Texte; Werte sind Listen von Texten,
+  fehlende Felder fehlen ganz.
+- Hochrechnung für WLO: rund 320 Seiten, etwa 80 Minuten, 2 bis 6 GB Übertragung.

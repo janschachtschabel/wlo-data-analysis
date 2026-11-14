@@ -47,6 +47,7 @@ Minute auch die richtige Anmeldung.
 | `WDA_TIMEZONE` | `Europe/Berlin` | Zeitzone, in der die Uhrzeiten der Zeitpläne gelten |
 | `WDA_SCHEDULER` | `on` | `off` schaltet den Planer ab; Zeitpläne bleiben dann liegen (z. B. bei einer zweiten Instanz auf derselben Datenbank) |
 | `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
+| `WDA_SNAPSHOT_PAGE` | `1000` | Materialien je Seite beim lokalen Abzug (10 bis 2000) |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
 | `WDA_LLM_API_KEY` | – | Schlüssel für die KI-Anbindung |
@@ -172,6 +173,40 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
 ### Quellen
 
 Der Reiter „Quellen“ unter „Qualität“ folgt dem Quellenpanel, zeigt aber nur Zählungen: Bezugsquellen und Crawler nach Größe (wie viele haben nur ein Material), Bindung zwischen Crawler und Bezugsquelle, dünne Metadaten und Offenheit je Bezugsquelle, Kosten, Werbung, Zugang, Datenschutz, Altersfreigabe, Erschließungsstatus, Materialart und Sprache je Bezugsquelle in Prozent, dazu die Vollständigkeit der Quelldatensätze. Dafür gibt es zwei Abfrageformen: `profile` (ein Merkmal je Zeile, je Zeilenwert eine Abfrage) und `sizes` (Größenklassen eines Feldes).
+
+### Tiefenprüfung aus dem lokalen Abzug
+
+Manches kann ein Repositorium nicht zählen: wie lang Beschreibungen sind, ob ein Titel
+fehlt, ob dieselbe Web-Adresse mehrfach vorkommt. Dafür liest die Anwendung auf Wunsch
+alle Materialien einer Instanz einmal seitenweise aus (Reiter „Tiefenprüfung“ unter
+„Qualität“, oder `POST /api/snapshot/{instanz}/start`) und merkt sich je Material nur
+Merkmale:
+
+- Längen von Titel und Beschreibung, Anzahl der Schlagwörter, Fächer, Bildungsstufen,
+  Materialarten und Sprachen, ob Autor und Lizenz angegeben sind,
+- Zeitpunkt der Erfassung und der letzten Änderung,
+- Quelle (Crawler) und Bezugsquelle,
+- den Rechnernamen der Web-Adresse und ob sie https nutzt,
+- für Adresse und Titel je einen nicht umkehrbaren Schlüssel (HMAC mit einem Geheimnis
+  der Installation), um gleiche Werte zu erkennen.
+
+Titel, Beschreibungen, Schlagwörter und Web-Adressen selbst werden nicht gespeichert.
+Der Abzug liegt in `WDA_DATA_DIR/abzug/` und ist über keine Schnittstelle abrufbar;
+heraus kommen nur Zählungen in der Form aller anderen Abfragen:
+
+```json
+{"instance": "wlo-prod", "snapshot": {"analysis": "duenn", "by": "publisher", "top": 40}}
+```
+
+`analysis` ist eine von `freitext`, `beschreibung`, `titel`, `schlagwoerter`, `duenn`,
+`vollstaendigkeit`, `dubletten`, `alter`, `adressen`, `jahrgang`, `rechner`; `by` gliedert
+nach `publisher` (Bezugsquelle) oder `source` (Quelle), `show` wählt Anteile oder Anzahlen.
+Das mitgelieferte Dashboard „Tiefenprüfung“ stellt 18 solche Kacheln zusammen.
+
+Ein vollständiger Abzug von WLO (rund 320.000 Materialien) dauert etwa 80 Minuten. Er
+lässt sich anhalten und fortsetzen; „Änderungen nachziehen“ liest danach nur, was sich
+seit dem letzten Abzug geändert hat. Gelöschte Materialien verschwinden erst mit einem
+vollständigen Abzug. Ändert sich die Adresse einer Instanz, wird ihr Abzug verworfen.
 
 ## KI: Assistent und Einstellungen
 

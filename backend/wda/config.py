@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     vocab_ttl: float = Field(default=86400.0, ge=60)
     upstream_timeout: float = Field(default=90.0, gt=0)
     upstream_concurrency: int = Field(default=4, ge=1, le=32)
+    # Materialien je Seite beim lokalen Abzug (gemessen: 1.000 ist am schnellsten)
+    snapshot_page: int = Field(default=1000, ge=10, le=2000)
     runs_keep: int = Field(default=500, ge=1, le=100000)
     oersi_url: str = "https://oersi.org/resources/api/search/oer_data/_search"
     timezone: str = "Europe/Berlin"  # in ihr gelten die Uhrzeiten der Zeitpläne
