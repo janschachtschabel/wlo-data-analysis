@@ -31,3 +31,26 @@ Vergleiche bequem, weiter allein aus Zählungen.
 
 `tests/test_growth.py`, `tests/test_highlights.py`, `tests/test_builtin.py` (Kontexte),
 `tests/test_drill.py` (Zielwert), `trend.spec.ts`, `overview.spec.ts`, Durchstich.
+
+## Stand nach Review
+
+Ein unabhängiger Durchgang fand 13 Befunde, davon 4 wichtige. Behoben:
+
+- „Auffällig“ meldete den normalen Zufluss des laufenden Monats: Tabellen mit Zuwachs je Monat
+  bleiben dort außen vor.
+- Zeilen, die verschwinden oder neu auftauchen, fehlten: Sie zählen jetzt im jeweils anderen
+  Lauf als 0 (nur in Blöcken, die beide Läufe haben).
+- Die Verlaufslinie hieß „Gesamt“, zeigte bei mehreren Spalten aber nur die erste: Sie nennt
+  jetzt die Spalte. Sie erscheint nur noch über Läufen der Reihe und endet am gezeigten Lauf.
+- Eine späte Antwort konnte den Verlauf einer anderen Auswertung zeigen; „einer anderen
+  Instanz“ bot die eigene an.
+- Zielwert: unbekannte Spalte oder Richtung ergibt einen Hinweis statt einer stillen Annahme;
+  „höchstens“ bei einer Gesamtzahl sagt „zu viel“; der Zielwert steht ungerundet da; NaN und
+  Unendlich sind kein Ziel; der Server nennt die verfehlten Zeilen, die Oberfläche markiert
+  genau diese; eine Kachel, die die Darstellung der Kennzahl übernimmt, bekommt keinen
+  eigenen Zielwert untergeschoben.
+- Zuwachs: `stock` mit `by: modified` wird abgelehnt.
+
+Bewusst offen: Materialien mit Anlagedatum in der Zukunft zählen im laufenden Monat mit; bei
+gekürzten Tabellen (top N) kann eine Zeile aus der Tabelle fallen, ohne verschwunden zu sein,
+und erscheint dann als „auf 0“.

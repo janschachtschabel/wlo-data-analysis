@@ -31,7 +31,10 @@
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/discipline/",
-        "top": 40
+        "top": 40,
+        "exclude": [
+         "Allgemein"
+        ]
        },
        "columns": {
         "property": "ccm:educationalcontext",
@@ -172,7 +175,10 @@
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/discipline/",
-        "top": 40
+        "top": 40,
+        "exclude": [
+         "Allgemein"
+        ]
        },
        "columns": {
         "property": "ccm:educationalcontext",
@@ -204,7 +210,10 @@
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
-        "top": 20
+        "top": 20,
+        "exclude": [
+         "Allgemein"
+        ]
        },
        "topics": {
         "property": "cclom:general_keyword",

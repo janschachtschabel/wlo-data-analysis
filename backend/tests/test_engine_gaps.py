@@ -73,3 +73,4 @@ def test_only_cells_far_below_the_expected_by_default():
                                     gaps={"min_expected": 1}))
     assert out["rows"] and all(r["values"][2] < 50 for r in out["rows"])
     assert "unter 50 % der Erwartung" in note(out)
+

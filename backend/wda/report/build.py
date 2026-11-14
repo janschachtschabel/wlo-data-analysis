@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -137,6 +138,12 @@ def table_from_result(key: str, title: str, result: dict[str, Any],
         }]))
 
 
+def known_order(known: list[tuple[Row, Any]], missed: list[tuple[Row, Any]]) -> list[Row]:
+    """Die verfehlten Zeilen in der Reihenfolge der Tabelle."""
+    hit = {id(r) for r, _ in missed}
+    return [r for r, _ in known if id(r) in hit]
+
+
 def _target(view: dict[str, Any], columns: list[Column], rows: list[Row],
             notes: list[dict[str, str]]) -> dict[str, Any] | None:
     """Soll und Ist. Die Darstellung trägt einen Zielwert (``options.target``), wahlweise die
@@ -145,12 +152,23 @@ def _target(view: dict[str, Any], columns: list[Column], rows: list[Row],
     den Hinweisen und damit in jedem Export."""
     options = view.get("options") if isinstance(view.get("options"), dict) else {}
     goal = options.get("target")
-    if isinstance(goal, bool) or not isinstance(goal, int | float) or not columns:
+    if (isinstance(goal, bool) or not isinstance(goal, int | float) or not math.isfinite(goal)
+            or not columns):
         return None
     ids = [c.id for c in columns]
-    wanted = options.get("target_column")
+    wanted, mode = options.get("target_column"), options.get("target_mode")
+    if wanted is not None and wanted not in ids:
+        notes.append({"code": "target_invalid", "text":
+                      f"Der Zielwert ist nicht ausgewertet: Die Zielspalte „{wanted}“ gibt es "
+                      "in dieser Tabelle nicht."})
+        return None
+    if mode not in (None, "min", "max"):
+        notes.append({"code": "target_invalid", "text":
+                      "Der Zielwert ist nicht ausgewertet: Als Richtung gibt es „min“ "
+                      "(mindestens) und „max“ (höchstens)."})
+        return None
     at = ids.index(wanted) if wanted in ids else ids.index("rate") if "rate" in ids else 0
-    low = options.get("target_mode") != "max"
+    low = mode != "max"
     measured = [r for r in rows if r.kind in ("value", "group")] or [
         r for r in rows if r.kind == "total"]
     known = [(r, r.values[at]) for r in measured
@@ -161,15 +179,18 @@ def _target(view: dict[str, Any], columns: list[Column], rows: list[Row],
     missed.sort(key=lambda item: item[1], reverse=not low)
 
     def number(value: float) -> str:
-        text = f"{value:,.1f}".rstrip("0").rstrip(".") if isinstance(value, float) else f"{value:,}"
+        # so viele Stellen, wie der Wert hat (höchstens vier): 99,96 bleibt unter 99,97
+        text = (f"{value:,.4f}".rstrip("0").rstrip(".") if isinstance(value, float)
+                else f"{value:,}")
         return text.replace(",", "\u202f").replace(".", ",")
 
     text = (f"Ziel: {'mindestens' if low else 'höchstens'} {number(goal)} bei "
             f"„{columns[at].label}“. ")
     if len(known) == 1 and known[0][0].kind == "total":
+        gap = number(round(abs(goal - known[0][1]), 4))
         text += ("Erreicht." if not missed else
-                 f"Nicht erreicht: {number(known[0][1])}, es fehlen "
-                 f"{number(abs(goal - known[0][1]))}.")
+                 f"Nicht erreicht: {number(known[0][1])}, es fehlen {gap}." if low else
+                 f"Überschritten: {number(known[0][1])}, das sind {gap} zu viel.")
     else:
         text += f"Erreicht von {len(known) - len(missed)} der {len(known)} Zeilen."
         if missed:
@@ -178,7 +199,9 @@ def _target(view: dict[str, Any], columns: list[Column], rows: list[Row],
                      + (f" und {len(missed) - 8} weitere" if len(missed) > 8 else "") + ".")
     notes.append({"code": "target", "text": text})
     return {"column": columns[at].id, "value": goal, "mode": "min" if low else "max",
-            "reached": len(known) - len(missed), "of": len(known)}
+            "reached": len(known) - len(missed), "of": len(known),
+            # die Zeilen, die das Ziel verfehlen: genau diese markiert die Oberfläche
+            "missed": [r.key for r in known_order(known, missed)]}
 
 
 # Darstellungen für Füllgrade: je Feld (ohne Zeilenfeld) bzw. je Zeile

@@ -91,7 +91,7 @@ export function historyQuery(
                   <tbody>
                     @for (p of newestFirst(); track p.point.run_id) {
                       <tr>
-                        <td><a [routerLink]="['/lauf', p.point.run_id]">{{ time(p.point.started_at) }}</a>@if (p.point.origin === 'schedule') { <span class="muted"> · Zeitplan</span> }</td>
+                        <td><a [routerLink]="['/lauf', p.point.run_id]">{{ time(p.point.started_at) }}</a>@if (p.point.origin === 'schedule') { <span class="muted"> · Zeitplan</span> }@if (p.point.origin === 'nightly') { <span class="muted"> · über Nacht</span> }</td>
                         @for (value of p.point.values; track $index) {
                           <td>{{ number(value) }}@if (p.before && delta(value, p.before.values[$index]); as change) { <span class="delta">{{ change }}</span> }</td>
                         }

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     snapshot_page: int = Field(default=1000, ge=10, le=2000)
     # Uhrzeit (HH:MM in ``timezone``), zu der vorhandene Abzüge Änderungen nachziehen
     snapshot_nightly: str = "03:30"
+    # Auswertungen, die jede Nacht zur selben Uhrzeit neu gezählt und abgelegt werden (IDs,
+    # durch Komma getrennt); leer: keine
+    precompute: str = "builtin-themen"
     runs_keep: int = Field(default=500, ge=1, le=100000)
     oersi_url: str = "https://oersi.org/resources/api/search/oer_data/_search"
     timezone: str = "Europe/Berlin"  # in ihr gelten die Uhrzeiten der Zeitpläne

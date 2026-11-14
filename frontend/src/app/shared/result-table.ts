@@ -140,7 +140,7 @@ export class ResultTable {
     return this.rows().map((row) => row.values.map((value, n) => (value ? cellLink(drill, row, columns[n]?.id ?? '') : null)));
   });
   /** Soll und Ist: Zellen der Zielspalte, die das Ziel verfehlen, bekommen ein Zeichen */
-  readonly target = input<{ column: string; value: number; mode: 'min' | 'max' } | null | undefined>(null);
+  readonly target = input<{ column: string; value: number; mode: 'min' | 'max'; missed?: string[] } | null | undefined>(null);
   protected readonly missTitle = computed(() => {
     const target = this.target();
     return target ? `${target.mode === 'max' ? 'über' : 'unter'} dem Ziel von ${target.value.toLocaleString('de-DE')}` : '';
@@ -150,6 +150,9 @@ export class ResultTable {
     const target = this.target();
     const at = target ? this.columns().findIndex((c) => c.id === target.column) : -1;
     if (!target || at < 0) return null;
+    // der Server nennt die verfehlten Zeilen; ältere Läufe tragen sie nicht
+    const missed = target.missed;
+    if (missed) return this.rows().map((row) => (missed.includes(row.key) ? at : -1));
     const single = this.rows().every((r) => r.kind === 'total');
     return this.rows().map((row) => {
       const value = row.values[at];

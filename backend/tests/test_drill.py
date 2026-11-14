@@ -156,8 +156,9 @@ def test_target_says_which_rows_reach_it(api):
                          {"type": "heatmap", "options": {"scale": "rate", "target": 80}})
     rates = {r["label"]: r["values"][2] for r in block["rows"]}
     reached = sum(1 for v in rates.values() if v >= 80)
+    missed = [r["key"] for r in block["rows"] if r["values"][2] < 80]
     assert block["target"] == {"column": "rate", "value": 80, "mode": "min",
-                               "reached": reached, "of": 3}
+                               "reached": reached, "of": 3, "missed": missed}
     note = next(n["text"] for n in block["notes"] if n["code"] == "target")
     assert note.startswith("Ziel: mindestens 80 bei „Füllgrad %“. Erreicht von "
                            f"{reached} der 3 Zeilen.")
@@ -174,3 +175,32 @@ def test_target_says_which_rows_reach_it(api):
     # ohne Zielwert bleibt alles, wie es war
     plain = target_table(api, {"fill": {"fields": fields}}, {"type": "table", "options": {}})
     assert plain["target"] is None and all(n["code"] != "target" for n in plain["notes"])
+
+
+def test_target_at_the_edges(api):
+    fields = [{"property": TAX, "label": "Fach"}, {"property": LVL, "label": "Stufe"}]
+    # eine Spalte oder Richtung, die es nicht gibt: kein Ziel, dafür ein Satz
+    for options in ({"target": 50, "target_column": "gibtsnicht"},
+                    {"target": 50, "target_mode": "hoechstens"}):
+        block = target_table(api, {"fill": {"fields": fields}},
+                             {"type": "table", "options": options})
+        assert block["target"] is None
+        assert any(n["code"] == "target_invalid" for n in block["notes"])
+    # höchstens bei einer Gesamtzahl: „zu viel“, nicht „es fehlen“
+    over = target_table(api, {}, {"type": "number", "options": {
+        "target": 100, "target_mode": "max"}})
+    assert "Überschritten: 400, das sind 300 zu viel." in over["notes"][-1]["text"]
+    assert over["target"]["missed"] == ["__total__"]
+    # der Zielwert steht ungerundet da
+    fine = target_table(api, {}, {"type": "number", "options": {"target": 399.97}})
+    assert "mindestens 399,97" in fine["notes"][-1]["text"]
+    # keine Zahl: abgelehnt statt eines Absturzes beim Lauf
+    for bad in ("NaN", "Infinity"):
+        out = api.post("/api/preview", content=(
+            '{"kind": "metric", "name": "M", "spec": {"query": {"instance": "wlo-prod"},'
+            ' "view": {"type": "number", "options": {"target": ' + bad + "}}}}"),
+            headers={"content-type": "application/json"})
+        assert out.status_code in (200, 422), out.text
+        if out.status_code == 200:
+            [block] = out.json()["report"]["blocks"]
+            assert block["target"] is None

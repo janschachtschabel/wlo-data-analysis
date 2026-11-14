@@ -20,6 +20,7 @@ from ..errors import Notes, QueryError
 from ..filters import resolve_filters, resolve_values
 from .engine import (
     _Column,
+    _drop_excluded,
     _helper,
     _plan_columns,
     _refused,
@@ -179,7 +180,8 @@ async def execute_topics(spec: QuerySpec, client: EduSharingClient, vocab: Vocab
     count_column = _Column("count", "Anzahl")
     for row in rows:
         count_column.cells[row.key] = counts.get(row.key, None if row_facet.truncated else 0)
-    rows = _sort_rows(rows, [count_column], rows_spec, include, False)
+    rows = _sort_rows(_drop_excluded(rows, rows_spec, notes), [count_column], rows_spec,
+                      include, False)
     if rows_spec.top is not None and len(rows) > rows_spec.top:
         notes.add("rows_top",
                   f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")

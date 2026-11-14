@@ -63,6 +63,7 @@ def test_growth_stands_alone():
     for bad in ({"growth": {"months": 0}}, {"growth": {"months": 61}},
                 {"growth": {}, "rows": {"property": TAX}},
                 {"growth": {}, "fill": {"fields": [{"property": TAX}]}},
+                {"growth": {"by": "modified", "stock": True}},
                 {"growth": {"by": "sonstwas"}}):
         with pytest.raises(ValidationError):
             QuerySpec(instance="t", **bad)

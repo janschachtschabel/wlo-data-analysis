@@ -45,6 +45,8 @@ class Rows(_Model):
     vocab: Literal["outside", "inside"] | None = None
     # oberste Ebene des Vokabularbaums; jede Zeile zählt den Wert samt allen Unterwerten
     rollup: Literal["top"] | None = None
+    # Zeilen, die nicht erscheinen sollen (Bezeichnung oder Kennung), etwa Sammelwerte
+    exclude: list[Match] | None = Field(default=None, min_length=1, max_length=50)
 
     @model_validator(mode="after")
     def _consistent(self) -> Rows:
@@ -57,6 +59,9 @@ class Rows(_Model):
                 self.groups or self.include or self.other or self.missing):
             raise ValueError("match und vocab wählen unter den vorkommenden Werten aus und "
                              "gehen nicht zusammen mit include, groups, other oder missing")
+        if self.exclude and (self.groups or self.include or self.other or self.rollup):
+            raise ValueError("exclude blendet vorkommende Werte aus und geht nicht zusammen "
+                             "mit include, groups, other oder rollup")
         if self.other and self.top is None:
             raise ValueError("other braucht top")
         return self
@@ -148,6 +153,12 @@ class Growth(_Model):
     months: int = Field(default=12, ge=1, le=60)
     by: Literal["created", "modified"] = "created"
     stock: bool = False  # dazu der Bestand am Monatsende (nur bei created)
+
+    @model_validator(mode="after")
+    def _stock_needs_created(self) -> Growth:
+        if self.stock and self.by != "created":
+            raise ValueError("stock (Bestand am Monatsende) gibt es nur mit by: created")
+        return self
 
 
 MAX_PROFILE_ROWS = 60

@@ -29,9 +29,9 @@ import { Trends, trendOf } from '../shared/trend';
             @case ('table') {
               <h2>{{ block.title }}</h2>
               @if (trend(block.key); as t) {
-                <p class="trend muted" [title]="'Gesamtzahl über die letzten ' + t.count + ' gespeicherten Läufe'">
+                <p class="trend muted" [title]="'Gesamtzahl über ' + t.count + ' gespeicherte Läufe'">
                   <svg viewBox="0 0 96 24" width="96" height="24" aria-hidden="true"><polyline [attr.points]="t.points" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" /></svg>
-                  <span>Gesamt {{ number(t.last) }}, {{ t.delta > 0 ? '+' : '' }}{{ number(t.delta) }}@if (t.percent !== null && t.delta) { ({{ t.delta > 0 ? '+' : '' }}{{ number(t.percent) }} %) } seit {{ time(t.since) }}</span>
+                  <span>{{ t.label ? 'Spalte „' + t.label + '“, gesamt' : 'Gesamt' }} {{ number(t.last) }}, {{ t.delta > 0 ? '+' : '' }}{{ number(t.delta) }}@if (t.percent !== null && t.delta) { ({{ t.delta > 0 ? '+' : '' }}{{ number(t.percent) }} %) } seit {{ time(t.since) }}</span>
                 </p>
               }
               @if (block.view.type === 'number') {

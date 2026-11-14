@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError } from '../core/api';
-import { Filter, QueryResult } from '../core/types';
+import { formatTime } from '../core/format';
+import { Filter, QueryResult, RunHead } from '../core/types';
 import { RunPage } from '../runs/run-page';
 import { SnapshotPanel } from './snapshot-panel';
 
@@ -10,10 +11,10 @@ const INSTANCE = 'wlo-prod';
 
 interface Builtin { id: string; definitions: { id: string; installed: boolean; changed?: boolean }[] }
 
-export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?: string }[] = [
+export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?: string; stored?: boolean }[] = [
   { id: 'datenqualitaet', label: 'Füllgrade', hint: 'Wie oft sind die Felder ausgefüllt?' },
   { id: 'abdeckung', label: 'Abdeckung', hint: 'Wo ist das Angebot dicht, wo gibt es Lücken?' },
-  { id: 'themen', label: 'Wissenslandkarte', hint: 'Welche Themen stecken in Fach und Bildungsstufe?' },
+  { id: 'themen', label: 'Wissenslandkarte', hint: 'Welche Themen stecken in Fach und Bildungsstufe?', stored: true },
   { id: 'datenprobleme', label: 'Datenprobleme', hint: 'Wo stimmen die Metadaten nicht?' },
   { id: 'steckbrief', label: 'Steckbrief', hint: 'Eine Quelle auf einer Seite: größte Probleme, Füllgrade, Fächer, Lizenzen, Zufluss' },
   { id: 'quellen', label: 'Quellen', hint: 'Größe, Bindung, dünne Metadaten und Merkmale je Quelle' },
@@ -71,6 +72,13 @@ export const QUALITY_TABS: { id: string; label: string; hint: string; snapshot?:
     }
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
     @else if (current().snapshot && !complete()) { <p class="muted">Sobald der Abzug vollständig ist, erscheinen hier die Auswertungen.</p> }
+    @else if (ready() && shown() && storedRun() && !scope().length) {
+      <p class="notice row" role="status">
+        <span class="grow">Abgelegter Stand vom {{ time(storedRun()!.started_at) }}{{ storedRun()!.origin === 'nightly' ? ' (über Nacht gezählt)' : '' }}. Diese Auswertung braucht lange; deshalb erscheint hier der jüngste gespeicherte Lauf.</span>
+        <button type="button" (click)="storedRun.set(null)">Jetzt neu zählen</button>
+      </p>
+      <app-run-page [runId]="storedRun()!.id ?? undefined" />
+    }
     @else if (ready() && shown()) { <app-run-page [defId]="'builtin-' + current().id" [scope]="scope()" /> }
     @else { <p class="muted" role="status">Wird vorbereitet …</p> }`,
   styles: `
@@ -93,6 +101,9 @@ export class Quality {
   /** die installierte Auswertung ist nicht (mehr) die mitgelieferte */
   protected readonly outdated = signal(false);
   protected readonly confirming = signal(false);
+  /** schwere Auswertungen: der jüngste abgelegte Lauf statt einer neuen Zählung */
+  protected readonly storedRun = signal<RunHead | null>(null);
+  protected readonly time = formatTime;
   /** null: wird geladen */
   protected readonly choicesState = signal<'loading' | 'ready' | 'empty' | 'failed'>('ready');
   /** Worauf sich eine Auswertung einengen lässt: Quelle, Bezugsquelle, Fach oder Bildungsstufe */
@@ -144,6 +155,7 @@ export class Quality {
       await this.api.post(`/builtin/${encodeURIComponent(id)}/install?mode=replace`);
       this.outdated.set(false);
       this.confirming.set(false);
+      this.storedRun.set(null);
       this.reload(this.complete());
     } catch (error) {
       this.error.set(error instanceof ApiError ? error.message : 'Die Fassung ließ sich nicht übernehmen.');
@@ -152,6 +164,7 @@ export class Quality {
 
   private async prepare(id: string): Promise<void> {
     this.ready.set(false);
+    this.storedRun.set(null);
     this.outdated.set(false);
     this.confirming.set(false);
     this.error.set('');
@@ -159,7 +172,13 @@ export class Quality {
       const bundles = await this.api.get<Builtin[]>('/builtin');
       const bundle = bundles.find((b) => b.id === id);
       if (bundle && bundle.definitions.some((d) => !d.installed)) await this.api.post(`/builtin/${encodeURIComponent(id)}/install`);
+      let stored: RunHead | null = null;
+      if (QUALITY_TABS.find((t) => t.id === id)?.stored) {
+        const runs = await this.api.get<RunHead[]>(`/definitions/${encodeURIComponent('builtin-' + id)}/runs?limit=5`).catch(() => []);
+        stored = runs.find((run) => !!run.id && run.status === 'ok' && !run.instance) ?? null;
+      }
       if (this.current().id === id) {
+        this.storedRun.set(stored);
         this.outdated.set(!!bundle?.definitions.some((d) => d.installed && d.changed));
         this.ready.set(true);
       }

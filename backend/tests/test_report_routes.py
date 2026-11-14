@@ -110,7 +110,7 @@ def test_check_hints_at_a_grouped_table_without_instance(api):
 
 def test_settings_name_the_export_formats(api):
     export = api.get("/api/settings").json()["export"]
-    assert export["formats"] == ["json", "csv", "md", "html", "xlsx", "pdf"]
+    assert export["formats"] == ["json", "csv", "md", "html", "xlsx", "docx", "pdf"]
     assert export["pdf_available"] is pdf_available()
 
 

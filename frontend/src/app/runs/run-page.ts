@@ -7,12 +7,12 @@ import { Auth } from '../core/auth';
 import { Instances } from '../core/instances';
 import { AppSettings, Definition, Filter, Report, RunHead } from '../core/types';
 import { ReportView } from './report-view';
-import { Trends } from '../shared/trend';
+import { Trends, trendsUpTo } from '../shared/trend';
 
 /** der Router setzt fehlende Eingaben auf undefined */
 const EMPTY: Filter[] = [];
 const STATUS: Record<string, string> = { ok: 'vollständig', partial: 'teilweise', failed: 'gescheitert' };
-const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Markdown', html: 'HTML', xlsx: 'Excel', pdf: 'PDF' };
+const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Markdown', html: 'HTML', xlsx: 'Excel', docx: 'Word', pdf: 'PDF' };
 
 /**
  * Zwei Wege zu einem Bericht: ein gespeicherter Lauf (/lauf/:runId, mit Export) oder die
@@ -74,7 +74,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
           <label>Instanz
             <select name="compare-instance" [value]="otherInstance()" (change)="otherInstance.set($any($event.target).value)">
               <option value="">bitte wählen</option>
-              @for (inst of instances.list(); track inst.id) { <option [value]="inst.id">{{ inst.name }}</option> }
+              @for (inst of instances.list(); track inst.id) { @if (inst.id !== ownInstance()) { <option [value]="inst.id">{{ inst.name }}</option> } }
             </select>
           </label>
           <button type="button" (click)="countOther()" [disabled]="!otherInstance() || counting()"
@@ -93,7 +93,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
     @if (report.value(); as data) {
       <p class="muted">Stand {{ time(data.started_at) }} · {{ status(data.status) }}
         @if (!runId()) { · nicht gespeichert }</p>
-      <app-report-view [report]="data" [widths]="widths()" [trends]="scope().length ? null : trends()" />
+      <app-report-view [report]="data" [widths]="widths()" [trends]="scope().length ? null : shownTrends()" />
     } @else if (report.error(); as error) {
       <p class="error card" role="alert">{{ error.message }}</p>
     } @else {
@@ -131,6 +131,11 @@ export class RunPage {
   protected readonly other = signal('');
   /** Gesamtzahl je Kachel über die gespeicherten Läufe (nur für den Gesamtbestand) */
   protected readonly trends = signal<Trends | null>(null);
+  /** nur für Läufe der Reihe, und nur bis zum gezeigten Lauf */
+  protected readonly shownTrends = computed(() => trendsUpTo(this.trends(), this.runId()));
+  private readonly trendId = computed(() => this.defId() ?? this.report.value()?.definition_id ?? null);
+  /** die Instanz, gegen die die Auswertung ohnehin zählt: kein Vergleich mit sich selbst */
+  protected readonly ownInstance = computed(() => { const spec = this.definition()?.spec as { instance?: string; query?: { instance?: string } } | undefined; return spec?.instance ?? spec?.query?.instance ?? ''; });
   protected readonly instances = inject(Instances);
   protected readonly otherInstance = signal('');
   protected readonly counting = signal(false);
@@ -140,7 +145,7 @@ export class RunPage {
   private waiting: AbortController | null = null;
 
   protected readonly formats = computed(() =>
-    (this.settings()?.export.formats ?? ['json', 'csv', 'md', 'html', 'xlsx', 'pdf']).map((id) => ({
+    (this.settings()?.export.formats ?? ['json', 'csv', 'md', 'html', 'xlsx', 'docx', 'pdf']).map((id) => ({
       id, label: FORMAT_LABEL[id] ?? id,
       available: id !== 'pdf' || (this.settings()?.export.pdf_available ?? true) })));
   protected readonly widths = computed(() => {
@@ -165,9 +170,10 @@ export class RunPage {
     });
     effect(() => { this.runId(); untracked(() => this.other.set('')); });
     effect(() => {
-      const id = this.defId() ?? this.report.value()?.definition_id;
+      const id = this.trendId();
       untracked(() => this.trends.set(null));
-      if (id) this.api.get<Trends>(`/definitions/${encodeURIComponent(id)}/trends`).then((t) => this.trends.set(t), () => undefined);
+      // eine späte Antwort gehört vielleicht schon zu einer anderen Auswertung
+      if (id) this.api.get<Trends>(`/definitions/${encodeURIComponent(id)}/trends`).then((t) => { if (this.trendId() === id) this.trends.set(t); }, () => undefined);
     });
     effect(() => {
       const id = this.defId();
@@ -230,9 +236,16 @@ export class RunPage {
     this.compareNote.set('');
     const waiting = (this.waiting = new AbortController());
     try {
+      // dieselbe Instanz ergäbe einen gewöhnlichen Lauf der Reihe, keinen Vergleich
+      const own = (await this.api.get<Definition>('/definitions/' + encodeURIComponent(defId), waiting.signal)).spec as { instance?: string; query?: { instance?: string } };
+      if ((own.instance ?? own.query?.instance) === instance) {
+        this.compareNote.set('Gegen diese Instanz zählt die Auswertung ohnehin. Bitte eine andere wählen.');
+        return;
+      }
       const id = await runAsJob(this.api, `/definitions/${encodeURIComponent(defId)}/run`, { wait: false, instance }, () => undefined, waiting.signal);
       if (this.runId() !== shown) return;
       const runs = await this.api.get<RunHead[]>(`/definitions/${encodeURIComponent(defId)}/runs?limit=100`);
+      if (this.runId() !== shown) return;
       this.others.set(runs.filter((r) => r.id !== shown));
       this.other.set(id);
       this.mode.set('run');

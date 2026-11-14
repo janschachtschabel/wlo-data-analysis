@@ -232,7 +232,7 @@ def test_real_run_in_all_formats(tmp_path):
     md = outputs["md"].decode()
     assert "## Methodik" in md and "Mundo: Handeintrag" in md and "**MINT**" in md
     with pytest.raises(ValueError):
-        render(report, "docx")
+        render(report, "exe")
 
 
 def test_wide_matrix_is_split_by_blocks_not_cut_off():

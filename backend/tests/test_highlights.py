@@ -53,7 +53,8 @@ def test_highlights_skip_small_noise_and_changed_definitions(api, repo):  # noqa
 
 def test_trends_give_each_tile_its_total_over_the_saved_runs(api, repo):  # noqa: F811
     m = make(api, "metric", "Fächer", {"query": QUERY})
-    assert api.get(f"/api/definitions/{m['id']}/trends").json() == {"runs": [], "blocks": {}}
+    assert api.get(f"/api/definitions/{m['id']}/trends").json() == {
+        "runs": [], "blocks": {}, "labels": {}}
     first = run(api, m["id"])
     assert api.get(f"/api/definitions/{m['id']}/trends").json()["runs"] == []
     repo.docs.extend([dict(d) for d in repo.docs[:10]])
@@ -68,3 +69,49 @@ def test_trends_give_each_tile_its_total_over_the_saved_runs(api, repo):  # noqa
     run(api, m["id"], refresh=True)
     assert api.get(f"/api/definitions/{m['id']}/trends").json()["runs"] == []
     assert api.get("/api/definitions/gibt-es-nicht/trends").status_code == 404
+
+
+def test_rows_that_vanish_or_appear_are_named(api, repo):  # noqa: F811
+    m = make(api, "metric", "Fächer", {"query": QUERY})
+    run(api, m["id"])
+    gone = sum(1 for d in repo.docs if M in d["ccm:taxonid"])
+    for doc in repo.docs:  # Mathematik verschwindet ganz
+        doc["ccm:taxonid"] = [v for v in doc["ccm:taxonid"] if v != M]
+    run(api, m["id"], refresh=True)
+    items = api.get("/api/highlights").json()["items"]
+    math = next(i for i in items if i["row"].startswith("Mathematik"))
+    assert (math["before"], math["after"], math["delta"], math["percent"]) == (
+        gone, 0, -gone, -100.0)
+    assert items[0] == math  # die größte Veränderung
+    for doc in repo.docs[:gone]:  # und kommt wieder
+        doc["ccm:taxonid"] = [*doc["ccm:taxonid"], M]
+    run(api, m["id"], refresh=True)
+    back = next(i for i in api.get("/api/highlights").json()["items"]
+                if i["row"].startswith("Mathematik"))
+    assert (back["before"], back["after"], back["percent"]) == (0, gone, None)
+
+
+def test_monthly_growth_is_no_highlight(api, repo):  # noqa: F811
+    """Der laufende Monat wächst von Lauf zu Lauf: Das ist Zufluss, keine Auffälligkeit."""
+    m = make(api, "metric", "Zufluss", {"query": {"instance": "wlo-prod",
+                                                  "growth": {"months": 3}}})
+    run(api, m["id"])
+    repo.docs.extend([dict(d) for d in repo.docs[:200]])
+    run(api, m["id"], refresh=True)
+    out = api.get("/api/highlights").json()
+    assert out["items"] == [] and out["compared"] == 1
+
+
+def test_trends_name_the_column_when_there_are_several(api, repo):  # noqa: F811
+    wide = {**QUERY, "columns": {"property": "ccm:educationalcontext", "top": 3}}
+    m = make(api, "metric", "Matrix", {"query": wide})
+    run(api, m["id"])
+    repo.docs.extend([dict(d) for d in repo.docs[:10]])
+    run(api, m["id"], refresh=True)
+    out = api.get(f"/api/definitions/{m['id']}/trends").json()
+    assert list(out["blocks"]) == ["main"] and out["labels"]["main"]
+    one = make(api, "metric", "Eine Spalte", {"query": QUERY})
+    run(api, one["id"])
+    repo.docs.extend([dict(d) for d in repo.docs[:10]])
+    run(api, one["id"], refresh=True)
+    assert api.get(f"/api/definitions/{one['id']}/trends").json()["labels"] == {}

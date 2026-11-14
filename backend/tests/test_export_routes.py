@@ -32,7 +32,8 @@ def test_export_in_every_format(api):
     m = make(api, "metric", 'Fächer "nach" Fach', {"query": QUERY, "view": {"type": "bar"}})
     run = api.post(f"/api/definitions/{m['id']}/run").json()
     expected = {"json": "application/json", "csv": "text/csv", "md": "text/markdown",
-                "html": "text/html", "pdf": "application/pdf"}
+                "html": "text/html", "pdf": "application/pdf",
+                "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml"}
     if not pdf_available():
         del expected["pdf"]
         r = api.get(f"/api/runs/{run['id']}/export", params={"format": "pdf"})
@@ -63,7 +64,7 @@ def test_export_errors_and_login(api):
     assert api.get("/api/runs/gibt-es-nicht/export").status_code == 404
     m = make(api, "metric", "M", {"query": QUERY})
     run = api.post(f"/api/definitions/{m['id']}/run").json()
-    r = api.get(f"/api/runs/{run['id']}/export", params={"format": "docx"})
+    r = api.get(f"/api/runs/{run['id']}/export", params={"format": "exe"})
     assert r.status_code == 422 and r.json()["kind"] == "invalid_request"
     api.cookies.clear()
     assert api.get(f"/api/runs/{run['id']}/export").status_code == 401

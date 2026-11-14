@@ -103,10 +103,14 @@ const SECTION_LABELS: Record<string, string> = { text: 'Text', table: 'Tabelle',
                     }
                   </select>
                 </label>
+                @if (item.view || !item.metric_id) {
                 <label title="Soll und Ist: Der Bericht sagt, welche Zeilen den Zielwert erreichen. Gemessen wird bei Füllgraden am Füllgrad in Prozent, sonst an der ersten Spalte.">Zielwert (mindestens)
                   <input type="number" class="target" [name]="'target-' + item.id" [attr.name]="'target-' + item.id" [ngModel]="item.view?.options?.target ?? null"
                          (ngModelChange)="setTarget(i, $event)" placeholder="keiner" />
                 </label>
+                } @else {
+                  <span class="muted" title="Ein Zielwert gehört zur Darstellung der Kachel. Solange die Kachel die Darstellung der Kennzahl übernimmt, gibt es keinen eigenen.">Zielwert: erst eine eigene Darstellung wählen</span>
+                }
               }
               @if (kind() === 'dashboard') {
                 <label>Breite

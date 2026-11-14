@@ -524,6 +524,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                     "Die Zeilen summieren sich deshalb nicht zur Gesamtzahl.")
 
     # ---- Formeln, Sortierung, top/other, „ohne Wert" --------------------------
+    rows = _drop_excluded(rows, rows_spec, notes)
     _apply_formulas(columns, [r.key for r in rows])
     rows = _sort_rows(rows, columns, rows_spec, include, bool(groups),
                       across=spec.columns is not None, row_totals=row_totals)
@@ -886,7 +887,8 @@ async def _execute_profile(spec: QuerySpec, client: EduSharingClient, vocab: Voc
     count_column = _Column("count", "Anzahl")
     for row in rows:
         count_column.cells[row.key] = counts.get(row.key, None if row_facet.truncated else 0)
-    rows = _sort_rows(rows, [count_column], rows_spec, include, False)
+    rows = _sort_rows(_drop_excluded(rows, rows_spec, notes), [count_column], rows_spec,
+                      include, False)
     if rows_spec.top is not None and len(rows) > rows_spec.top:
         notes.add("rows_top",
                   f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
@@ -1317,7 +1319,8 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
         count_column = _Column("count", "Anzahl")
         for row in rows:
             count_column.cells[row.key] = counts.get(row.key, None if facet.truncated else 0)
-        rows = _sort_rows(rows, [count_column], rows_spec, include, False)
+        rows = _sort_rows(_drop_excluded(rows, rows_spec, notes), [count_column],
+                          rows_spec, include, False)
         if rows_spec.top is not None and len(rows) > rows_spec.top:
             notes.add("rows_top",
                       f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
@@ -1631,6 +1634,28 @@ async def _value_rows(rows_spec, vocab: VocabStore, base, include, facet_counts,
     if restrict is not None:
         keys = [k for k in keys if k in restrict]
     return [_Row(k, await vocab.label(prop, k), "value") for k in keys]
+
+
+def _drop_excluded(rows: list[_Row], rows_spec: Any, notes: Notes) -> list[_Row]:
+    """Nimmt die Zeilen heraus, die die Abfrage ausblendet (``rows.exclude``), nach Kennung
+    oder Bezeichnung, mit oder ohne Zusatz in Klammern. Gesamtzahlen bleiben die des Bestands."""
+    asked = {str(e).strip().casefold() for e in (getattr(rows_spec, "exclude", None) or [])}
+    if not asked:
+        return rows
+
+    def hit(row: _Row) -> bool:
+        label = row.label.casefold()
+        return row.kind == "value" and (
+            row.key.casefold() in asked or label in asked
+            or label.rpartition(" (")[0] in asked)
+
+    gone = [row for row in rows if hit(row)]
+    if gone:
+        names = ", ".join(f"„{row.label}“" for row in gone[:8])
+        notes.add("rows_excluded",
+                  f"Ausgeblendet: {names}{' …' if len(gone) > 8 else ''}. Gesamtzahlen "
+                  "zählen diese Materialien weiterhin mit.")
+    return [row for row in rows if not hit(row)]
 
 
 def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, grouped: bool,

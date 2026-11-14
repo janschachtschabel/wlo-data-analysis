@@ -65,11 +65,11 @@ export interface Group { id: string; name: string }
 export interface RunHead {
   id: string | null; seq?: number; definition_id: string | null; kind: Kind; name: string;
   status: 'ok' | 'partial' | 'failed'; started_at: string; finished_at: string;
-  origin?: 'manual' | 'schedule'; instance?: string | null;
+  origin?: 'manual' | 'schedule' | 'nightly'; instance?: string | null;
 }
 export interface ReportTable {
   type: 'table'; key: string; title: string; fill?: FillInfo | null;
-  target?: { column: string; value: number; mode: 'min' | 'max'; reached: number; of: number } | null;
+  target?: { column: string; value: number; mode: 'min' | 'max'; reached: number; of: number; missed?: string[] } | null;
   columns: { id: string; label: string; derived: boolean }[]; rows: ResultRow[];
   header_groups?: [string, number][] | null; view: View; notes: Note[];
   /** Filter hinter den Zellen, für den Sprung in den Explorer */

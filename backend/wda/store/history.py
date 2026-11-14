@@ -104,6 +104,9 @@ def compare_target(con: sqlite3.Connection, run_id: str, target: str, tz: ZoneIn
     return dict(current), dict(found), points
 
 
+_MONTH = re.compile(r"\d{4}-\d{2}")
+
+
 class History:
     def __init__(self, db: Database, tz: ZoneInfo) -> None:
         self._db = db
@@ -118,6 +121,10 @@ class History:
             f"SELECT * FROM runs WHERE {where} AND EXISTS (SELECT 1 FROM run_results"  # noqa: S608
             " WHERE run_id=runs.id AND result IS NOT NULL) ORDER BY seq DESC LIMIT 1",
             args).fetchone()
+        return History._blocks_of(con, row)
+
+    @staticmethod
+    def _blocks_of(con: sqlite3.Connection, row: sqlite3.Row | None) -> dict[str, Any]:
         if row is None:
             return {"run_id": None, "blocks": []}
         try:
@@ -149,17 +156,19 @@ class History:
                 _HEAD + f"WHERE {where}{_USABLE} ORDER BY seq DESC LIMIT ?",  # noqa: S608
                 [*args, limit]).fetchall()))
             if len(heads) < 2:
-                return {"runs": [], "blocks": {}}
+                return {"runs": [], "blocks": {}, "labels": {}}
             # nur Läufe seit der letzten Änderung der Abfrage sind vergleichbar
             start = max((n for n in range(1, len(heads)) if changed(heads[n - 1], heads[n])),
                         default=0)
             heads = heads[start:]
             if len(heads) < 2:
-                return {"runs": [], "blocks": {}}
+                return {"runs": [], "blocks": {}, "labels": {}}
             position = {head["id"]: n for n, head in enumerate(heads)}
-            first = {b["key"]: b["columns"][0]["id"]
-                     for b in self._layout(con, def_id, None)["blocks"]
-                     if b["columns"] and any(r["key"] == TOTAL for r in b["rows"])}
+            shown = [b for b in self._layout(con, def_id, None)["blocks"]
+                     if b["columns"] and any(r["key"] == TOTAL for r in b["rows"])]
+            first = {b["key"]: b["columns"][0]["id"] for b in shown}
+            # mehrere Spalten: Die Linie zeigt die erste und sagt, welche das ist
+            named = {b["key"]: b["columns"][0]["label"] for b in shown if len(b["columns"]) > 1}
             blocks: dict[str, list[float | int | None]] = {}
             marks = ",".join("?" * len(heads))
             for point in con.execute(
@@ -172,9 +181,11 @@ class History:
                 blocks.setdefault(point["key"], [None] * len(heads))[
                     position[point["run_id"]]] = (int(value) if float(value).is_integer()
                                                   else round(value, 2))
+            kept = {key: values for key, values in blocks.items()
+                    if sum(v is not None for v in values) >= 2}
             return {"runs": [{"run_id": h["id"], "started_at": h["started_at"]} for h in heads],
-                    "blocks": {key: values for key, values in blocks.items()
-                               if sum(v is not None for v in values) >= 2}}
+                    "blocks": kept,
+                    "labels": {key: named[key] for key in kept if key in named}}
 
         return await self._db.read(fn)
 
@@ -194,6 +205,8 @@ class History:
                     args).fetchall()
                 if not heads:
                     continue
+                runs = [con.execute("SELECT * FROM runs WHERE id=?", (h["id"],)).fetchone()
+                        for h in heads]
                 watched += 1
                 if len(heads) < 2 or changed(heads[1], heads[0]):
                     continue
@@ -202,23 +215,39 @@ class History:
                                 for r in con.execute(
                                     "SELECT key, row_key, column_id, value FROM points"
                                     " WHERE run_id=?", (head["id"],))} for head in heads)
+                # Zeilen, die es nur in einem der Läufe gibt, zählen dort als 0; nur in Blöcken,
+                # die beide Läufe haben (sonst wäre ein gescheiterter Block lauter Verlust)
+                both = {k for k, _, _ in now} & {k for k, _, _ in before}
                 moved = []
-                for where_, after in now.items():
-                    old = before.get(where_)
-                    if after is None or old is None or after == old:
+                for where_ in {*now, *before}:
+                    if where_[0] not in both:
                         continue
-                    moved.append((where_, old, after))
+                    after, old = now.get(where_), before.get(where_)
+                    if where_ in now and where_ in before and (after is None or old is None):
+                        continue  # nicht bestimmbar ist keine Null
+                    after, old = after or 0, old or 0
+                    if after != old:
+                        moved.append((where_, old, after))
                 if not moved:
                     continue
-                layout = self._layout(con, definition["id"], None)
-                blocks = {b["key"]: b for b in layout["blocks"]}
+                blocks = {b["key"]: b for b in self._blocks_of(con, runs[0])["blocks"]}
+                earlier: dict[str, Any] | None = None
                 found = []
-                for (key, row, column), old, after in moved:
+                for (key, row, column), old, after in sorted(moved, key=lambda m: m[0]):
                     block = blocks.get(key)
                     if block is None:
                         continue
+                    rows = [r for r in block["rows"] if r["kind"] != "total"]
+                    if rows and all(_MONTH.fullmatch(r["key"]) for r in rows):
+                        continue  # Zuwachs je Monat: Der laufende Monat wächst immer
                     row_label = next((r["label"] for r in block["rows"] if r["key"] == row),
                                      None)
+                    if row_label is None:  # die Zeile gibt es nur im früheren Lauf
+                        if earlier is None:
+                            earlier = {b["key"]: b
+                                       for b in self._blocks_of(con, runs[1])["blocks"]}
+                        row_label = next((r["label"] for r in (earlier.get(key) or {"rows": []})
+                                          ["rows"] if r["key"] == row), None)
                     column_label = next((c["label"] for c in block["columns"]
                                          if c["id"] == column), None)
                     if row_label is None or column_label is None:

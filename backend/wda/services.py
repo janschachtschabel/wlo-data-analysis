@@ -28,7 +28,7 @@ from .llm.client import LlmClient
 from .snapshot.store import Snapshot
 from .snapshot.sync import sync
 from .store.db import Database
-from .store.definitions import DefinitionStore
+from .store.definitions import DefinitionStore, NotFound
 from .store.history import History
 from .store.runner import Runner, backfill_instances, backfill_points
 from .store.schedules import ScheduleStore
@@ -47,6 +47,8 @@ class Services:
     ) -> None:
         self._settings = settings
         self._instances = instances
+        self.precompute = [p.strip() for p in settings.precompute.split(",") if p.strip()][:20]
+        self._precompute_tried: dict[str, float] = {}
         self._transport = transport
         self._http: httpx.AsyncClient | None = None
         self._llm_transport = llm_transport
@@ -253,12 +255,11 @@ class Services:
         self.syncs[instance_id] = asyncio.create_task(go())
         return True
 
-    async def nightly_snapshots(self, now: datetime) -> list[str]:
-        """Zieht einmal je Nacht Änderungen in jeden vollständigen Abzug nach. Legt keinen
-        Abzug an; ein gescheiterter Versuch wird erst in der nächsten Nacht wiederholt."""
+    def _nightly_due(self, now: datetime) -> float | None:
+        """Der jüngste nächtliche Termin vor ``now``; ``None``, wenn es keinen gibt."""
         at = self._settings.snapshot_nightly
         if not at:
-            return []
+            return None
         zone = ZoneInfo(self._settings.timezone)
         clock = dtime(int(at[:2]), int(at[3:]))
         today = now.astimezone(zone).date()
@@ -266,6 +267,43 @@ class Services:
         due = datetime.combine(today, clock, tzinfo=zone).timestamp()
         if due > now.timestamp():
             due = datetime.combine(today - timedelta(days=1), clock, tzinfo=zone).timestamp()
+        return due
+
+    async def nightly_precompute(self, now: datetime) -> list[str]:
+        """Zählt einmal je Nacht die schweren Auswertungen neu und legt sie als Lauf ab, damit
+        ihre Seite am Morgen sofort da ist. Was es nicht gibt, wird übergangen; ein
+        gescheiterter Versuch wird erst in der nächsten Nacht wiederholt."""
+        due = self._nightly_due(now)
+        if due is None:
+            return []
+        done = []
+        for def_id in self.precompute:
+            if self._precompute_tried.get(def_id) == due:
+                continue
+            try:
+                runs = await self.runner.runs(def_id, limit=1)
+                fresh = bool(runs) and datetime.fromisoformat(
+                    runs[0]["started_at"].replace("Z", "+00:00")).timestamp() >= due
+                self._precompute_tried[def_id] = due
+                if fresh:
+                    continue
+                await self.runner.run(def_id, refresh=True, origin="nightly")
+                done.append(def_id)
+            except NotFound:
+                continue
+            except Exception as exc:  # eine Auswertung hält die übrigen nicht auf
+                self._precompute_tried[def_id] = due
+                log.warning("Nächtliches Vorrechnen von %s gescheitert (%s)", def_id,
+                            type(exc).__name__)
+        return done
+
+    async def nightly_snapshots(self, now: datetime) -> list[str]:
+        """Zieht einmal je Nacht Änderungen in jeden vollständigen Abzug nach. Legt keinen
+        Abzug an; ein gescheiterter Versuch wird erst in der nächsten Nacht wiederholt."""
+        found = self._nightly_due(now)
+        if found is None:
+            return []
+        due = found
         started = []
         for inst in self.registry.list():
             try:

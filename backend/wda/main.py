@@ -101,9 +101,14 @@ def create_app(
                                   llm_transport=llm_transport)
 
     app.state.scheduler_clock = now
+
+    async def nightly(when: datetime) -> None:
+        await app.state.services.nightly_snapshots(when)
+        await app.state.services.nightly_precompute(when)
+
     app.state.scheduler = Scheduler(
         lambda: app.state.services.schedules, lambda: app.state.services.runner, clock=now,
-        also=lambda when: app.state.services.nightly_snapshots(when))
+        also=nightly)
 
     @app.exception_handler(TooManyJobs)
     async def too_many_jobs(request: Request, exc: TooManyJobs) -> JSONResponse:
