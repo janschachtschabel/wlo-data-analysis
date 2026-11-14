@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api, ApiError, Latest } from '../core/api';
 import { Instances } from '../core/instances';
@@ -144,6 +144,8 @@ export class FilterBar {
           `&q=${encodeURIComponent(query)}&limit=40`, signal));
       }, 200);
     });
+    // eine entfernte Leiste fragt nicht mehr nach (sonst läuft die Suche nach dem Abbau noch los)
+    inject(DestroyRef).onDestroy(() => { if (this.timer) clearTimeout(this.timer); });
     effect(() => { this.options(); this.active.set(0); });
     // die mit den Pfeiltasten gewählte Zeile bleibt im sichtbaren Teil der Liste
     effect(() => {
