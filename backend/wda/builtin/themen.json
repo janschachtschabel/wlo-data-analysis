@@ -24,14 +24,14 @@
     "tiles": [
      {
       "id": "schlagwoerter-fach-stufe",
-      "title": "Wissenslandkarte Schule: typische Schlagwörter je Fach und Bildungsstufe (25 größte Fächer)",
+      "title": "Wissenslandkarte Schule: typische Schlagwörter je Fach und Bildungsstufe (40 größte Fächer)",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/discipline/",
-        "top": 25
+        "top": 40
        },
        "columns": {
         "property": "ccm:educationalcontext",
@@ -172,7 +172,7 @@
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/discipline/",
-        "top": 25
+        "top": 40
        },
        "columns": {
         "property": "ccm:educationalcontext",

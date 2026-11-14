@@ -9,7 +9,8 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
   selector: 'app-result-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="scroll" tabindex="0" role="region" [attr.aria-label]="'Tabelle: ' + (rowTitle() || 'Ergebnis')">
+    @if (topical()) { <p class="rows-note">{{ rows().length }} Zeilen, jede mit den Themen ihrer Zellen. Die Tabelle läuft über die ganze Seite nach unten.</p> }
+    <div class="scroll" [class.whole]="topical()" tabindex="0" role="region" [attr.aria-label]="'Tabelle: ' + (rowTitle() || 'Ergebnis')">
       <table class="data" [class.two]="!!headerGroups()" [class.topical]="topical()">
         <thead>
           @if (headerGroups(); as groups) {
@@ -72,6 +73,9 @@ import { HeatOptions, HeatScale, heatClasses } from './heat';
     }`,
   styles: `
     .scroll { overflow: auto; max-height: 70vh; }
+    /* Zeilen mit Themen sind hoch: im Kasten von 70 % der Fensterhöhe wären nur zwei, drei zu sehen */
+    .scroll.whole { max-height: none; }
+    .rows-note { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
     .pct { margin-left: 6px; font-size: 12px; }
     .get { margin: 4px 0 0; font-size: 12px; text-align: right; }
     @media print { .get { display: none; } }
