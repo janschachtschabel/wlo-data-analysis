@@ -260,6 +260,7 @@ await page.click('summary:has-text("Spezifikation")');
   assert.equal(await cell.getAttribute('aria-invalid'), 'true');
   // Enter übernimmt die Zahl und speichert nicht
   await cell.fill('1.234'); await cell.press('Enter');
+  await page.waitForFunction(() => document.querySelector('#spec').value.includes(': 1234'));
   assert.equal(await page.locator('form .row [role=status]').count(), 0);
   const manual = JSON.parse(await page.inputValue('#spec')).sections.find((x) => x.type === 'matrix').blocks.find((b) => b.source === 'manual');
   assert.ok(JSON.stringify(manual).includes(':1234'));
