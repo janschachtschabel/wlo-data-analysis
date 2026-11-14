@@ -48,7 +48,7 @@ Minute auch die richtige Anmeldung.
 | `WDA_SCHEDULER` | `on` | `off` schaltet den Planer ab; Zeitpläne bleiben dann liegen (z. B. bei einer zweiten Instanz auf derselben Datenbank) |
 | `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
 | `WDA_SNAPSHOT_PAGE` | `1000` | Materialien je Seite beim lokalen Abzug (10 bis 2000) |
-| `WDA_SNAPSHOT_NIGHTLY` | `03:30` | Uhrzeit (in `WDA_TIMEZONE`), zu der vorhandene Abzüge Änderungen nachziehen; `off` schaltet das ab |
+| `WDA_SNAPSHOT_NIGHTLY` | `03:30` | Uhrzeit (in `WDA_TIMEZONE`), zu der vorhandene Abzüge Änderungen nachziehen; `off` schaltet das ab (ebenso `WDA_SCHEDULER=off`) |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
 | `WDA_LLM_API_KEY` | – | Schlüssel für die KI-Anbindung |
@@ -184,7 +184,8 @@ was Zeilen- und Spaltensumme erwarten lassen:
 ```
 
 Je Feld stehen die gezählten Materialien, die Erwartung (Zeilensumme × Spaltensumme ÷
-Summe der gezeigten Matrix) und der Anteil am Erwarteten in Prozent; die kleinsten zuerst.
+Summe der gezeigten Matrix) und der Anteil am Erwarteten in Prozent; nur Felder unter der
+Erwartung, die kleinsten zuerst. Felder, die sich nicht bestimmen ließen, fehlen.
 Felder mit einer Erwartung unter `min_expected` bleiben weg, damit seltene Fächer die
 Liste nicht füllen. Eine Lücke kann fachlich begründet sein (Philosophie in der
 Primarstufe); die Liste zeigt, wo sich das Nachsehen lohnt. Im Dashboard „Abdeckung“
@@ -227,7 +228,7 @@ Ein vollständiger Abzug von WLO (rund 320.000 Materialien) dauert etwa zweieinh
 lässt sich anhalten und fortsetzen; „Änderungen nachziehen“ liest danach nur, was sich
 seit dem letzten Abzug geändert hat; das geschieht für vorhandene Abzüge auch von selbst
 jede Nacht (`WDA_SNAPSHOT_NIGHTLY`). Gelöschte Materialien verschwinden erst mit einem
-vollständigen Abzug. Ändern sich Adresse, Repositorium, Metadatenset, Query oder Anmeldung einer Instanz, wird ihr
+vollständigen Abzug. Ändern sich Adresse, Repositorium, Metadatenset, Query oder Benutzername einer Instanz, wird ihr
 Abzug verworfen; eine Umbenennung lässt ihn stehen. In der Liste der Rechner stehen nur
 Rechner mit mindestens fünf Materialien einzeln.
 

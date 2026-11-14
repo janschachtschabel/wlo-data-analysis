@@ -165,10 +165,16 @@ async def sync(client: EduSharingClient, snapshot: Snapshot, secret: bytes, mode
         gone = 0
         if mode == "full":
             seen = await store(snapshot.seen, pass_no)
-            if expected and seen + skipped < expected * COMPLETE:
+            # gegen den Bestand von jetzt prüfen, nicht gegen den vom Beginn des Laufs
+            current, _ = await _page(client, sleep, criteria=[Criterion("ngsearchword", ("*",))],
+                                     sort=sort, max_items=1, skip=0, properties=PROPERTIES[:1])
+            if seen + skipped < current * COMPLETE:
+                # Zeiger verwerfen: Der nächste Start beginnt neu, statt hier festzuhängen
+                await store(_set, snapshot, {"cursor": None, "cursor_mode": None,
+                                             "total": None})
                 raise SyncError(
-                    f"Der Durchgang hat nur {seen} von {expected} Materialien gesehen. Der "
-                    "alte Bestand bleibt; bitte vollständig erneuern.")
+                    f"Der Durchgang hat nur {seen} von {current} Materialien gesehen. Der "
+                    "alte Bestand bleibt; ein neuer Start liest von vorn.")
             gone = await store(snapshot.finish_pass, pass_no)
         await store(lambda: snapshot.set_state(
             status="ok", finished_at=started, cursor=None, cursor_mode=None, done=done,

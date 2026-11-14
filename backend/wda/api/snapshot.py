@@ -32,8 +32,7 @@ def _snapshot(request: Request, instance: str) -> Snapshot:
 
 
 def _running(request: Request, instance: str) -> bool:
-    task = request.app.state.services.syncs.get(instance)
-    return task is not None and not task.done()
+    return request.app.state.services.sync_running(instance)
 
 
 @router.get("/{instance}")
@@ -56,10 +55,11 @@ async def start(instance: str, body: StartIn, request: Request) -> Any:
             "conflict", "Nachziehen geht erst nach einem vollständigen Abzug."),
             status_code=409)
     # Den Stand schreibt allein der Abzug: Er muss erst lesen, was vorher war.
-    services.start_sync(instance, body.mode)
-    await asyncio.sleep(0)
+    if not services.start_sync(instance, body.mode):
+        return JSONResponse(error_body("conflict", "Der Abzug läuft schon."), status_code=409)
     out = await asyncio.to_thread(status, snap, True)
-    out["status"] = "running"
+    # der Abzug schreibt seinen Stand gleich selbst; bis dahin nichts vom vorigen Lauf zeigen
+    out.update(status="running", error=None, resumable=False)
     return out
 
 
@@ -79,8 +79,11 @@ async def clear(instance: str, request: Request) -> Any:
     if _running(request, instance):
         return JSONResponse(error_body("conflict", "Erst den laufenden Abzug anhalten."),
                             status_code=409)
-    # als laufende Aufgabe eingetragen, damit währenddessen kein Abzug beginnt
-    task = asyncio.create_task(asyncio.to_thread(snap.clear))
-    request.app.state.services.syncs[instance] = task
-    await task
+    # gesperrt, damit währenddessen kein Abzug beginnt; „Anhalten“ lässt das Löschen laufen
+    services = request.app.state.services
+    services.clearing.add(instance)
+    try:
+        await asyncio.to_thread(snap.clear)
+    finally:
+        services.clearing.discard(instance)
     return await asyncio.to_thread(status, snap, False)

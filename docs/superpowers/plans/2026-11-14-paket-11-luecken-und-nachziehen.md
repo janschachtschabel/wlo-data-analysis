@@ -43,3 +43,28 @@ Matrix), `tests/test_snapshot_sync.py` (nächtliches Nachziehen, Abschalten).
 2. Nächtliches Nachziehen: Kann es mehrfach, gar nicht oder gleichzeitig mit einem
    Abzug von Hand starten? Zeitzonen, Sommerzeit, lange Standzeit der App.
 3. Neue Kacheln: sinnvolle Abfragen, Aufwand je Lauf (Zahl der Abfragen).
+
+## Stand nach Review (Commits 9af5dff und 30f1f0d gemeinsam geprüft)
+
+Kein kritischer Befund. Behoben (Tests in `backend/tests/test_review_p11.py` und
+`test_engine_gaps.py`):
+
+- W1: Die Lückenliste nimmt auch Gruppenzeilen (rollup); die Kachel für die Hochschule
+  war leer.
+- W2: Nicht bestimmbare Felder zählen nicht als null; sie fehlen in Summen und Liste, der
+  Hinweis nennt ihre Zahl. Die Liste zeigt nur Felder unter der Erwartung.
+- W3: Die Vollständigkeitsprüfung am Ende eines vollen Laufs vergleicht mit dem Bestand
+  von jetzt (eine Zählabfrage) und verwirft bei Abbruch den Zeiger, damit der nächste
+  Start neu liest.
+- W4: Nachts wird nichts nachgezogen, solange ein voller Lauf aufs Fortsetzen wartet.
+- W5: `start_sync` prüft selbst, ob schon etwas läuft; zwei Abzüge derselben Instanz
+  sind ausgeschlossen.
+- W6: Löschen sperrt über `Services.clearing`; „Anhalten“ hebt die Sperre nicht auf.
+- G1 Zeitumstellung (Vergleich von Zeitpunkten statt Uhrzeiten), G2 eine unlesbare
+  Abzugsdatei hält die übrigen Instanzen nicht auf, G3 Text des Hinweises und
+  eindeutiger Schlüssel, G4 Antwort auf Start ohne Reste des vorigen Laufs, G6 README.
+
+Offen, gering: G5 Die beiden Lückenkacheln wiederholen die Abfragen ihrer Matrix; im
+gewöhnlichen Lauf kommen sie aus dem Zwischenspeicher, bei Zeitplänen (`refresh`) kosten
+sie die Aufrufe noch einmal. G7 `close()` wartet auf eine laufende Auswertung. In der
+Historie wechselt die Zeilenmenge der Lückenliste je Lauf.

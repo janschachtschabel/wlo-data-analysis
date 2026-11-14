@@ -13,6 +13,7 @@ Zerlegung (Zähl-Semantik siehe docs/edu-sharing-api-erkenntnisse.md):
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -108,38 +109,47 @@ async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore
 
 def _gaps(result: dict[str, Any], spec: QuerySpec) -> dict[str, Any]:
     """Aus der Matrix wird eine Liste: je Feld die Zahl, die Erwartung aus Zeilen- und
-    Spaltensumme (bei gleicher Verteilung) und das Verhältnis. Die kleinsten zuerst."""
+    Spaltensumme (wenn Zeile und Spalte unabhängig wären) und das Verhältnis. Nur Felder
+    unter der Erwartung, die kleinsten zuerst."""
     ask = spec.gaps
     assert ask is not None
     cols = [(n, c) for n, c in enumerate(result["columns"])
             if not c.get("derived") and not str(c["id"]).startswith("__")]
-    rows = [r for r in result["rows"] if r.get("kind") == "value"]
-    cells = [[r["values"][n] or 0 for n, _ in cols] for r in rows]
-    row_sums = [sum(line) for line in cells]
-    col_sums = [sum(line[k] for line in cells) for k in range(len(cols))]
+    rows = [r for r in result["rows"] if r.get("kind") in ("value", "group")]
+    cells = [[r["values"][n] for n, _ in cols] for r in rows]
+    # ein nicht bestimmbares Feld zählt nicht als null; es bleibt aus Summen und Liste
+    unknown = sum(1 for line in cells for value in line if value is None)
+    row_sums = [sum(v or 0 for v in line) for line in cells]
+    col_sums = [sum(line[k] or 0 for line in cells) for k in range(len(cols))]
     whole = sum(row_sums)
     found = []
     for i, row in enumerate(rows):
         for k, (_, col) in enumerate(cols):
+            value = cells[i][k]
             expected = row_sums[i] * col_sums[k] / whole if whole else 0
-            if expected < ask.min_expected:
+            if value is None or expected < ask.min_expected or value >= expected:
                 continue
-            found.append((cells[i][k] / expected, -expected, {
-                "key": f"{row['key']}|{col['id']}", "label": f"{row['label']} · {col['label']}",
-                "kind": "value",
-                "values": [cells[i][k], round(expected), round(100 * cells[i][k] / expected, 1)]}))
+            found.append((value / expected, -expected, {
+                "key": json.dumps([row["key"], col["id"]], ensure_ascii=False),
+                "label": f"{row['label']} · {col['label']}", "kind": "value",
+                "values": [value, round(expected), round(100 * value / expected, 1)]}))
     found.sort(key=lambda item: item[:2])
     columns = [
         {"id": "count", "label": "Materialien", "derived": False, "total": None},
         {"id": "expected", "label": "erwartet", "derived": True, "total": None},
         {"id": "ratio", "label": "Anteil am Erwarteten (%)", "derived": True, "total": None}]
-    notes = list(result["provenance"]["notes"])
-    notes.append({"code": "gaps", "text": (
-        f"Lückenliste aus {len(rows)} Zeilen × {len(cols)} Spalten: die {ask.limit} Felder mit "
-        "dem kleinsten Anteil am Erwarteten. Erwartet ist, was Zeilen- und Spaltensumme der "
-        "gezeigten Matrix bei gleicher Verteilung ergäben; Felder mit einer Erwartung unter "
-        f"{ask.min_expected:g} bleiben weg. Eine Lücke kann fachlich begründet sein.")})
-    return {**result, "columns": columns, "rows": [item[2] for item in found[:ask.limit]],
+    shown = found[:ask.limit]
+    text = (
+        f"Lückenliste aus {len(rows)} Zeilen × {len(cols)} Spalten: {len(shown)} von "
+        f"{len(found)} Feldern unter der Erwartung, die mit dem kleinsten Anteil zuerst. "
+        "Erwartet ist, was Zeilen- und Spaltensumme der gezeigten Matrix ergäben, wenn Zeile "
+        "und Spalte unabhängig wären; Felder mit einer Erwartung unter "
+        f"{ask.min_expected:g} bleiben weg. Materialien mit mehreren Werten zählen in den "
+        "Summen mehrfach. Eine Lücke kann fachlich begründet sein.")
+    if unknown:
+        text += f" {unknown} Felder ließen sich nicht bestimmen und fehlen."
+    notes = [*result["provenance"]["notes"], {"code": "gaps", "text": text}]
+    return {**result, "columns": columns, "rows": [item[2] for item in shown],
             "total_row": False,
             "provenance": {**result["provenance"], "notes": notes,
                            "columns": [{"id": c["id"], "filters": [], "formula": None}

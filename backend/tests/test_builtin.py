@@ -281,7 +281,11 @@ def test_coverage_dashboard_runs_and_separates_school_and_university_subjects(ap
     assert [c["id"] for c in gaps["columns"]] == ["count", "expected", "ratio"]
     ratios = [r["values"][2] for r in gaps["rows"]]
     assert ratios and ratios == sorted(ratios)
-    row_key, col_key = gaps["rows"][0]["key"].split("|")
+    row_key, col_key = json.loads(gaps["rows"][0]["key"])
+    assert all(r["values"][2] < 100 for r in gaps["rows"])
+    uni_gaps = results["luecken-hochschule"]  # Zeilen sind hier Gruppen (rollup)
+    assert "aus 0 Zeilen" not in next(
+        n["text"] for n in uni_gaps["provenance"]["notes"] if n["code"] == "gaps")
     grid = results["schule-stufe"]
     matrix_row = next(r for r in grid["rows"] if r["key"] == row_key)
     matrix_col = [c["id"] for c in grid["columns"]].index(col_key)
