@@ -6,11 +6,12 @@ import { Api, ApiError, Latest } from '../core/api';
 import { Auth } from '../core/auth';
 import { formatNumber, formatTime } from '../core/format';
 import { Instances } from '../core/instances';
-import { Definition, FieldInfo, FillShow, Filter, QueryResult, QuerySpec, ViewType } from '../core/types';
+import { Definition, FieldInfo, FillShow, Filter, QueryResult, QuerySpec, ViewType, VocabPage } from '../core/types';
 import { FilterBar } from '../filters/filter-bar';
 import { ExplorerState, FILL_VIEWS, MAX_FILL_FIELDS, decodeState, emptyState, encodeState, fieldChoices, fillDefaults, replaceValue } from '../filters/state';
 import { heatScale } from '../shared/heat';
 import { ResultTable } from '../shared/result-table';
+import { VocabInfo, vocabInfo } from './vocab-info';
 
 const VIEWS: { id: ViewType; label: string }[] = [
   { id: 'table', label: 'Tabelle' }, { id: 'heatmap', label: 'Heatmap' }, { id: 'bar', label: 'Balken' }, { id: 'stacked_bar', label: 'Gestapelt' },
@@ -68,6 +69,18 @@ const VIEWS: { id: ViewType; label: string }[] = [
             </label>
           }
         }
+        @if (spec().rows && rowInfo().spaces.length) {
+          <label>Vokabular
+            <select name="row-match" [ngModel]="spec().rows?.match ?? ''" (ngModelChange)="setMatch($event)">
+              <option value="">alle</option>
+              @for (space of rowInfo().spaces; track space.prefix) { <option [value]="space.prefix">{{ space.label }}</option> }
+            </select>
+          </label>
+        }
+        @if (spec().rows && !spec().fill && rowInfo().tree) {
+          <label title="Jede Zeile zählt einen Wert der obersten Ebene samt allen Unterwerten">
+            <input type="checkbox" name="rollup" [ngModel]="!!spec().rows?.rollup" (ngModelChange)="setRollup($event)" /> oberste Ebene</label>
+        }
         @if (spec().rows && !spec().fill) {
           <label>Spalten nach
             <select [ngModel]="spec().columns?.property ?? ''" (ngModelChange)="setColumns($event)">
@@ -79,13 +92,23 @@ const VIEWS: { id: ViewType; label: string }[] = [
               }
             </select>
           </label>
+          @if (spec().columns && columnInfo().spaces.length) {
+            <label>Vokabular der Spalten
+              <select name="column-match" [ngModel]="spec().columns?.match ?? ''" (ngModelChange)="setColumnMatch($event)">
+                <option value="">alle</option>
+                @for (space of columnInfo().spaces; track space.prefix) { <option [value]="space.prefix">{{ space.label }}</option> }
+              </select>
+            </label>
+          }
           <label>Zeilen
             <select [ngModel]="spec().rows?.top ?? 0" (ngModelChange)="setTop(+$event)">
               <option [value]="10">Top 10</option><option [value]="25">Top 25</option>
               <option [value]="100">Top 100</option><option [value]="0">alle</option>
             </select>
           </label>
-          <label><input type="checkbox" [ngModel]="spec().rows?.missing ?? false" (ngModelChange)="setMissing($event)" /> ohne Wert</label>
+          @if (!spec().rows?.match && !spec().rows?.rollup) {
+            <label><input type="checkbox" [ngModel]="spec().rows?.missing ?? false" (ngModelChange)="setMissing($event)" /> ohne Wert</label>
+          }
           <label>Anteile
             <select [ngModel]="spec().percent ?? 'none'" (ngModelChange)="patch({ percent: $event })">
               <option value="none">keine</option><option value="column">je Spalte</option><option value="row">je Zeile</option>
@@ -215,6 +238,10 @@ export class Explorer {
   private fromUrl = false;
 
   protected readonly facetFields = computed(() => fieldChoices(this.fields()));
+  private readonly vocabs = signal<Record<string, VocabInfo>>({});
+  private readonly none: VocabInfo = { spaces: [], tree: false };
+  protected readonly rowInfo = computed(() => this.vocabs()[this.spec().instance + '\n' + (this.spec().rows?.property ?? '')] ?? this.none);
+  protected readonly columnInfo = computed(() => this.vocabs()[this.spec().instance + '\n' + (this.spec().columns?.property ?? '')] ?? this.none);
   protected readonly rowTitle = computed(() => {
     const property = this.spec().rows?.property;
     return this.fields().find((f) => f.property === property)?.caption || property || '';
@@ -280,6 +307,22 @@ export class Explorer {
       this.instances.fields(instance).then(
         (fields) => { if (instance === this.instance()) this.fields.set(fields); },
         () => undefined); // die Filterleiste zeigt den Fehler
+    });
+    // Wertelisten der gewählten Achsen: daraus entstehen „Vokabular“ und „oberste Ebene“.
+    effect(() => {
+      const instance = this.instance();
+      const wanted = [this.spec().rows?.property, this.spec().columns?.property];
+      const fields = this.fields();
+      untracked(() => {
+        for (const property of wanted) {
+          const key = instance + '\n' + property;
+          if (!property || key in this.vocabs()) continue;
+          if (!fields.find((f) => f.property === property)?.value_count) continue;
+          this.vocabs.update((all) => ({ ...all, [key]: this.none }));
+          this.api.get<VocabPage>(`/instances/${encodeURIComponent(instance)}/vocab?property=${encodeURIComponent(property)}&limit=5000`)
+            .then((page) => this.vocabs.update((all) => ({ ...all, [key]: vocabInfo(page.values) })), () => undefined);
+        }
+      });
     });
     // Nach erneuter Anmeldung zählt die Ansicht von selbst neu.
     const auth = inject(Auth);
@@ -354,6 +397,18 @@ export class Explorer {
     if (!property) { this.patch({ rows: null, columns: null, percent: 'none' }); this.view.set('table'); return; }
     const columns = this.spec().columns?.property === property ? null : this.spec().columns;
     this.patch({ rows: { property, top: this.spec().rows?.top ?? 25, missing: this.spec().rows?.missing ?? false }, columns });
+  }
+  protected setMatch(match: string): void {
+    const rows = this.spec().rows;
+    if (rows) this.patch({ rows: { ...rows, match: match || null, missing: false } });
+  }
+  protected setRollup(on: boolean): void {
+    const rows = this.spec().rows;
+    if (rows) this.patch({ rows: { ...rows, rollup: on ? 'top' : null, missing: false, top: on ? null : rows.top ?? 25 } });
+  }
+  protected setColumnMatch(match: string): void {
+    const columns = this.spec().columns;
+    if (columns) this.patch({ columns: { ...columns, match: match || null } });
   }
   protected setColumns(property: string): void { this.patch({ columns: property ? { property, top: 8 } : null }); }
   protected setTop(top: number): void { const rows = this.spec().rows; if (rows) this.patch({ rows: { ...rows, top: top || null } }); }

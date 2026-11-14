@@ -6,10 +6,14 @@ export interface Rows {
   property: string; include?: Value[] | null; top?: number | null; other?: boolean;
   missing?: boolean; sort?: 'count' | 'label' | 'given' | null;
   groups?: { id?: string; label: string; values: Value[] }[] | null;
+  /** nur Werte, die so beginnen (eines von mehreren Vokabularen im Feld) */
+  match?: string | null; vocab?: 'outside' | 'inside' | null;
+  /** oberste Ebene des Vokabularbaums, jede Zeile samt Unterwerten */
+  rollup?: 'top' | null;
 }
 export interface QuerySpec {
   instance: string; filters?: Filter[]; rows?: Rows | null; series?: Series[];
-  columns?: { property: string; top?: number } | null;
+  columns?: { property: string; top?: number; match?: string | null } | null;
   percent?: 'none' | 'column' | 'row'; refresh?: boolean;
   /** Füllgrade statt Zählungen: je Feld, wie oft es gefüllt ist */
   fill?: { fields: { property: string; label?: string }[]; show?: FillShow } | null;

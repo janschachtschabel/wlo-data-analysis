@@ -159,6 +159,9 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
 - `rows.vocab: "outside"`: nur Werte, die die Werteliste des Feldes nicht kennt (Schmutzwerte,
   andere Schreibweisen). `vocab_check: {"fields": [...]}` zählt das je Feld. Beides nur für
   Felder mit Werteliste, damit nie Werte einzelner Datensätze erscheinen.
+- `rows.rollup: "top"`: die oberste Ebene des Vokabularbaums als Zeilen, jede samt allen
+  Unterwerten (Fächergruppen der Hochschulsystematik statt 259 einzelner Fächer). Im Explorer
+  die Schalter „Vokabular“ und „oberste Ebene“.
 - Darstellung `heatmap`: die Tabelle mit eingefärbten Zellen, 0 als schraffierte Lücke; für
   Prozent-Spalten eine Ampel (unter 50 rot, unter 80 gelb). Auch im HTML- und PDF-Export.
 - Der Menüpunkt „Qualität“ zeigt die mitgelieferten Dashboards „Abdeckung“ (Fach ×

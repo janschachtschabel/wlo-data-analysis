@@ -31,6 +31,7 @@
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "vocab": "inside",
         "sort": "label"
        },
        "columns": {
@@ -50,15 +51,15 @@
       }
      },
      {
-      "id": "hochschule-stufe",
-      "title": "Hochschulfächer (Destatis) × Bildungsstufe, 40 größte",
+      "id": "hochschule-gruppen-stufe",
+      "title": "Hochschule: Fächergruppen (Destatis) × Bildungsstufe, samt aller Fächer darunter",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
-        "top": 40
+        "rollup": "top"
        },
        "columns": {
         "property": "ccm:educationalcontext",
@@ -73,6 +74,34 @@
        "x": 0,
        "y": 14,
        "w": 12,
+       "h": 8
+      }
+     },
+     {
+      "id": "hochschule-stufe",
+      "title": "Hochschule: Studienbereiche und Fächer × Bildungsstufe, 40 größte",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
+        "vocab": "inside",
+        "top": 40
+       },
+       "columns": {
+        "property": "ccm:educationalcontext",
+        "match": "http://w3id.org/openeduhub/vocabs/educationalContext/",
+        "top": 14
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 22,
+       "w": 12,
        "h": 12
       }
      },
@@ -85,6 +114,7 @@
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "vocab": "inside",
         "sort": "label"
        },
        "columns": {
@@ -97,21 +127,21 @@
       },
       "layout": {
        "x": 0,
-       "y": 26,
+       "y": 34,
        "w": 12,
        "h": 14
       }
      },
      {
       "id": "hochschule-materialart",
-      "title": "Hochschulfächer × Materialart, 40 größte",
+      "title": "Hochschule: Fächergruppen × Materialart (10 häufigste Arten)",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/hochschulfaechersystematik/",
-        "top": 40
+        "rollup": "top"
        },
        "columns": {
         "property": "ccm:oeh_lrt_aggregated",
@@ -123,9 +153,36 @@
       },
       "layout": {
        "x": 0,
-       "y": 40,
+       "y": 48,
        "w": 12,
-       "h": 12
+       "h": 8
+      }
+     },
+     {
+      "id": "schule-zielgruppe",
+      "title": "Schulfächer × Zielgruppe: für wen ist das Angebot gedacht?",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:taxonid",
+        "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "vocab": "inside",
+        "sort": "label"
+       },
+       "columns": {
+        "property": "ccm:educationalintendedenduserrole",
+        "top": 8
+       }
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 56,
+       "w": 12,
+       "h": 14
       }
      },
      {
@@ -148,7 +205,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 52,
+       "y": 70,
        "w": 12,
        "h": 8
       }
@@ -162,6 +219,7 @@
        "rows": {
         "property": "ccm:taxonid",
         "match": "http://w3id.org/openeduhub/vocabs/discipline/",
+        "vocab": "inside",
         "sort": "label"
        },
        "series": [
@@ -248,7 +306,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 60,
+       "y": 78,
        "w": 12,
        "h": 14
       }
@@ -347,9 +405,108 @@
       },
       "layout": {
        "x": 0,
-       "y": 74,
+       "y": 92,
        "w": 12,
        "h": 8
+      }
+     },
+     {
+      "id": "materialart-lizenz",
+      "title": "Materialart × Lizenz (20 häufigste Arten)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [],
+       "rows": {
+        "property": "ccm:oeh_lrt_aggregated",
+        "top": 20
+       },
+       "series": [
+        {
+         "id": "gesamt",
+         "label": "Gesamt"
+        },
+        {
+         "id": "offen",
+         "label": "offen (PD, CC0, CC BY, CC BY-SA)",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "OPEN",
+            "CC_BY_OPEN"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "nc_nd",
+         "label": "CC mit NC/ND",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "CC_BY_RESTRICTED"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "copyright",
+         "label": "urheberrechtlich geschützt",
+         "filters": [
+          {
+           "property": "license",
+           "values": [
+            "COPYRIGHT_OTHERS"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "custom",
+         "label": "eigene Lizenz (CUSTOM)",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "CUSTOM",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "mit",
+         "label": "mit Lizenzangabe",
+         "filters": [
+          {
+           "property": "ccm:commonlicense_key",
+           "values": [
+            {
+             "value": "",
+             "literal": true
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "id": "ohne",
+         "label": "ohne Lizenzangabe",
+         "formula": "gesamt - mit"
+        }
+       ]
+      },
+      "view": {
+       "type": "heatmap"
+      },
+      "layout": {
+       "x": 0,
+       "y": 100,
+       "w": 12,
+       "h": 9
       }
      },
      {
@@ -373,7 +530,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 82,
+       "y": 109,
        "w": 12,
        "h": 10
       }
@@ -399,7 +556,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 92,
+       "y": 119,
        "w": 12,
        "h": 10
       }

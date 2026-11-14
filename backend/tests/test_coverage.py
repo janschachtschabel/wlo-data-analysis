@@ -147,3 +147,90 @@ def test_fill_per_row_respects_match(repo, tmp_path):
     result = query(repo, tmp_path, rows={"property": LVL, "match": EC},
                    fill={"fields": [{"property": TAX}]})
     assert {r["key"] for r in result["rows"]} == set(LEVELS.values())
+
+
+def test_fill_counts_a_field_whose_filter_also_finds_other_spellings(repo, tmp_path):
+    lang = "cclom:general_language"
+    for n, doc in enumerate(repo.docs):
+        if n % 9 == 0:
+            doc[lang] = ["DE"]
+        elif n % 11 == 0:
+            doc[lang] = ["de-DE", "en"]
+    result = query(repo, tmp_path, fill={"fields": [{"property": lang}]})
+    filled = repo.brute(lambda d: bool(d.get(lang)))
+    assert result["rows"][0]["values"][0] == filled
+    assert "fill_range" not in notes_of(result)
+
+
+@pytest.fixture
+def tree(repo, monkeypatch):
+    """Hochschulfächer als Baum: Wurzel, Fächergruppen, darunter ein Studienbereich."""
+    from . import esdata
+    child = HSF + "n8-61"
+    widgets = []
+    for widget in esdata.MDS["widgets"]:
+        if widget["id"] == TAX:
+            values = [dict(v, parent=HSF if v["id"].startswith(HSF) else None)
+                      for v in widget["values"]]
+            values += [{"id": HSF, "caption": "Destatis-Systematik", "parent": None},
+                       {"id": child, "caption": "Informatik", "parent": HSF + "n8"}]
+            widget = dict(widget, values=values)
+        widgets.append(widget)
+    monkeypatch.setattr(esdata, "MDS", dict(esdata.MDS, widgets=widgets))
+    for n, doc in enumerate(repo.docs):
+        if n % 5 == 0:
+            doc[TAX] = [*doc[TAX], child]
+        if n % 13 == 0:
+            doc[TAX] = [*doc[TAX], HSF]
+    return child
+
+
+def test_rollup_counts_each_top_value_with_everything_below(repo, tree, tmp_path):
+    result = query(repo, tmp_path, rows={"property": TAX, "match": HSF, "rollup": "top"})
+    got = cells(result)
+    assert set(got) == UNI  # die Wurzel und der Studienbereich sind keine Zeilen
+    eng = HSF + "n8"
+    assert got[eng] == repo.brute(repo.has(TAX, eng, tree))
+    assert got[eng] > repo.brute(repo.has(TAX, eng))
+    assert got[HSF + "n1"] == repo.brute(repo.has(TAX, HSF + "n1"))
+    labels = {r["key"]: r["label"] for r in result["rows"]}
+    assert labels[eng] == "Ingenieurwissenschaften"
+    # größte zuerst
+    values = [r["values"][0] for r in result["rows"]]
+    assert values == sorted(values, reverse=True)
+    notes = notes_of(result)
+    assert "Destatis-Systematik" in notes["rows_rollup"]
+    # die Wurzel und der unbekannte Wert kommen vor, stehen aber in keiner Zeile
+    assert "2 vorkommende Werte" in notes["values_ungrouped"]
+
+
+def test_rollup_with_columns_counts_cells_and_sorts_by_row_sum(repo, tree, tmp_path):
+    result = query(repo, tmp_path, rows={"property": TAX, "match": HSF, "rollup": "top"},
+                   columns={"property": LVL, "match": EC})
+    eng = next(r for r in result["rows"] if r["key"] == HSF + "n8")
+    for col, value in zip(result["columns"], eng["values"], strict=True):
+        assert value == repo.brute(lambda d, c=col["id"]: bool(
+            {HSF + "n8", tree} & set(d[TAX])) and c in d[LVL])
+    sums = [sum(r["values"]) for r in result["rows"]]
+    assert sums == sorted(sums, reverse=True)
+
+
+def test_matrix_rows_are_ordered_by_their_sum_not_by_the_first_column(repo, tmp_path):
+    result = query(repo, tmp_path, rows={"property": TAX, "match": DISC},
+                   columns={"property": LVL, "match": EC})
+    sums = [sum(v or 0 for v in r["values"]) for r in result["rows"]]
+    assert sums == sorted(sums, reverse=True)
+    first = [r["values"][0] for r in result["rows"]]
+    assert first != sorted(first, reverse=True)  # sonst prüft der Test nichts
+
+
+def test_rollup_needs_a_value_list_and_excludes_what_does_not_fit(repo, tmp_path):
+    with pytest.raises(QueryError, match="Werteliste"):
+        query(repo, tmp_path, rows={"property": SRC, "rollup": "top"})
+    for rows in ({"property": TAX, "rollup": "top", "vocab": "inside"},
+                 {"property": TAX, "rollup": "top", "include": ["x"]}):
+        with pytest.raises(ValidationError):
+            QuerySpec(instance="x", rows=rows)
+    with pytest.raises(ValidationError):
+        QuerySpec(instance="x", rows={"property": TAX, "rollup": "top"},
+                  fill={"fields": [{"property": LIC}]})

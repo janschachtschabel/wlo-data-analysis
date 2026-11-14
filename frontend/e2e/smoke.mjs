@@ -92,6 +92,14 @@ await page.waitForSelector('select[name=show]');
 assert.equal(await page.inputValue('select[name=show]'), 'missing');
 assert.equal(await page.getAttribute('.views button:has-text("Füllgrade")', 'aria-pressed'), 'true');
 
+// zwei Vokabulare in einem Feld (Schul- und Hochschulfächer): die Auswahl beschränkt die Zeilen
+await page.click('.views button:has-text("Verteilung")');
+await page.waitForSelector('select[name=row-match]');
+await page.waitForFunction(() => !document.querySelector('section.result [aria-busy=true]') && document.querySelectorAll('app-result-table tbody tr').length > 4);
+const allRows = await page.locator('app-result-table tbody tr').count();
+await page.selectOption('select[name=row-match]', { index: 2 });
+await page.waitForFunction((n) => { const k = document.querySelectorAll('app-result-table tbody tr').length; return k > 1 && k < n; }, allRows);
+
 // Bibliothek: der HTML-Name bleibt Text; mitgelieferte Vorlage installieren und ansehen
 await page.goto(base + '/bibliothek');
 await page.waitForSelector(`text=${EVIL}`);

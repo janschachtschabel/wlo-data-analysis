@@ -29,7 +29,7 @@ from ..filters import (
     resolve_values,
 )
 from .formula import Formula, compile_formula
-from .spec import MAX_CALLS, MAX_SERIES, QuerySpec, Series
+from .spec import MAX_CALLS, MAX_GROUPS, MAX_SERIES, QuerySpec, Series
 
 Number = int | float
 SCHEMA_VERSION = 1  # Form des Ergebnisses; gespeicherte Läufe tragen sie mit
@@ -127,6 +127,11 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
         await vocab.check_facet(rows_spec.property)
         if rows_spec.vocab:
             await known_values(vocab, rows_spec.property)  # vor dem ersten Aufruf prüfen
+        if rows_spec.rollup:
+            mode = "distinct"
+            if single:
+                raise QueryError(f"'{row_prop}' ist einwertig und hat keinen Baum.")
+            groups = await _rollup_rows(vocab, rows_spec, notes)
         if rows_spec.groups:
             mode = rows_spec.group_mode
             if mode == "auto":
@@ -242,7 +247,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
 
         if groups:
             grouped = {m for g in groups for m in g.members}
-            loose = sorted({v for fc in facet_counts.values() for v, n in fc.items() if n}
+            loose = sorted({v for fc in facet_counts.values() for v, n in fc.items() if n
+                            and (not rows_spec.match or v.startswith(rows_spec.match))}
                            - grouped)
             if loose:
                 shown = ", ".join(f"'{v}'" if v else "(leer)" for v in loose[:5])
@@ -253,7 +259,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
 
     # ---- Formeln, Sortierung, top/other, „ohne Wert" --------------------------
     _apply_formulas(columns, [r.key for r in rows])
-    rows = _sort_rows(rows, columns, rows_spec, include, bool(groups))
+    rows = _sort_rows(rows, columns, rows_spec, include, bool(groups),
+                      across=spec.columns is not None)
     if rows_spec and rows_spec.top is not None and len(rows) > rows_spec.top:
         kept, rest = rows[: rows_spec.top], rows[rows_spec.top:]
         notes.add("rows_top",
@@ -608,8 +615,14 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
             if not _refused(exc):
                 raise
             probe = counted = None
-        if (probe is not None and counted is not None and probe.total == best.count
-                and low <= counted.total <= high):
+        # Trifft das Kriterium auch andere Schreibweisen desselben Werts („de“ findet „DE“
+        # und „de-DE“), bleibt „irgendein Wert“ dieselbe Menge: Die Probe darf um die Werte
+        # höher liegen, die den häufigsten enthalten.
+        alike = sum(v.count for v in values
+                    if v is not best and best.value.casefold() in v.value.casefold())
+        if (probe is not None and counted is not None
+                and best.count <= probe.total <= best.count + alike
+                and low <= counted.total <= min(high, total)):
             return counted
         field = await vocab.field(prop)
         if high <= total and (low == high
@@ -941,6 +954,48 @@ async def known_values(vocab: VocabStore, prop: str) -> set[str]:
     return {v.id for v in field.values}
 
 
+async def _rollup_rows(vocab: VocabStore, rows_spec, notes: Notes) -> list[_Row]:
+    """Die oberste Ebene des Vokabularbaums als Zeilen, jede mit allen ihren Unterwerten.
+    Eine einzelne Wurzel (der Name des Vokabulars) zählt nicht als Ebene."""
+    prop = rows_spec.property
+    field = await vocab.field(prop)
+    values = [v for v in (field.values if field else ())
+              if not rows_spec.match or v.id.startswith(rows_spec.match)]
+    if not values:
+        raise QueryError(
+            f"'{prop}' hat auf dieser Instanz keine passende Werteliste; die oberste Ebene "
+            "lässt sich nicht bilden.")
+    ids = {v.id for v in values}
+    children: dict[str | None, list] = {}
+    for v in values:
+        parent = v.parent if v.parent in ids and v.parent != v.id else None
+        children.setdefault(parent, []).append(v)
+    tops, skipped = children.get(None, []), []
+    while len(tops) == 1 and children.get(tops[0].id):
+        skipped.append(tops[0])
+        tops = children[tops[0].id]
+    rows = []
+    for top in tops:
+        members, stack = [], [top]
+        while stack:
+            node = stack.pop()
+            if node.id in members:
+                continue
+            members.append(node.id)
+            stack.extend(children.get(node.id, []))
+        rows.append(_Row(top.id, top.caption or top.id, "group", tuple(members)))
+    if len(rows) > MAX_GROUPS:
+        raise QueryError(f"Die oberste Ebene von '{prop}' hat {len(rows)} Werte, erlaubt "
+                         f"sind {MAX_GROUPS}.")
+    text = ("Jede Zeile zählt die Materialien mit dem Wert selbst oder einem seiner "
+            "Unterwerte im Vokabular, jedes Material je Zeile einmal.")
+    if skipped:
+        text += (" Die Wurzel des Vokabulars („" + skipped[0].caption
+                 + "“) ist keine eigene Zeile.")
+    notes.add("rows_rollup", text)
+    return rows
+
+
 async def _select_rows(rows: list[_Row], rows_spec, vocab: VocabStore, notes: Notes
                        ) -> list[_Row]:
     """``match`` und ``vocab``: Auswahl unter den vorkommenden Werten."""
@@ -980,19 +1035,26 @@ async def _value_rows(rows_spec, vocab: VocabStore, base, include, facet_counts,
     return [_Row(k, await vocab.label(prop, k), "value") for k in keys]
 
 
-def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, grouped: bool
-               ) -> list[_Row]:
+def _sort_rows(rows: list[_Row], columns: list[_Column], rows_spec, include, grouped: bool,
+               across: bool = False) -> list[_Row]:
     if not rows_spec or not rows:
         return rows
-    sort = rows_spec.sort or ("given" if grouped or include is not None else "count")
+    sort = rows_spec.sort or ("given" if (grouped and not rows_spec.rollup)
+                              or include is not None else "count")
     if sort == "given":
         return rows
     if sort == "label":
         return sorted(rows, key=lambda r: (r.label.casefold(), r.key))
     first = columns[0]
+    counted = [c for c in columns if not c.derived]
 
     def by_count(row: _Row):
-        value = first.cells.get(row.key)
+        if across:
+            # Spalten aus einem Feld: keine ist „die erste“; es zählt die Zeile insgesamt
+            cells = [c.cells.get(row.key) for c in counted]
+            value = None if all(v is None for v in cells) else sum(v or 0 for v in cells)
+        else:
+            value = first.cells.get(row.key)
         return (value is None, -(value or 0), row.label.casefold(), row.key)
 
     return sorted(rows, key=by_count)

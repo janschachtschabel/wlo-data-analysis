@@ -214,7 +214,7 @@
      },
      {
       "id": "vokabular",
-      "title": "Werte außerhalb der Vokabulare: Übersicht je Feld",
+      "title": "Werte außerhalb der Wertelisten je Feld (auch abweichende Schreibweisen wie Zahl statt URI)",
       "query": {
        "instance": "wlo-prod",
        "filters": [],
@@ -346,28 +346,6 @@
       }
      },
      {
-      "id": "materialart-unbekannt",
-      "title": "Materialart: Werte, die das Vokabular nicht kennt (30 häufigste)",
-      "query": {
-       "instance": "wlo-prod",
-       "filters": [],
-       "rows": {
-        "property": "ccm:oeh_lrt_aggregated",
-        "vocab": "outside",
-        "top": 30
-       }
-      },
-      "view": {
-       "type": "table"
-      },
-      "layout": {
-       "x": 0,
-       "y": 61,
-       "w": 6,
-       "h": 8
-      }
-     },
-     {
       "id": "sprache-unbekannt",
       "title": "Sprache: Werte, die das Vokabular nicht kennt (30 häufigste)",
       "query": {
@@ -383,30 +361,8 @@
        "type": "table"
       },
       "layout": {
-       "x": 6,
-       "y": 61,
-       "w": 6,
-       "h": 8
-      }
-     },
-     {
-      "id": "zielgruppe-unbekannt",
-      "title": "Zielgruppe: Werte, die das Vokabular nicht kennt (30 häufigste)",
-      "query": {
-       "instance": "wlo-prod",
-       "filters": [],
-       "rows": {
-        "property": "ccm:educationalintendedenduserrole",
-        "vocab": "outside",
-        "top": 30
-       }
-      },
-      "view": {
-       "type": "table"
-      },
-      "layout": {
        "x": 0,
-       "y": 69,
+       "y": 61,
        "w": 6,
        "h": 8
       }
@@ -427,7 +383,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 69,
+       "y": 61,
        "w": 6,
        "h": 8
       }
@@ -526,7 +482,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 77,
+       "y": 69,
        "w": 12,
        "h": 10
       }
@@ -547,7 +503,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 87,
+       "y": 79,
        "w": 6,
        "h": 8
       }
@@ -568,7 +524,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 87,
+       "y": 79,
        "w": 6,
        "h": 8
       }

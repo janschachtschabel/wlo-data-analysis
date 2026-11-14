@@ -43,13 +43,18 @@ class Rows(_Model):
     match: Match | None = None
     # nur Werte, die das Vokabular des Feldes nicht kennt (outside) bzw. kennt (inside)
     vocab: Literal["outside", "inside"] | None = None
+    # oberste Ebene des Vokabularbaums; jede Zeile zählt den Wert samt allen Unterwerten
+    rollup: Literal["top"] | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> Rows:
         if self.groups and self.include:
             raise ValueError("include und groups schließen sich aus")
-        if (self.match or self.vocab) and (self.groups or self.include or self.other
-                                           or self.missing):
+        if self.rollup and (self.groups or self.include or self.vocab or self.other):
+            raise ValueError("rollup bildet die Zeilen aus dem Vokabular und geht nicht "
+                             "zusammen mit include, groups, vocab oder other")
+        if (self.match or self.vocab) and not self.rollup and (
+                self.groups or self.include or self.other or self.missing):
             raise ValueError("match und vocab wählen unter den vorkommenden Werten aus und "
                              "gehen nicht zusammen mit include, groups, other oder missing")
         if self.other and self.top is None:
@@ -139,6 +144,8 @@ class QuerySpec(_Model):
         if self.fill and (self.series or self.columns or self.percent != "none"):
             raise ValueError("fill (Füllgrade) geht nicht zusammen mit series, columns "
                              "oder percent")
+        if self.fill and self.rows and self.rows.rollup:
+            raise ValueError("fill geht nicht zusammen mit rows.rollup")
         if self.vocab_check and (self.series or self.columns or self.fill or self.rows
                                  or self.percent != "none"):
             raise ValueError("vocab_check geht nicht zusammen mit rows, series, columns, "

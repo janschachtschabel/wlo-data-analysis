@@ -53,3 +53,14 @@
 3. Heatmap in Oberfläche und Export.
 4. Bundles `abdeckung` und `datenprobleme`, Reiter „Qualität“.
 5. Review, Befundbehebung, Live-Probe.
+
+## Stand nach Live-Probe (2026-11-14, WLO Produktion, Commit 2f65d14)
+
+Alle 39 Kacheln der drei Dashboards laufen (2 bis 4 s je Dashboard); zwei Zellen der Heatmap direkt gegen das Repositorium geprüft, beide exakt. Behoben aus der Probe:
+
+- Füllgrad „Sprache“ war leer: Das Kriterium trifft auch andere Schreibweisen („de“ findet „DE“ und „de-DE“), die Probe verlangte Gleichheit. Sie lässt jetzt den Überschuss zu, den Werte erklären, die den häufigsten enthalten.
+- Zeilen einer Matrix aus `columns` wurden nach der ersten Spalte sortiert und gekürzt; jetzt nach der Zeilensumme.
+- Hochschulfächer: neue Zeilenoption `rollup: "top"` (Fächergruppen samt aller Fächer darunter). Die Wurzel der Systematik ist keine Zeile mehr.
+- Schmutzwerte verlängerten die Heatmaps; die Kacheln der Abdeckung zeigen nur Werte der Werteliste (`vocab: "inside"`), die übrigen stehen unter Datenprobleme.
+- Zwei leere Kacheln (Materialart, Zielgruppe außerhalb des Vokabulars) entfernt; Titel der Übersicht nennt abweichende Schreibweisen.
+- Explorer: Schalter „Vokabular“ (aus den URIs der Werteliste) und „oberste Ebene“.

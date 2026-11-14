@@ -97,7 +97,8 @@ export function decodeState(text: string | null): { state: ExplorerState | null;
     // Zustände, aus denen die Bedienung nicht herausführt, gar nicht erst annehmen
     if (clean.fill) {
       clean.columns = null; clean.percent = 'none'; delete clean.series;
-      clean.rows = clean.rows ? { property: clean.rows.property, top: clean.rows.top ?? null } : null;
+      clean.rows = clean.rows ? { property: clean.rows.property, top: clean.rows.top ?? null,
+        ...(typeof clean.rows.match === 'string' && clean.rows.match ? { match: clean.rows.match } : {}) } : null;
       if (clean.rows && clean.fill.fields.some((f) => f.property === clean.rows!.property)) {
         clean.fill = { ...clean.fill, fields: clean.fill.fields.filter((f) => f.property !== clean.rows!.property) };
         if (!clean.fill.fields.length) return broken;
