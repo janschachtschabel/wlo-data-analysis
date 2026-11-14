@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -40,10 +42,16 @@ Wert“), "match": URI-Anfang, "vocab": "outside"|"inside", "rollup": "top"}}. O
 nur die Gesamtzahl.
 - columns: {{"property": Feld, "top": n (höchstens 40), "match": URI-Anfang}} macht aus rows \
 eine Matrix (z. B. Fach × Bildungsstufe; Darstellung heatmap).
-- series statt columns: [{{"id": "offen", "label": "offen", "filters": […]}}, {{"id": "anteil", \
+- series statt columns: [{{"id": "gesamt", "label": "gesamt"}}, \
+{{"id": "offen", "label": "offen", "filters": […]}}, \
+{{"id": "anteil", \
 "label": "Anteil %", "formula": "round(100 * offen / gesamt, 1)"}}]. Eine Spalte ohne filters \
 zählt alles. IDs klein, a–z, Ziffern, Unterstrich.
-- percent: "column"|"row" ergänzt Anteile.
+- percent: "column"|"row" ergänzt Anteile (im Ergebnis unter "anteile").
+- Was nicht zusammengeht: match oder vocab mit missing, other, include, groups; rollup mit \
+vocab; fill mit columns, series, percent, missing, other, rollup. Ein Feld steht nur in einem \
+Filter. Ein Wert außerhalb der Werteliste als Filter: {{"value": "…", "literal": true}}.
+- Ergebnisse zeigen höchstens 40 Zeilen und 12 Spalten; mit top eingrenzen.
 - fill: {{"fields": [{{"property": Feld}}, …], "show": "rate"|"missing"|"filled"}} misst, wie \
 oft Felder ausgefüllt sind; mit rows je Zeile (z. B. je Quelle). Nicht zusammen mit \
 columns/series.
@@ -80,6 +88,16 @@ ccm:oeh_publisher_combined. Materialart: ccm:oeh_lrt_aggregated.
 """
 
 
+_PROPERTY = re.compile(r"[\w:.\-]{1,120}")
+MAX_ANSWER_CHARS = 20000
+MAX_SECONDS = 240  # Zeitbudget einer Frage; danach wird mit dem Vorhandenen geantwortet
+
+
+def _one_line(text: str) -> str:
+    return " ".join("".join(c for c in text if c.isprintable() or c.isspace()).split())[:60] \
+        .replace("“", "'").replace("„", "'")
+
+
 async def system_prompt(services: Any, toolbox: Toolbox, today: str) -> str:
     vocab = services.vocab(toolbox.instance)
     try:
@@ -88,8 +106,10 @@ async def system_prompt(services: Any, toolbox: Toolbox, today: str) -> str:
     except Exception:  # noqa: BLE001 - ohne Feldliste geht es mit list_fields weiter
         fields = []
     fields.sort(key=lambda f: -len(f.values))
-    lines = "\n".join(f"- {f.property}: {(f.caption or '')[:60]} ({len(f.values)} Werte)"
-                      for f in fields[:30]) or "- (list_fields benutzen)"
+    # Bezeichnungen sind fremder Text: eine Zeile, ohne Steuerzeichen, in Anführungszeichen
+    lines = "\n".join(
+        f"- {f.property}: „{_one_line(f.caption or '')}“ ({len(f.values)} Werte)"
+        for f in fields[:30] if _PROPERTY.fullmatch(f.property)) or "- (list_fields benutzen)"
     special = WLO if any(f.property == "ccm:oeh_lrt_aggregated" for f in fields) else ""
     text = GUIDE.format(instance=toolbox.instance, fields=lines, special=special, today=today)
     if toolbox.has_context:
@@ -103,11 +123,30 @@ def _arguments(call: Any) -> tuple[str, str, Any]:
     function = call.get("function") if isinstance(call, dict) else None
     function = function if isinstance(function, dict) else {}
     call_id = str(call.get("id") or "")[:200] if isinstance(call, dict) else ""
+    raw = function.get("arguments")
+    if isinstance(raw, dict):  # manche kompatible Server liefern das Objekt selbst
+        return call_id, str(function.get("name") or ""), raw
     try:
-        args = json.loads(function.get("arguments") or "{}")
+        args = json.loads(raw or "{}")
     except (ValueError, TypeError):
         args = None
     return call_id, str(function.get("name") or ""), args
+
+
+def _clean_calls(calls: Any) -> list[dict[str, Any]]:
+    """Werkzeugaufrufe in der Form, die der Anbieter zurückerwartet: nur Objekte, jede mit
+    einer ID (fehlt sie, entsteht eine) und Argumenten als Zeichenkette."""
+    out = []
+    for n, call in enumerate(calls if isinstance(calls, list) else []):
+        if not isinstance(call, dict):
+            continue
+        call_id, name, _ = _arguments(call)
+        function = call.get("function") if isinstance(call.get("function"), dict) else {}
+        raw = function.get("arguments")
+        out.append({"id": call_id or f"call_{n}", "type": "function", "function": {
+            "name": name[:64], "arguments": raw if isinstance(raw, str)
+            else json.dumps(raw if isinstance(raw, dict) else {}, ensure_ascii=False)}})
+    return out
 
 
 async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
@@ -118,19 +157,27 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
     toolbox.on_proposal = proposals.append
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}, *history]
     used = 0
+    said = ""  # letzter Text des Modells neben Werkzeugaufrufen
+    shown = 0
+    started = time.monotonic()
     try:
         for round_no in range(MAX_ROUNDS + 1):
-            last = round_no == MAX_ROUNDS or used >= MAX_TOOL_CALLS
+            last = (round_no == MAX_ROUNDS or used >= MAX_TOOL_CALLS
+                    or time.monotonic() - started > MAX_SECONDS)
             if last:
                 messages.append({"role": "user", "content":
                                  "Antworte jetzt mit dem, was du weißt, ohne weitere "
                                  "Werkzeuge."})
             answer = await llm.chat(messages, None if last else toolbox.definitions)
-            calls = [] if last else answer["tool_calls"]
+            calls = [] if last else _clean_calls(answer["tool_calls"])
             if not calls:
-                text = (answer["content"] or "").strip() or "Dazu habe ich keine Antwort."
+                text = (answer["content"] or "").strip() or said or (
+                    "Siehe die Vorschläge oben." if shown else "Dazu habe ich keine Antwort.")
+                if len(text) > MAX_ANSWER_CHARS:
+                    text = text[:MAX_ANSWER_CHARS - 40].rstrip() + "\n\n(Antwort gekürzt)"
                 yield {"type": "final", "text": text, "html": markdown_to_html(text, 2)}
                 return
+            said = (answer["content"] or "").strip() or said
             messages.append({"role": "assistant", "content": answer["content"],
                              "tool_calls": calls})
             for call in calls:
@@ -145,6 +192,7 @@ async def converse(llm: LlmClient, toolbox: Toolbox, system: str,
                     result = await toolbox.call(name, args)
                 messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
                 while proposals:
+                    shown += 1
                     yield {"type": "proposal", **proposals.pop(0)}
     except LlmError as exc:
         yield {"type": "error", "kind": exc.kind, "detail": exc.message}

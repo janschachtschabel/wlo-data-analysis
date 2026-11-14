@@ -263,10 +263,10 @@ def test_counts_with_the_engine_and_answers(api, model, repo):
     tool = model.bodies[1]["messages"][-1]
     assert tool["role"] == "tool" and tool["tool_call_id"] == "c0"
     result = json.loads(tool["content"])
-    assert result["spalten"] == ["Anzahl"]
+    assert result["spalten"] == ["Zeile", "Anzahl"]
     rows = dict((label, value) for label, value in result["zeilen"])
     assert rows["Mathematik"] == repo.brute(repo.has(TAX, DISC + "380"))
-    assert result["gesamt"] == [len(repo.docs)]
+    assert result["gesamt"] == ["Gesamt", len(repo.docs)]
     assert any("mehrere Werte" in note for note in result["hinweise"])
 
 
@@ -299,7 +299,8 @@ def test_broken_arguments_do_not_break_the_conversation(api, model):
     events = chat(api)
     assert events[-1]["text"] == "Entschuldigung."
     tools = [m for m in model.bodies[1]["messages"] if m["role"] == "tool"]
-    assert len(tools) == 4 and all("fehler" in json.loads(m["content"]) for m in tools)
+    # was kein Objekt ist, geht nicht an den Anbieter zurück
+    assert len(tools) == 3 and all("fehler" in json.loads(m["content"]) for m in tools)
 
 
 def test_lookup_tools_show_fields_and_values_but_no_helper_fields(api, model):

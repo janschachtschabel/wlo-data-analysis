@@ -24,6 +24,7 @@ from ..store.runner import DamagedRun
 from ..store.specs import InvalidDefinition, parse_spec
 
 MAX_ROWS, MAX_COLUMNS, MAX_RESULT_CHARS = 40, 12, 12000
+MAX_RUN_TABLES, MAX_DASHBOARDS = 30, 2
 MAX_TILES = 12
 VIEWS = ("table", "number", "bar", "stacked_bar", "line", "pie", "heatmap")
 
@@ -67,22 +68,30 @@ def _norm(text: str) -> str:
 
 
 def _dump(value: Any) -> str:
+    """Immer gültiges JSON: Was zu groß ist, wird nicht mitten im Text abgeschnitten."""
     text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     if len(text) > MAX_RESULT_CHARS:
-        text = text[:MAX_RESULT_CHARS] + " …(gekürzt)"
+        text = json.dumps({"fehler": "Das Ergebnis ist zu groß. Bitte enger fragen (weniger "
+                                     "Zeilen oder Spalten, top setzen)."}, ensure_ascii=False)
     return text
+
+
+def _size(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 
 
 def compact(result: dict[str, Any]) -> dict[str, Any]:
     """Ein Ergebnis der Engine in der Kürze, die ein Modell braucht."""
     columns = result["columns"][:MAX_COLUMNS]
+    shown = result["rows"][:MAX_ROWS]
     out: dict[str, Any] = {
-        "spalten": [c["label"] for c in columns],
-        "zeilen": [[r["label"], *r["values"][:MAX_COLUMNS]]
-                   for r in result["rows"][:MAX_ROWS]],
+        "spalten": ["Zeile", *[c["label"] for c in columns]],
+        "zeilen": [[r["label"], *r["values"][:MAX_COLUMNS]] for r in shown],
     }
+    if any(r.get("percent") for r in shown):
+        out["anteile"] = [[r["label"], *(r.get("percent") or [])[:MAX_COLUMNS]] for r in shown]
     if result.get("total_row", True):
-        out["gesamt"] = [c.get("total") for c in columns]
+        out["gesamt"] = ["Gesamt", *[c.get("total") for c in columns]]
     if result.get("base_total") is not None:
         out["grundgesamtheit"] = result["base_total"]
     if len(result["rows"]) > MAX_ROWS:
@@ -97,9 +106,14 @@ def compact(result: dict[str, Any]) -> dict[str, Any]:
 
 def _compact_table(block: dict[str, Any]) -> dict[str, Any]:
     columns = block.get("columns", [])[:MAX_COLUMNS]
-    rows = block.get("rows", [])
-    return {"titel": block.get("title"), "spalten": [c["label"] for c in columns],
+    every = block.get("rows", [])
+    rows = [r for r in every if r.get("kind") != "total"]
+    total = next((r for r in every if r.get("kind") == "total"), None)
+    return {"titel": block.get("title"), "spalten": ["Zeile", *[c["label"] for c in columns]],
             "zeilen": [[r["label"], *r["values"][:MAX_COLUMNS]] for r in rows[:MAX_ROWS]],
+            **({"gesamt": ["Gesamt", *total["values"][:MAX_COLUMNS]]} if total else {}),
+            **({"weitere_spalten": len(block["columns"]) - MAX_COLUMNS}
+               if len(block.get("columns", [])) > MAX_COLUMNS else {}),
             **({"weitere_zeilen": len(rows) - MAX_ROWS} if len(rows) > MAX_ROWS else {}),
             **({"hinweise": [n["text"] for n in block["notes"][:4]]}
                if block.get("notes") else {})}
@@ -115,6 +129,7 @@ class Toolbox:
         self.definition_id = definition_id
         self._client, self._vocab = services.client(instance), services.vocab(instance)
         self.on_proposal = on_proposal or (lambda proposal: None)
+        self._dashboards = 0
 
     @property
     def definitions(self) -> list[dict[str, Any]]:
@@ -194,17 +209,31 @@ class Toolbox:
         return {"feld": field.caption, "anzahl": len(values),
                 "werte": [{"id": v.id, "bezeichnung": v.caption} for v in values[:60]]}
 
-    def _query(self, raw: Any) -> QuerySpec:
+    async def _query(self, raw: Any) -> QuerySpec:
         if not isinstance(raw, dict):
             raise QueryError("spec muss ein JSON-Objekt sein.")
         try:
-            return QuerySpec.model_validate({**raw, "instance": self.instance,
+            spec = QuerySpec.model_validate({**raw, "instance": self.instance,
                                              "refresh": False})
         except ValidationError as exc:
             raise QueryError(describe_validation(exc.errors())) from None
+        # Ein Filter auf Volltext, Titel oder Knoten-ID wäre eine Ja/Nein-Auskunft über
+        # einzelne Datensätze: Das Modell filtert nur, wo es auch zählen darf.
+        allowed = {"license", *self._client.instance.prefix_fields}
+        for flt in [*spec.filters, *(f for s in spec.series for f in s.filters)]:
+            if flt.property in allowed:
+                continue
+            try:
+                await self._vocab.check_facet(flt.property)
+            except EduSharingError:
+                raise QueryError(
+                    f"Auf '{flt.property[:80]}' kann hier nicht gefiltert werden. Filter gehen "
+                    "auf Feldern mit Werteliste, auf Quelle und Bezugsquelle und auf "
+                    "'license'.") from None
+        return spec
 
     async def _run_query(self, args: dict[str, Any]) -> Any:
-        return compact(await run_query(self._query(args.get("spec")), self._client,
+        return compact(await run_query(await self._query(args.get("spec")), self._client,
                                        self._vocab))
 
     async def _preview(self, kind: str, name: str, spec: dict[str, Any]) -> dict[str, Any]:
@@ -219,7 +248,8 @@ class Toolbox:
     async def _propose_view(self, args: dict[str, Any]) -> Any:
         title = " ".join(str(args.get("title") or "").split())[:200] or "Ansicht"
         view = args.get("view") if args.get("view") in VIEWS else "table"
-        query = self._query(args.get("spec")).model_dump(mode="json", exclude={"refresh"})
+        query = (await self._query(args.get("spec"))).model_dump(mode="json",
+                                                                 exclude={"refresh"})
         spec = {"query": query, "view": {"type": view}}
         parse_spec("metric", spec)
         run = await self._preview("metric", title, spec)
@@ -231,6 +261,9 @@ class Toolbox:
 
     async def _propose_dashboard(self, args: dict[str, Any]) -> Any:
         name = " ".join(str(args.get("name") or "").split())[:200] or "Dashboard"
+        self._dashboards += 1
+        if self._dashboards > MAX_DASHBOARDS:  # jedes kostet viele Abfragen am Repositorium
+            raise QueryError(f"Je Frage höchstens {MAX_DASHBOARDS} Dashboard-Vorschläge.")
         raw = args.get("tiles")
         if not isinstance(raw, list) or not raw:
             raise QueryError("tiles muss eine Liste mit mindestens einer Kachel sein.")
@@ -241,7 +274,7 @@ class Toolbox:
             if not isinstance(item, dict):
                 raise QueryError(f"Kachel {n} muss ein JSON-Objekt sein.")
             try:
-                query = self._query(item.get("spec"))
+                query = await self._query(item.get("spec"))
             except QueryError as exc:
                 raise QueryError(f"Kachel {n}: {exc}") from None
             width = 6 if item.get("width") == "half" else 12
@@ -268,23 +301,37 @@ class Toolbox:
         if self.run_id:
             run = await self._services.runner.get_run(self.run_id)
         else:  # die Definition frisch zählen (aus dem Zwischenspeicher, wenn eben gezeigt)
-            run = await self._services.runner.run(self.definition_id, instance=self.instance,
+            # wie die Ansicht: gegen die Instanz der Definition, nicht die der Kopfzeile
+            run = await self._services.runner.run(self.definition_id, instance=None,
                                                   save=False)
         report = report_data(build_report(run), with_html=False)
         tables = [b for b in report["blocks"] if b.get("type") == "table"]
-        budget = max(1500, MAX_RESULT_CHARS // max(1, len(tables)) - 200)
+        shown = tables[:MAX_RUN_TABLES]
+        budget = (MAX_RESULT_CHARS - 1500) // max(1, len(shown))
         out = []
-        for block in tables[:20]:
+        for block in shown:
             table = _compact_table(block)
-            while len(json.dumps(table, ensure_ascii=False)) > budget and len(table["zeilen"]) > 5:
+            if _size(table) > budget:
+                table.pop("hinweise", None)
+            while _size(table) > budget and table["zeilen"]:
                 cut = len(table["zeilen"]) // 2
                 table["weitere_zeilen"] = table.get("weitere_zeilen", 0) + len(
                     table["zeilen"]) - cut
                 table["zeilen"] = table["zeilen"][:cut]
+            if _size(table) > budget:  # selbst der Kopf ist zu breit: nur der Titel
+                table = {"titel": str(table.get("titel"))[:120],
+                         "weitere_zeilen": table.get("weitere_zeilen", 0)}
             out.append(table)
-        failed = [b.get("title") for b in report["blocks"] if b.get("type") == "failure"]
+        failed = [str(b.get("title"))[:120] for b in report["blocks"]
+                  if b.get("type") == "failure"][:20]
+        instances = sorted({str(s.get("instance")) for b in tables
+                            for s in b.get("sources") or [] if s.get("instance")})
         return {"auswertung": report.get("title"), "stand": report.get("finished_at"),
-                "tabellen": out, **({"fehlgeschlagen": failed} if failed else {})}
+                **({"instanz": ", ".join(instances)[:200]} if instances else {}),
+                "tabellen": out,
+                **({"weitere_tabellen": len(tables) - len(shown)}
+                   if len(tables) > len(shown) else {}),
+                **({"fehlgeschlagen": failed} if failed else {})}
 
 
 def _about(spec: Any) -> str:

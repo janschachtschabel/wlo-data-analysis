@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Api, ApiError, isAbort } from '../core/api';
@@ -56,7 +56,7 @@ const MAX_TEXT = 4000, MAX_MEMO = 3000, MAX_TURNS = 24;
         @if (turn.role === 'user') {
           <div class="bubble mine"><span class="sr-only">Du: </span>{{ turn.text }}</div>
         } @else {
-          <div class="answer" [attr.aria-busy]="turn.pending ? 'true' : null">
+          <div class="answer" aria-live="polite" [attr.aria-busy]="turn.pending ? 'true' : null">
             @if (turn.steps.length) {
               <ul class="steps" aria-label="Schritte des Assistenten">
                 @for (step of turn.steps; track $index) { <li>{{ step }}</li> }
@@ -98,7 +98,7 @@ const MAX_TEXT = 4000, MAX_MEMO = 3000, MAX_TURNS = 24;
       @if (busy()) { <button type="button" (click)="stop()">Abbrechen</button> }
       @else { <button class="primary" type="submit" [disabled]="!draft.trim() || ready() === false">Fragen</button> }
     </form>
-    <p class="muted small">An das Sprachmodell gehen nur Feldnamen, Wertelisten und Zählungen. Zahlen in den Karten stammen aus der Zählung, nicht vom Modell.</p>`,
+    <p class="muted small">An das Sprachmodell gehen deine Fragen, Feldnamen, Werte der Felder (auch frei erfasste wie Quellen) und Zählungen, nie einzelne Materialien. Zahlen in den Karten stammen aus der Zählung, nicht vom Modell.</p>`,
   styles: `
     .head { margin-bottom: var(--gap); } h1 { margin: 0; }
     .talk { display: grid; gap: var(--gap); margin-bottom: var(--gap); }
@@ -142,10 +142,13 @@ export class Assistant {
     if (run) this.context.set({ run_id: run, label });
     else if (definition) this.context.set({ definition_id: definition, label });
     void this.instances.load().catch(() => undefined);
+    // wer die Seite verlässt, beendet die laufende Antwort auch auf dem Server
+    inject(DestroyRef).onDestroy(() => this.controller?.abort());
   }
 
   protected enter(event: Event): void {
-    if ((event as KeyboardEvent).shiftKey) return;
+    const key = event as KeyboardEvent;
+    if (key.shiftKey || key.isComposing) return; // Eingabe mit IME: Enter bestätigt nur das Zeichen
     event.preventDefault();
     void this.ask(this.draft);
   }

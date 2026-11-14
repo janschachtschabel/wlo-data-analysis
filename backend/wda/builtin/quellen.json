@@ -359,64 +359,6 @@
       }
      },
      {
-      "id": "dsgvo-je-bezugsquelle",
-      "title": "Datenschutz (DSGVO) je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
-      "query": {
-       "instance": "wlo-prod",
-       "filters": [],
-       "rows": {
-        "property": "ccm:oeh_publisher_combined",
-        "top": 25
-       },
-       "profile": {
-        "property": "ccm:dataProtectionConformity",
-        "top": 6
-       }
-      },
-      "view": {
-       "type": "heatmap",
-       "options": {
-        "scale": "count",
-        "zero": "plain"
-       }
-      },
-      "layout": {
-       "x": 6,
-       "y": 67,
-       "w": 6,
-       "h": 10
-      }
-     },
-     {
-      "id": "altersfreigabe-je-bezugsquelle",
-      "title": "Altersfreigabe je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
-      "query": {
-       "instance": "wlo-prod",
-       "filters": [],
-       "rows": {
-        "property": "ccm:oeh_publisher_combined",
-        "top": 25
-       },
-       "profile": {
-        "property": "ccm:fskRating",
-        "top": 6
-       }
-      },
-      "view": {
-       "type": "heatmap",
-       "options": {
-        "scale": "count",
-        "zero": "plain"
-       }
-      },
-      "layout": {
-       "x": 0,
-       "y": 77,
-       "w": 6,
-       "h": 10
-      }
-     },
-     {
       "id": "erschliessung-je-bezugsquelle",
       "title": "Erschließungsstatus der Redaktion je Bezugsquelle: Anteil der Materialien in Prozent (25 größte)",
       "query": {
@@ -440,7 +382,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 77,
+       "y": 67,
        "w": 6,
        "h": 10
       }
@@ -469,7 +411,7 @@
       },
       "layout": {
        "x": 0,
-       "y": 87,
+       "y": 77,
        "w": 6,
        "h": 10
       }
@@ -498,7 +440,7 @@
       },
       "layout": {
        "x": 6,
-       "y": 87,
+       "y": 77,
        "w": 6,
        "h": 10
       }
@@ -628,14 +570,14 @@
       },
       "layout": {
        "x": 0,
-       "y": 97,
+       "y": 87,
        "w": 12,
        "h": 14
       }
      },
      {
       "id": "quelldatensaetze-status",
-      "title": "Quelldatensätze: Erschließungsstatus, mit „ohne Wert“",
+      "title": "Quelldatensätze: Erschließungsstatus",
       "query": {
        "instance": "wlo-prod",
        "filters": [
@@ -659,14 +601,14 @@
       },
       "layout": {
        "x": 0,
-       "y": 111,
+       "y": 101,
        "w": 6,
        "h": 8
       }
      },
      {
       "id": "quelldatensaetze-kosten",
-      "title": "Quelldatensätze: Kosten, mit „ohne Wert“",
+      "title": "Quelldatensätze: Kosten",
       "query": {
        "instance": "wlo-prod",
        "filters": [
@@ -690,14 +632,14 @@
       },
       "layout": {
        "x": 6,
-       "y": 111,
+       "y": 101,
        "w": 6,
        "h": 8
       }
      },
      {
       "id": "quelldatensaetze-werbung",
-      "title": "Quelldatensätze: Werbung, mit „ohne Wert“",
+      "title": "Quelldatensätze: Werbung",
       "query": {
        "instance": "wlo-prod",
        "filters": [
@@ -721,14 +663,14 @@
       },
       "layout": {
        "x": 0,
-       "y": 119,
+       "y": 109,
        "w": 6,
        "h": 8
       }
      },
      {
       "id": "quelldatensaetze-zugang",
-      "title": "Quelldatensätze: Zugang (Anmeldung), mit „ohne Wert“",
+      "title": "Quelldatensätze: Zugang (Anmeldung)",
       "query": {
        "instance": "wlo-prod",
        "filters": [
@@ -752,7 +694,69 @@
       },
       "layout": {
        "x": 6,
-       "y": 119,
+       "y": 109,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-dsgvo",
+      "title": "Quelldatensätze: Datenschutz (DSGVO)",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:dataProtectionConformity",
+        "missing": false
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 0,
+       "y": 117,
+       "w": 6,
+       "h": 8
+      }
+     },
+     {
+      "id": "quelldatensaetze-barrierefreiheit",
+      "title": "Quelldatensätze: Barrierefreiheit",
+      "query": {
+       "instance": "wlo-prod",
+       "filters": [
+        {
+         "property": "ccm:oeh_lrt_aggregated",
+         "values": [
+          {
+           "value": "http://w3id.org/openeduhub/vocabs/new_lrt_aggregated/2e678af3-1026-4171-b88e-3b3a915d1673",
+           "literal": true
+          }
+         ]
+        }
+       ],
+       "rows": {
+        "property": "ccm:accessibilitySummary",
+        "missing": false
+       }
+      },
+      "view": {
+       "type": "bar"
+      },
+      "layout": {
+       "x": 6,
+       "y": 117,
        "w": 6,
        "h": 8
       }

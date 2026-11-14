@@ -42,6 +42,17 @@ class ChatIn(BaseModel):
     definition_id: Annotated[StrictStr, Field(min_length=1, max_length=64)] | None = None
 
 
+def _context_instance(services: Any, found: set[str], fallback: str) -> str:
+    if len(found) != 1:
+        return fallback
+    (only,) = found
+    try:
+        services.client(only)
+    except KeyError:
+        return fallback
+    return only
+
+
 @router.post("/chat")
 async def chat(body: ChatIn, request: Request) -> Any:
     services = request.app.state.services
@@ -54,15 +65,27 @@ async def chat(body: ChatIn, request: Request) -> Any:
             "llm_not_configured",
             "Für das Sprachmodell ist kein Schlüssel hinterlegt (Einstellungen)."),
             status_code=409)
+    # Hängt die Unterhaltung an einer Auswertung, zählt der Assistent gegen deren Instanz,
+    # nicht gegen die gerade in der Kopfzeile gewählte: sonst passten Fragen und Zahlen
+    # nicht zusammen.
+    instance = body.instance
+    if body.run_id:
+        run = await services.runner.get_run(body.run_id)  # 404, bevor der Strom beginnt
+        found = {str((r.get("result") or {}).get("instance") or "")
+                 for r in run.get("results") or [] if isinstance(r, dict)} - {""}
+        instance = _context_instance(services, found, instance)
+    elif body.definition_id:
+        spec = (await services.definitions.get(body.definition_id)).spec
+        found = set()
+        if isinstance(spec, dict):
+            query = spec.get("query") if isinstance(spec.get("query"), dict) else {}
+            found = {str(v) for v in (spec.get("instance"), query.get("instance")) if v}
+        instance = _context_instance(services, found, instance)
     try:
-        toolbox = Toolbox(services, body.instance, body.run_id,
+        toolbox = Toolbox(services, instance, body.run_id,
                           definition_id=None if body.run_id else body.definition_id)
     except KeyError:
-        raise UnknownInstance(body.instance) from None
-    if body.run_id:
-        await services.runner.get_run(body.run_id)  # 404, bevor der Strom beginnt
-    elif body.definition_id:
-        await services.definitions.get(body.definition_id)
+        raise UnknownInstance(instance) from None
     history: list[dict[str, str]] = []
     for message in body.messages:
         text = message.content

@@ -39,3 +39,12 @@ Nicht aus Zählungen bestimmbar: Dubletten einzelner Datensätze, Blacklist, Zwe
 1. `profile` und `sizes` in Spec und Engine, Tests in `tests/test_sources.py`.
 2. Dashboard `backend/wda/builtin/quellen.json` (20 Kacheln), Reiter „Quellen“, Durchstich.
 3. Live-Probe auf Jans PC, Felder nachziehen, Review.
+
+## Stand nach Live-Probe (2026-11-14, Commit a1077ef gegen WLO Produktion)
+
+- 20 Kacheln ok, 302 Abfragen, 8,2 s, keine Zeile mit `profile_inexact`.
+- Bezugsquellen: 3.603, davon 2.460 (68 %) mit nur einem Material; 19 Bezugsquellen tragen 92 % der Materialien. Crawler: 121, davon 15 mit einem Material.
+- Quelldatensätze: 1.319. Füllgrade: Fach 95 %, Bezugsquelle 87 %, Kosten 70 %, Werbung 58 %, Zugang 46 %, die Bewertungsfelder der Redaktion 16 bis 27 %, Datenschutz (rechtlich) 2 %.
+- Als Facette zählbar: `ccm:accessibilitySummary` und alle `ccm:oeh_quality_*`, `ccm:oeh_languageLevel`, `ccm:oeh_languageTarget`, `ccm:general_identifier`. Nicht: `ccm:wf_status` (400).
+- DSGVO und Altersfreigabe je Bezugsquelle sagten nichts (fast alles ohne Angabe): ersetzt durch DSGVO und Barrierefreiheit unter den Quelldatensätzen.
+- Offen: Rohwerte als Spaltenköpfe bei Werbung (gemischte Schreibweisen im Feld), drei Schreibweisen von Deutsch bei Sprache; Review durch frischen Reviewer.

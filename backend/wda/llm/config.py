@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
@@ -22,7 +23,13 @@ def check_base_url(value: str) -> str:
     """Die Basis-URL ohne Schrägstrich am Ende. ``http`` nur für Rechner im eigenen Netz
     (localhost, private Adressen, Namen ohne Punkt), damit der Schlüssel nie offen reist."""
     value = value.strip().rstrip("/")
-    parts = urlsplit(value)
+    if re.search(r"[\s\x00-\x1f\x7f]", value):
+        raise ValueError("darf keine Leer- oder Steuerzeichen enthalten")
+    try:
+        parts = urlsplit(value)
+        _ = parts.port
+    except ValueError:
+        raise ValueError("muss eine gültige Adresse sein (Rechner und Port)") from None
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise ValueError("muss mit https:// beginnen und einen Rechner nennen")
     if parts.username or parts.password or "@" in parts.netloc:

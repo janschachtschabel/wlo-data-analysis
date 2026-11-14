@@ -56,6 +56,7 @@ class _Row:
     label: str
     kind: str  # value | group | other | missing
     members: tuple[str, ...] = ()
+    unused: bool = False  # aus der Werteliste ergänzt, kein Material trägt den Wert
 
 
 class _Run:
@@ -265,7 +266,8 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
             rows = await _value_rows(rows_spec, vocab, base, include,
                                      {**facet_counts, "": row_totals}, data_columns)
             if rows_spec.match or rows_spec.vocab:
-                rows = await _select_rows(rows, rows_spec, vocab, notes)
+                rows = await _select_rows(rows, rows_spec, vocab, notes,
+                                          _row_filter(base, row_prop))
             for row in rows:
                 row.members = (row.key,)
                 for col in data_columns:
@@ -295,6 +297,7 @@ async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore,
                       across=spec.columns is not None, row_totals=row_totals)
     if rows_spec and rows_spec.top is not None and len(rows) > rows_spec.top:
         kept, rest = rows[: rows_spec.top], rows[rows_spec.top:]
+        _unused_after_top(notes, rows, kept)
         notes.add("rows_top",
                   f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
         if rows_spec.other:
@@ -1001,7 +1004,8 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
             keys = [k for k in keys if k in restrict]
         rows = [_Row(k, await vocab.label(rows_spec.property, k), "value") for k in keys]
         if rows_spec.match or rows_spec.vocab:
-            rows = await _select_rows(rows, rows_spec, vocab, notes)
+            rows = await _select_rows(rows, rows_spec, vocab, notes,
+                                      _row_filter(base, row_prop))
         count_column = _Column("count", "Anzahl")
         for row in rows:
             count_column.cells[row.key] = counts.get(row.key, None if facet.truncated else 0)
@@ -1009,6 +1013,7 @@ async def _execute_fill(spec: QuerySpec, client: EduSharingClient, vocab: VocabS
         if rows_spec.top is not None and len(rows) > rows_spec.top:
             notes.add("rows_top",
                       f"Angezeigt werden die ersten {rows_spec.top} von {len(rows)} Zeilen.")
+            _unused_after_top(notes, rows, rows[: rows_spec.top])
             rows = rows[: rows_spec.top]
         derived = fill.show != "filled"
         suffix = {"rate": " %", "missing": ": ohne Wert", "filled": ""}[fill.show]
@@ -1246,8 +1251,28 @@ async def _rollup_rows(vocab: VocabStore, rows_spec, notes: Notes) -> list[_Row]
     return rows
 
 
-async def _select_rows(rows: list[_Row], rows_spec, vocab: VocabStore, notes: Notes
-                       ) -> list[_Row]:
+def _row_filter(base, prop: str) -> bool:
+    return any(c.property == prop for c in base)
+
+
+def _unused_after_top(notes: Notes, before: list[_Row], shown: list[_Row]) -> None:
+    """Der Hinweis auf die ergänzten Nullzeilen spricht nur von dem, was zu sehen ist."""
+    total, left = sum(r.unused for r in before), sum(r.unused for r in shown)
+    if left == total:
+        return
+    for note in notes:
+        if note["code"] == "rows_unused":
+            note["text"] = (
+                f"{total} Werte der Werteliste trägt kein Material; "
+                + (f"{left} davon stehen mit 0 in der Tabelle, die übrigen schneidet"
+                   if left else "sie stehen nicht in der Tabelle, weil")
+                + " die Begrenzung der Zeilen" + (" ab." if left else " sie abschneidet."))
+            if not left:
+                note["code"] = "rows_unused_cut"
+
+
+async def _select_rows(rows: list[_Row], rows_spec, vocab: VocabStore, notes: Notes,
+                       filtered: bool = False) -> list[_Row]:
     """``match`` und ``vocab``: Auswahl unter den vorkommenden Werten."""
     total = len(rows)
     unused: list = []
@@ -1257,13 +1282,13 @@ async def _select_rows(rows: list[_Row], rows_spec, vocab: VocabStore, notes: No
         known = await known_values(vocab, rows_spec.property)
         inside = rows_spec.vocab == "inside"
         rows = [r for r in rows if (r.key in known) == inside]
-        if inside:
+        if inside and not filtered:  # ein Filter auf dem Zeilenfeld gilt auch hier
             # auch Werte der Werteliste, die kein Material trägt: die größten Lücken
             have = {r.key for r in rows}
             field = await vocab.field(rows_spec.property)
             unused = [v for v in field.values if v.id not in have
                       and (not rows_spec.match or v.id.startswith(rows_spec.match))]
-            rows += [_Row(v.id, v.caption or v.id, "value") for v in unused]
+            rows += [_Row(v.id, v.caption or v.id, "value", unused=True) for v in unused]
     what = []
     if rows_spec.match:
         what.append(f"die mit „{rows_spec.match}“ beginnen")

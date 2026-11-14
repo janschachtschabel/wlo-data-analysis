@@ -111,7 +111,8 @@ class LlmClient:
             error = data.get("error")
             text = (error.get("message") if isinstance(error, dict) else error) or \
                 data.get("message") or ""
-        text = " ".join(str(text).split())[:300] if isinstance(text, str) else ""
-        if self.config.api_key:
+        text = " ".join(str(text).split()) if isinstance(text, str) else ""
+        if self.config.api_key:  # erst schwärzen, dann kürzen: kein Rest an der Schnittkante
             text = text.replace(self.config.api_key, "…")
+        text = text[:300]
         return text or f"Status {status}"
