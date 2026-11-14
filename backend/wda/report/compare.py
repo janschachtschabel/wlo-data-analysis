@@ -57,6 +57,7 @@ def apply_previous(report: Report, head: dict[str, Any], points: Points,
                     f"Vergleichslauf vom {when} geändert; Veränderungen können auch daher "
                     "rühren."})
     if head["instance"] != current["instance"]:
+        report.compare["other_instance"] = head["instance"] or current["instance"] or ""
         report.notes.append({
             "code": "compare_other_instance",
             "text": f"Der Vergleichslauf vom {when} lief gegen eine andere Instanz."})

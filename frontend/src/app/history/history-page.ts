@@ -40,8 +40,10 @@ export function historyQuery(
   template: `
     <div class="row head">
       <h1 class="grow">Verlauf: {{ definition()?.name ?? '…' }}</h1>
-      <a class="btn" [routerLink]="['/ansicht', defId()]">Aktuelle Zahlen</a>
-      <a class="btn" [routerLink]="['/bearbeiten', defId()]">Bearbeiten</a>
+      @if (!viewer()) {
+        <a class="btn" [routerLink]="['/ansicht', defId()]">Aktuelle Zahlen</a>
+        <a class="btn" [routerLink]="['/bearbeiten', defId()]">Bearbeiten</a>
+      }
     </div>
     @if (failure()) { <p class="error card" role="alert">{{ failure() }}</p> }
     @if (keys(); as k) {
@@ -108,10 +110,12 @@ export function historyQuery(
         </section>
       }
     }
-    <section class="card">
-      <h2>Zeitplan</h2>
-      <app-schedules [defId]="defId()" (ran)="reload()" />
-    </section>`,
+    @if (!viewer()) {
+      <section class="card">
+        <h2>Zeitplan</h2>
+        <app-schedules [defId]="defId()" (ran)="reload()" />
+      </section>
+    }`,
   styles: `
     .head { margin-bottom: var(--gap); } h1 { margin: 0; } section { margin-bottom: var(--gap); }
     .controls { margin-bottom: var(--gap); align-items: flex-end; } .controls select { max-width: 280px; }
@@ -147,6 +151,7 @@ export class HistoryPage {
     const data = this.data.value();
     return data ? (palette: Palette) => historyPlan(data, palette) : null;
   });
+  protected readonly viewer = inject(Auth).viewer;
   protected readonly newestFirst = computed(() => {
     const points = this.data.value()?.points ?? [];
     return points.map((point, n) => ({ point, before: n > 0 ? points[n - 1] : null })).reverse();

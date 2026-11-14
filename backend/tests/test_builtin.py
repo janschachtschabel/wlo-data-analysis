@@ -383,6 +383,8 @@ def test_wlo_and_oersi_side_by_side(api):
     table = report["blocks"][1]
     assert [g[0] for g in table["header_groups"]] == ["WLO: Hochschule", "OERSI (direkt)"]
     assert [c["label"] for c in table["columns"]] == ["Gesamt", "A: OER", "OER-Anteil %"] * 2
+    # nur die Fächergruppen: Einzelfächer der Schule sagten neben OERSI nichts
+    assert {r["kind"] for r in table["rows"]} <= {"group", "missing", "total"}
     total = next(r for r in table["rows"] if r["kind"] == "total")
     for at in (0, 3):  # der Anteil passt zu den beiden Zahlen links davon
         whole, oer, share = total["values"][at:at + 3]

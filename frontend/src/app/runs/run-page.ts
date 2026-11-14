@@ -35,8 +35,10 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
                 [title]="scope().length ? 'Gespeichert wird nur der Gesamtbestand, damit Verlauf und Zeitreihen vergleichbar bleiben' : ''">Lauf speichern</button>
       }
       @if (runId(); as id) {
-        <a class="btn" routerLink="/assistent" [queryParams]="{ lauf: id, titel: report.value()?.title }"
-           title="Den Assistenten zu dieser Auswertung fragen">Fragen</a>
+        @if (!viewer()) {
+          <a class="btn" routerLink="/assistent" [queryParams]="{ lauf: id, titel: report.value()?.title }"
+             title="Den Assistenten zu dieser Auswertung fragen">Fragen</a>
+        }
         @if (settings()?.llm?.ready) {
           <button type="button" (click)="comment(id)" [disabled]="commenting()"
                   title="Der Assistent schreibt einen kurzen Kommentar zu den Zahlen dieses Berichts. Gespeichert wird er nicht.">{{ commenting() ? 'Kommentiert …' : 'Kommentieren' }}</button>
@@ -63,7 +65,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
             <option value="">kein Vergleich</option><option value="previous">vorigem Lauf</option>
             <option value="date">Stand an einem Tag</option>
             @if (others().length) { <option value="run">einem bestimmten Lauf</option> }
-            @if (report.value()?.definition_id && instances.list().length > 1) { <option value="instance">einer anderen Instanz</option> }
+            @if (!viewer() && report.value()?.definition_id && instances.list().length > 1) { <option value="instance">einer anderen Instanz</option> }
           </select>
         </label>
         @if (mode() === 'run') {
@@ -88,7 +90,7 @@ const FORMAT_LABEL: Record<string, string> = { json: 'JSON', csv: 'CSV', md: 'Ma
           <label>Tag <input type="date" name="compare-date" [value]="date()" (change)="date.set($any($event.target).value)" /></label>
         }
         @if (report.value()?.compare; as other) {
-          <span class="muted">Veränderung gegenüber dem <a [routerLink]="['/lauf', other.run_id]">Lauf vom {{ time(other.started_at) }}</a></span>
+          <span class="muted">{{ other.other_instance !== undefined ? 'Unterschied zum' : 'Veränderung gegenüber dem' }} <a [routerLink]="['/lauf', other.run_id]">Lauf vom {{ time(other.started_at) }}</a>@if (other.other_instance !== undefined) { (andere Instanz) }</span>
         }
         @if (report.value()?.definition_id; as id) { <span class="grow"></span><a [routerLink]="['/verlauf', id]">Verlauf</a> }
       </div>
@@ -121,6 +123,7 @@ export class RunPage {
   private readonly api = inject(Api);
   private readonly router = inject(Router);
   private readonly auth = inject(Auth);
+  protected readonly viewer = this.auth.viewer;
   readonly runId = input<string>();
   readonly defId = input<string>();
   /** Kontext: Filter, die vor jede Abfrage treten (etwa eine Quelle); nur für die Ansicht einer Definition */

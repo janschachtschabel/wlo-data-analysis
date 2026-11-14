@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import HTTPException, Request, status
@@ -13,6 +14,26 @@ from .security import COOKIE_NAME
 
 def is_admin(request: Request) -> bool:
     return request.app.state.signer.valid(request.cookies.get(COOKIE_NAME))
+
+
+def role_of(request: Request) -> str | None:
+    return request.app.state.signer.role(request.cookies.get(COOKIE_NAME))
+
+
+# Was der Lesezugang darf: diese Routen, nur lesend. Alles andere bleibt dem Admin.
+VIEWER_MAY = frozenset({
+    "/api/settings", "/api/instances", "/api/definitions/{def_id}", "/api/highlights", "/api/runs", "/api/runs/{run_id}",
+    "/api/runs/{run_id}/report", "/api/runs/{run_id}/export",
+    "/api/definitions/{def_id}/runs", "/api/definitions/{def_id}/history",
+    "/api/definitions/{def_id}/history/keys", "/api/definitions/{def_id}/trends"})
+_SEGMENT = r"[^/]+"
+_VIEWER_PATHS = re.compile("|".join(
+    "^" + re.sub(r"\\\{[a-z_]+\\\}", _SEGMENT, re.escape(path)) + "$"
+    for path in sorted(VIEWER_MAY)))
+
+
+def viewer_may(method: str, path: str) -> bool:
+    return method in ("GET", "HEAD") and bool(_VIEWER_PATHS.match(path))
 
 
 MAX_BODY_BYTES = 6 * 1024 * 1024  # der Import erlaubt 5 MB, sonst braucht nichts so viel
@@ -50,11 +71,17 @@ class AdminGate:
             await too_large(scope, receive, send)
             return
         if (path == "/api" or path.startswith("/api/")) and path not in self.public_paths:
-            request = Request(scope)
-            if not is_admin(request):
+            role = role_of(Request(scope))
+            if role is None:
                 response = JSONResponse({"detail": "Nicht angemeldet", "kind": "unauthenticated"},
                                         status_code=401,
                                         headers={"Cache-Control": "no-store"})
+                await response(scope, receive, send)
+                return
+            if role != "admin" and not viewer_may(scope["method"], path):
+                response = JSONResponse(
+                    {"detail": "Dafür reicht der Lesezugang nicht.", "kind": "forbidden"},
+                    status_code=403, headers={"Cache-Control": "no-store"})
                 await response(scope, receive, send)
                 return
         elif not (path == "/api" or path.startswith("/api/")):
@@ -94,5 +121,10 @@ class AdminGate:
 
 
 def require_admin(request: Request) -> None:
-    if not is_admin(request):
+    """Zweite Sicherung an jeder Route: Admin, oder der Lesezugang auf einem Pfad, den
+    ``viewer_may`` erlaubt."""
+    role = role_of(request)
+    if role is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Nicht angemeldet")
+    if role != "admin" and not viewer_may(request.method, request.url.path):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Dafür reicht der Lesezugang nicht.")

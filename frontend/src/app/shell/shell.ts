@@ -15,23 +15,28 @@ import { Instances } from '../core/instances';
     <header [attr.inert]="auth.expired() ? '' : null">
       <strong>WLO-Daten</strong>
       <nav aria-label="Hauptnavigation">
-        <a routerLink="/assistent" routerLinkActive="on">Assistent</a>
+        @if (!auth.viewer()) { <a routerLink="/assistent" routerLinkActive="on">Assistent</a> }
         <a routerLink="/auffaellig" routerLinkActive="on">Auffällig</a>
-        <a routerLink="/explorer" routerLinkActive="on">Explorer</a>
-        <a routerLink="/qualitaet" routerLinkActive="on">Qualität</a>
-        <a routerLink="/bibliothek" routerLinkActive="on">Bibliothek</a>
+        @if (!auth.viewer()) {
+          <a routerLink="/explorer" routerLinkActive="on">Explorer</a>
+          <a routerLink="/qualitaet" routerLinkActive="on">Qualität</a>
+          <a routerLink="/bibliothek" routerLinkActive="on">Bibliothek</a>
+        }
         <a routerLink="/laeufe" routerLinkActive="on">Läufe</a>
-        <a routerLink="/instanzen" routerLinkActive="on">Instanzen</a>
-        <a routerLink="/einstellungen" routerLinkActive="on">Einstellungen</a>
+        @if (!auth.viewer()) {
+          <a routerLink="/instanzen" routerLinkActive="on">Instanzen</a>
+          <a routerLink="/einstellungen" routerLinkActive="on">Einstellungen</a>
+        }
       </nav>
       <span class="grow"></span>
+      @if (auth.viewer()) { <span class="muted" title="Mit diesem Zugang lassen sich abgelegte Läufe und Berichte ansehen und herunterladen.">Lesezugang</span> }
       <label class="sr-only" for="instance">Instanz</label>
       <select id="instance" [ngModel]="instances.current()" (ngModelChange)="instances.current.set($event)">
         @for (inst of instances.list(); track inst.id) {
           <option [value]="inst.id">{{ inst.name }}</option>
         }
       </select>
-      @if (!onAssistant()) {
+      @if (!onAssistant() && !auth.viewer()) {
         <button type="button" class="primary" (click)="toggleChat()" [attr.aria-expanded]="chatOpen()"
                 title="Den Assistenten neben dieser Ansicht befragen">Chat</button>
       }

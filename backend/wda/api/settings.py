@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from .. import __version__
+from ..deps import is_admin
 from ..errors import error_body
 from ..llm.client import LlmError
 from ..llm.config import LlmConfig, LlmIn, host_of
@@ -25,7 +26,9 @@ def read_settings(request: Request) -> dict[str, Any]:
         "version": __version__,
         "timezone": settings.timezone,
         "export": {"formats": list(FORMATS), "pdf_available": pdf_available()},
-        "llm": request.app.state.services.llm.public(),
+        # Adresse und Modell des Sprachmodells sieht nur der Admin
+        "llm": (request.app.state.services.llm.public() if is_admin(request)
+                else {"ready": False}),
         "mail": {"ready": request.app.state.services.notifier.mail_ready},
     }
 

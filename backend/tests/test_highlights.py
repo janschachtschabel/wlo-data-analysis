@@ -116,3 +116,14 @@ def test_trends_name_the_column_when_there_are_several(api, repo):  # noqa: F811
     repo.docs.extend([dict(d) for d in repo.docs[:10]])
     run(api, one["id"], refresh=True)
     assert api.get(f"/api/definitions/{one['id']}/trends").json()["labels"] == {}
+
+
+def test_fill_tiles_get_no_trend(api, repo):  # noqa: F811
+    """Bei Füllgraden wäre die Linie in jeder Kachel dieselbe Grundgesamtheit."""
+    fill = make(api, "metric", "Füllgrade", {"query": {"instance": "wlo-prod", "fill": {
+        "fields": [{"property": "ccm:taxonid"}, {"property": "ccm:educationalcontext"}]}}})
+    run(api, fill["id"])
+    repo.docs.extend([dict(d) for d in repo.docs[:10]])
+    run(api, fill["id"], refresh=True)
+    out = api.get(f"/api/definitions/{fill['id']}/trends").json()
+    assert out["blocks"] == {} and len(out["runs"]) == 2

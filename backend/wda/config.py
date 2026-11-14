@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, SecretStr, ValidationError, field_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="WDA_", extra="ignore")
 
     admin_password: SecretStr
+    # optional: zweites Passwort nur zum Ansehen abgelegter Läufe und Berichte
+    viewer_password: SecretStr | None = None
     session_secret: SecretStr | None = None
     session_max_age: int = 43200
     cookie_secure: bool = True
@@ -80,6 +82,16 @@ class Settings(BaseSettings):
         if not value.get_secret_value().strip():
             raise ValueError("darf nicht leer sein")
         return value
+
+    @model_validator(mode="after")
+    def _viewer_differs(self) -> Settings:
+        if self.viewer_password is not None:
+            viewer = self.viewer_password.get_secret_value()
+            if not viewer.strip():
+                raise ValueError("viewer_password darf nicht leer sein")
+            if viewer == self.admin_password.get_secret_value():
+                raise ValueError("viewer_password muss sich vom Admin-Passwort unterscheiden")
+        return self
 
     @field_validator("llm_base_url", "public_url")
     @classmethod

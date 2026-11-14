@@ -42,7 +42,7 @@ const PAGE = 50;
                 <td><a [routerLink]="['/lauf', run.id]">{{ run.name }}</a></td>
                 <td>{{ kind(run.kind) }}</td><td>{{ time(run.started_at) }}@if (run.origin === 'schedule') { <span class="muted"> · Zeitplan</span> }@if (run.origin === 'nightly') { <span class="muted"> · über Nacht</span> }@if (run.instance) { <span class="muted"> · {{ run.instance }}</span> }</td>
                 <td [class.error]="run.status === 'failed'">{{ status(run.status) }}</td>
-                <td><button type="button" class="link" (click)="remove(run)">Löschen</button></td>
+                <td>@if (!viewer()) { <button type="button" class="link" (click)="remove(run)">Löschen</button> }</td>
               </tr>
             }
           </tbody>
@@ -51,7 +51,7 @@ const PAGE = 50;
       @if (more()) { <p><button type="button" (click)="load()" [disabled]="loading()">Weitere laden</button></p> }
     </div>
     <h2 class="top">Zeitpläne</h2>
-    <div class="card"><app-schedules (ran)="refresh()" /></div>`,
+    @if (!viewer()) { <div class="card"><app-schedules (ran)="refresh()" /></div> }`,
   styles: `.top { margin-top: 24px; }`,
 })
 export class Runs {
@@ -64,6 +64,7 @@ export class Runs {
   protected readonly statusFilter = signal('');
   protected readonly time = formatTime;
   protected readonly status = (s: string) => STATUS[s] ?? s;
+  protected readonly viewer = inject(Auth).viewer;
   protected readonly kind = (k: string) => KIND[k] ?? k;
 
   constructor() {

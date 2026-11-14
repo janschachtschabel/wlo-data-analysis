@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, StrictStr
 
-from ..deps import is_admin
+from ..deps import role_of
 from ..security import COOKIE_NAME, verify_password
 
 router = APIRouter(prefix="/auth")
@@ -28,13 +30,18 @@ def login(body: LoginBody, request: Request, response: Response) -> None:
             "Zu viele Fehlversuche, bitte später erneut versuchen",
             headers={"Retry-After": str(wait)},
         )
-    if not verify_password(body.password, state.settings.admin_password.get_secret_value()):
+    viewer = state.settings.viewer_password
+    if verify_password(body.password, state.settings.admin_password.get_secret_value()):
+        role = "admin"
+    elif viewer is not None and verify_password(body.password, viewer.get_secret_value()):
+        role = "viewer"
+    else:
         state.throttle.record_failure(key)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Passwort falsch")
     state.throttle.reset(key)
     response.set_cookie(
         COOKIE_NAME,
-        state.signer.issue(),
+        state.signer.issue(role),
         max_age=state.settings.session_max_age,
         httponly=True,
         samesite="strict",
@@ -55,5 +62,6 @@ def logout(request: Request, response: Response) -> None:
 
 
 @router.get("/status")
-def auth_status(request: Request) -> dict[str, bool]:
-    return {"authenticated": is_admin(request)}
+def auth_status(request: Request) -> dict[str, Any]:
+    role = role_of(request)
+    return {"authenticated": True, "role": role} if role else {"authenticated": False}

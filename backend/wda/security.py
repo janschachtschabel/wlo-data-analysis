@@ -29,17 +29,22 @@ class SessionSigner:
         self._serializer = URLSafeTimedSerializer(secret, salt="wda-admin-session")
         self._max_age = max_age
 
-    def issue(self) -> str:
-        return self._serializer.dumps({"role": "admin", "n": secrets.token_hex(8)})
+    def issue(self, role: str = "admin") -> str:
+        return self._serializer.dumps({"role": role, "n": secrets.token_hex(8)})
 
-    def valid(self, token: str | None) -> bool:
+    def role(self, token: str | None) -> str | None:
+        """``admin``, ``viewer`` (Lesezugang) oder ``None`` ohne gültige Sitzung."""
         if not token or self._max_age <= 0:
-            return False
+            return None
         try:
             data = self._serializer.loads(token, max_age=self._max_age)
         except BadData:
-            return False
-        return isinstance(data, dict) and data.get("role") == "admin"
+            return None
+        role = data.get("role") if isinstance(data, dict) else None
+        return role if role in ("admin", "viewer") else None
+
+    def valid(self, token: str | None) -> bool:
+        return self.role(token) == "admin"
 
 
 def resolve_session_secret(settings: Settings) -> str:

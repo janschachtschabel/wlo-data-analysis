@@ -185,8 +185,10 @@ class History:
             if len(heads) < 2:
                 return {"runs": [], "blocks": {}, "labels": {}}
             position = {head["id"]: n for n, head in enumerate(heads)}
+            # Füllgrade: Die Gesamtzeile ist dort die Grundgesamtheit, in jeder Kachel dieselbe
             shown = [b for b in self._layout(con, def_id, None)["blocks"]
-                     if b["columns"] and any(r["key"] == TOTAL for r in b["rows"])]
+                     if b["columns"] and any(r["key"] == TOTAL for r in b["rows"])
+                     and not {"missing", "rate"} <= {c["id"] for c in b["columns"]}]
             first = {b["key"]: b["columns"][0]["id"] for b in shown}
             # mehrere Spalten: Die Linie zeigt die erste und sagt, welche das ist
             named = {b["key"]: b["columns"][0]["label"] for b in shown if len(b["columns"]) > 1}

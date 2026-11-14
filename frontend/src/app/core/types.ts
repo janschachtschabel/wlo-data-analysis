@@ -83,7 +83,7 @@ export interface Report {
   report_version: number; title: string; kind: Kind; run_id: string | null;
   status: 'ok' | 'partial' | 'failed'; started_at: string; finished_at: string;
   notes: Note[]; blocks: ReportBlock[];
-  definition_id?: string | null; compare?: { run_id: string; started_at: string; empty?: boolean } | null;
+  definition_id?: string | null; compare?: { run_id: string; started_at: string; empty?: boolean; other_instance?: string } | null;
 }
 export interface LlmSettings {
   base_url: string; model: string; effort: 'auto' | 'off' | 'low' | 'medium' | 'high';

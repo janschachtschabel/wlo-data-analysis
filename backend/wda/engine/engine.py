@@ -310,8 +310,7 @@ async def _execute_problems(spec: QuerySpec, client: EduSharingClient, vocab: Vo
         notes.add("vocab_unfit",
                   f"Bei {', '.join(unfit)} liegt mehr als die Hälfte der Zuordnungen außerhalb "
                   "der Werteliste: Die Liste beschreibt das Feld offenbar nicht, deshalb steht "
-                  "es hier nicht als Datenproblem. Die Werte zeigt der Abgleich mit den "
-                  "Wertelisten.")
+                  "es hier nicht als Datenproblem.")
     if ask.top is not None and len(rows) > ask.top:
         notes.add("rows_top", f"Angezeigt werden die ersten {ask.top} von {len(rows)} Zeilen.")
         rows = rows[: ask.top]
@@ -1715,13 +1714,23 @@ async def _criterion_exact(run: _Run, criteria: tuple[Criterion, ...], prop: str
     return values[pick] <= probe <= values[pick] + slack
 
 
+_PARTS = re.compile(r"[\W_]+")
+
+
 async def _widened_values(run: _Run, criteria: tuple[Criterion, ...], prop: str,
                           counts: dict[str, int]) -> list[str]:
-    """Die Werte, die als Filter mehr zählen als in der Facette, weil ein anderer Wert mit
-    ihnen beginnt („en“ trifft „en_US“). Geprüft am häufigsten solchen Wert: Zählt er genau,
-    vergleicht das Feld genau, und keiner ist betroffen."""
+    """Die Werte, die als Filter mehr zählen als in der Facette, weil ein anderer Wert oder
+    einer seiner Wortteile mit ihnen beginnt („en“ trifft „en_US“, „ar“ trifft „es_AR“).
+    Geprüft am häufigsten solchen Wert: Zählt er genau, vergleicht das Feld genau, und
+    keiner ist betroffen."""
     values = {v: n for v, n in counts.items() if v.strip() and n}
-    begin = sorted((v for v in values if any(o != v and _begins(v, o) for o in values)),
+    def within(value: str, other: str) -> bool:
+        # live gemessen: verglichen wird je Wortteil („ar“ trifft „es_AR“)
+        low = value.casefold()
+        other = other.casefold()
+        return other.startswith(low) or any(p.startswith(low) for p in _PARTS.split(other))
+
+    begin = sorted((v for v in values if any(o != v and within(v, o) for o in values)),
                    key=lambda v: (-values[v], v))
     if not begin:
         return []

@@ -31,7 +31,7 @@ def test_login_logout_cycle(client):
     assert "wda_session=" in cookie
     assert "httponly" in cookie and "samesite=strict" in cookie and "path=/" in cookie
     assert "secure" not in cookie  # cookie_secure=False in der Testkonfiguration
-    assert client.get("/api/auth/status").json() == {"authenticated": True}
+    assert client.get("/api/auth/status").json() == {"authenticated": True, "role": "admin"}
     assert client.get("/api/instances").status_code == 200
     assert client.post("/api/auth/logout").status_code == 204
     assert client.get("/api/auth/status").json() == {"authenticated": False}
@@ -85,7 +85,7 @@ def test_password_change_invalidates_sessions(admin, settings):
     assert other.get("/api/auth/status").json() == {"authenticated": False}
     same = TestClient(create_app(settings))
     same.cookies.set("wda_session", cookie)
-    assert same.get("/api/auth/status").json() == {"authenticated": True}
+    assert same.get("/api/auth/status").json() == {"authenticated": True, "role": "admin"}
 
 
 def test_lone_surrogate_password_is_plain_failure(client):

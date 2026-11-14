@@ -127,11 +127,13 @@ def test_values_that_begin_another_value_have_no_link(settings):
             doc[lang] = ["en_US"]
             changed += 1
     assert changed == 7
+    next(doc for doc in docs if doc[lang] == ["fr"])[lang] = ["es_FR"]
     with TestClient(create_app(settings, transport=DataRepo(docs).transport())) as client:
         assert client.post("/api/auth/login",
                            json={"password": ADMIN_PASSWORD}).status_code == 204
         block = table(client, {"rows": {"property": lang}})
-        assert block["drill"]["skip"] == ["en"]
+        # „fr“ steht in „es_FR“ als Wortteil: live gemessen trifft „ar“ auch „es_AR“
+        assert block["drill"]["skip"] == ["en", "fr"]
         for row in block["rows"]:
             if row["kind"] == "value" and row["key"] not in block["drill"]["skip"]:
                 assert count(client, cell_filters(block["drill"], row, "anzahl")) == (

@@ -1,4 +1,4 @@
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { Api } from './api';
 
@@ -7,6 +7,9 @@ export class Auth {
   private readonly api = inject(Api);
   /** null = noch nicht gefragt */
   readonly authenticated = signal<boolean | null>(null);
+  /** admin oder viewer (Lesezugang: abgelegte Läufe und Berichte ansehen) */
+  readonly role = signal<'admin' | 'viewer' | null>(null);
+  readonly viewer = computed(() => this.role() === 'viewer');
   /** Die Sitzung ist während der Arbeit abgelaufen: neu anmelden, ohne die Seite zu verlassen. */
   readonly expired = signal(false);
   /** Zählt jede erneute Anmeldung nach Ablauf; Ansichten laden daraufhin neu. */
@@ -27,7 +30,8 @@ export class Auth {
 
   async check(): Promise<boolean> {
     try {
-      const status = await this.api.get<{ authenticated: boolean }>('/auth/status');
+      const status = await this.api.get<{ authenticated: boolean; role?: 'admin' | 'viewer' }>('/auth/status');
+      this.role.set(status.authenticated ? status.role ?? 'admin' : null);
       this.authenticated.set(status.authenticated);
     } catch {
       this.authenticated.set(false);
@@ -37,6 +41,7 @@ export class Auth {
 
   async login(password: string): Promise<void> {
     await this.api.post('/auth/login', { password });
+    await this.check();
     this.authenticated.set(true);
     if (this.expired()) {
       this.expired.set(false);
@@ -47,6 +52,7 @@ export class Auth {
   async logout(): Promise<void> {
     await this.api.post('/auth/logout');
     this.authenticated.set(false);
+    this.role.set(null);
     this.expired.set(false);
   }
 }
@@ -73,3 +79,6 @@ export const requireLogin: CanActivateFn = async (_route, state) => {
   if (auth.authenticated() === true || (await auth.check())) return true;
   return router.createUrlTree(['/login'], { queryParams: { weiter: state.url } });
 };
+
+/** Seiten, die ändern, zählen oder einrichten: Mit dem Lesezugang geht es zu „Auffällig“. */
+export const adminOnly: CanActivateFn = () => (inject(Auth).viewer() ? inject(Router).createUrlTree(['/auffaellig']) : true);
