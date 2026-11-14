@@ -48,6 +48,7 @@ Minute auch die richtige Anmeldung.
 | `WDA_SCHEDULER` | `on` | `off` schaltet den Planer ab; Zeitpläne bleiben dann liegen (z. B. bei einer zweiten Instanz auf derselben Datenbank) |
 | `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
 | `WDA_SNAPSHOT_PAGE` | `1000` | Materialien je Seite beim lokalen Abzug (10 bis 2000) |
+| `WDA_SNAPSHOT_NIGHTLY` | `03:30` | Uhrzeit (in `WDA_TIMEZONE`), zu der vorhandene Abzüge Änderungen nachziehen; `off` schaltet das ab |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
 | `WDA_LLM_API_KEY` | – | Schlüssel für die KI-Anbindung |
@@ -170,6 +171,25 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 
+### Lückenliste
+
+`gaps` macht aus einer Matrix eine Liste der Felder, die am weitesten unter dem bleiben,
+was Zeilen- und Spaltensumme erwarten lassen:
+
+```json
+{"instance": "wlo-prod",
+ "rows": {"property": "ccm:taxonid", "match": "http://w3id.org/openeduhub/vocabs/discipline/", "vocab": "inside"},
+ "columns": {"property": "ccm:educationalcontext", "top": 14},
+ "gaps": {"limit": 25, "min_expected": 20}}
+```
+
+Je Feld stehen die gezählten Materialien, die Erwartung (Zeilensumme × Spaltensumme ÷
+Summe der gezeigten Matrix) und der Anteil am Erwarteten in Prozent; die kleinsten zuerst.
+Felder mit einer Erwartung unter `min_expected` bleiben weg, damit seltene Fächer die
+Liste nicht füllen. Eine Lücke kann fachlich begründet sein (Philosophie in der
+Primarstufe); die Liste zeigt, wo sich das Nachsehen lohnt. Im Dashboard „Abdeckung“
+stehen zwei solche Listen, für Schulfächer und für Fächergruppen der Hochschule.
+
 ### Quellen
 
 Der Reiter „Quellen“ unter „Qualität“ folgt dem Quellenpanel, zeigt aber nur Zählungen: Bezugsquellen und Crawler nach Größe (wie viele haben nur ein Material), Bindung zwischen Crawler und Bezugsquelle, dünne Metadaten und Offenheit je Bezugsquelle, Kosten, Werbung, Zugang, Datenschutz, Altersfreigabe, Erschließungsstatus, Materialart und Sprache je Bezugsquelle in Prozent, dazu die Vollständigkeit der Quelldatensätze. Dafür gibt es zwei Abfrageformen: `profile` (ein Merkmal je Zeile, je Zeilenwert eine Abfrage) und `sizes` (Größenklassen eines Feldes).
@@ -205,7 +225,8 @@ Das mitgelieferte Dashboard „Tiefenprüfung“ stellt 18 solche Kacheln zusamm
 
 Ein vollständiger Abzug von WLO (rund 320.000 Materialien) dauert etwa zweieinhalb Stunden (gemessen: rund 36 Materialien je Sekunde) und belegt rund 180 MB. Er
 lässt sich anhalten und fortsetzen; „Änderungen nachziehen“ liest danach nur, was sich
-seit dem letzten Abzug geändert hat. Gelöschte Materialien verschwinden erst mit einem
+seit dem letzten Abzug geändert hat; das geschieht für vorhandene Abzüge auch von selbst
+jede Nacht (`WDA_SNAPSHOT_NIGHTLY`). Gelöschte Materialien verschwinden erst mit einem
 vollständigen Abzug. Ändern sich Adresse, Repositorium, Metadatenset, Query oder Anmeldung einer Instanz, wird ihr
 Abzug verworfen; eine Umbenennung lässt ihn stehen. In der Liste der Rechner stehen nur
 Rechner mit mindestens fünf Materialien einzeln.

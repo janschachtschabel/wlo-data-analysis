@@ -62,6 +62,10 @@ top bis 60): Ausprägungen eines Merkmals je Zeile, z. B. Kosten oder Werbung je
 Geht auch bei Feldern, die als Filter nicht zählbar sind. Darstellung heatmap.
 - sizes: {{"property": Feld}} ohne rows: Größenklassen, z. B. wie viele Bezugsquellen nur \
 ein Material haben.
+- gaps: {{"limit": n, "min_expected": 20}} zusammen mit rows und columns: Lückenliste. Aus \
+der Matrix wird eine Liste der Felder (z. B. Fach · Bildungsstufe), die am weitesten unter \
+dem bleiben, was Zeilen- und Spaltensumme erwarten lassen. Darstellung table. Gut für \
+„Wo fehlt Angebot?“.
 - snapshot: {{"analysis": Name, "by": "publisher"|"source", "top": n, "show": \
 "share"|"count"}} steht allein (keine filters, rows, columns): Zählung aus dem lokalen Abzug, \
 für das, was das Repositorium nicht zählen kann. Namen: freitext (Füllgrad von Titel, \

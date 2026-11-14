@@ -99,10 +99,51 @@ async def run_query(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore
         return await asyncio.to_thread(run_analysis, snapshot, spec, client.instance)
     run = _Run(client, spec.content_type, spec.refresh)
     try:
-        return await _execute(spec, client, vocab, run)
+        result = await _execute(spec, client, vocab, run)
     except BaseException:
         await run.cancel()
         raise
+    return _gaps(result, spec) if spec.gaps is not None else result
+
+
+def _gaps(result: dict[str, Any], spec: QuerySpec) -> dict[str, Any]:
+    """Aus der Matrix wird eine Liste: je Feld die Zahl, die Erwartung aus Zeilen- und
+    Spaltensumme (bei gleicher Verteilung) und das Verhältnis. Die kleinsten zuerst."""
+    ask = spec.gaps
+    assert ask is not None
+    cols = [(n, c) for n, c in enumerate(result["columns"])
+            if not c.get("derived") and not str(c["id"]).startswith("__")]
+    rows = [r for r in result["rows"] if r.get("kind") == "value"]
+    cells = [[r["values"][n] or 0 for n, _ in cols] for r in rows]
+    row_sums = [sum(line) for line in cells]
+    col_sums = [sum(line[k] for line in cells) for k in range(len(cols))]
+    whole = sum(row_sums)
+    found = []
+    for i, row in enumerate(rows):
+        for k, (_, col) in enumerate(cols):
+            expected = row_sums[i] * col_sums[k] / whole if whole else 0
+            if expected < ask.min_expected:
+                continue
+            found.append((cells[i][k] / expected, -expected, {
+                "key": f"{row['key']}|{col['id']}", "label": f"{row['label']} · {col['label']}",
+                "kind": "value",
+                "values": [cells[i][k], round(expected), round(100 * cells[i][k] / expected, 1)]}))
+    found.sort(key=lambda item: item[:2])
+    columns = [
+        {"id": "count", "label": "Materialien", "derived": False, "total": None},
+        {"id": "expected", "label": "erwartet", "derived": True, "total": None},
+        {"id": "ratio", "label": "Anteil am Erwarteten (%)", "derived": True, "total": None}]
+    notes = list(result["provenance"]["notes"])
+    notes.append({"code": "gaps", "text": (
+        f"Lückenliste aus {len(rows)} Zeilen × {len(cols)} Spalten: die {ask.limit} Felder mit "
+        "dem kleinsten Anteil am Erwarteten. Erwartet ist, was Zeilen- und Spaltensumme der "
+        "gezeigten Matrix bei gleicher Verteilung ergäben; Felder mit einer Erwartung unter "
+        f"{ask.min_expected:g} bleiben weg. Eine Lücke kann fachlich begründet sein.")})
+    return {**result, "columns": columns, "rows": [item[2] for item in found[:ask.limit]],
+            "total_row": False,
+            "provenance": {**result["provenance"], "notes": notes,
+                           "columns": [{"id": c["id"], "filters": [], "formula": None}
+                                       for c in columns]}}
 
 
 async def _execute(spec: QuerySpec, client: EduSharingClient, vocab: VocabStore, run: _Run

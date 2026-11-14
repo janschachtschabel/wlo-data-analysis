@@ -4,7 +4,6 @@ etwas aus dem Abzug heraus; ausgewertet wird er nur über Abfragen (``snapshot``
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from typing import Any, Literal
 
@@ -14,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from ..errors import UnknownInstance, error_body
 from ..snapshot.store import Snapshot
-from ..snapshot.sync import status, sync
+from ..snapshot.sync import status
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/snapshot")
@@ -56,16 +55,8 @@ async def start(instance: str, body: StartIn, request: Request) -> Any:
         return JSONResponse(error_body(
             "conflict", "Nachziehen geht erst nach einem vollständigen Abzug."),
             status_code=409)
-    client, secret = services.client(instance), services.snapshot_secret
-
-    async def go() -> None:
-        # Fehler stehen im Stand des Abzugs; die Aufgabe selbst endet still
-        with contextlib.suppress(Exception):
-            await sync(client, snap, secret, body.mode,
-                       page=request.app.state.settings.snapshot_page)
-
     # Den Stand schreibt allein der Abzug: Er muss erst lesen, was vorher war.
-    services.syncs[instance] = asyncio.create_task(go())
+    services.start_sync(instance, body.mode)
     await asyncio.sleep(0)
     out = await asyncio.to_thread(status, snap, True)
     out["status"] = "running"

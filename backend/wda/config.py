@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -31,10 +32,22 @@ class Settings(BaseSettings):
     upstream_concurrency: int = Field(default=4, ge=1, le=32)
     # Materialien je Seite beim lokalen Abzug (gemessen: 1.000 ist am schnellsten)
     snapshot_page: int = Field(default=1000, ge=10, le=2000)
+    # Uhrzeit (HH:MM in ``timezone``), zu der vorhandene Abzüge Änderungen nachziehen
+    snapshot_nightly: str = "03:30"
     runs_keep: int = Field(default=500, ge=1, le=100000)
     oersi_url: str = "https://oersi.org/resources/api/search/oer_data/_search"
     timezone: str = "Europe/Berlin"  # in ihr gelten die Uhrzeiten der Zeitpläne
     scheduler: bool = True  # ``off``: Zeitpläne bleiben liegen (Tests, zweite Instanz)
+
+    @field_validator("snapshot_nightly")
+    @classmethod
+    def _nightly_time(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value in ("", "off", "aus"):
+            return ""
+        if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("erwartet HH:MM oder off")
+        return value
 
     @field_validator("timezone")
     @classmethod

@@ -155,6 +155,14 @@ class Sizes(_Model):
         return self
 
 
+class Gaps(_Model):
+    """Lückenliste: macht aus einer Matrix (rows × columns) eine Liste der Felder, die am
+    weitesten hinter dem zurückbleiben, was Zeile und Spalte erwarten lassen."""
+
+    limit: int = Field(default=30, ge=1, le=200)
+    min_expected: float = Field(default=20, ge=1, le=1_000_000)
+
+
 SNAPSHOT_ANALYSES = ("freitext", "beschreibung", "titel", "schlagwoerter", "duenn",
                      "vollstaendigkeit", "dubletten", "alter", "adressen", "jahrgang",
                      "rechner")
@@ -188,6 +196,7 @@ class QuerySpec(_Model):
     profile: Profile | None = None
     sizes: Sizes | None = None
     snapshot: SnapshotQuery | None = None
+    gaps: Gaps | None = None
     percent: Literal["none", "column", "row"] = "none"
     refresh: bool = False
 
@@ -210,6 +219,11 @@ class QuerySpec(_Model):
                               or self.filters):
             raise ValueError("snapshot (lokaler Abzug) steht für sich: ohne filters, rows, "
                              "series, columns, fill, vocab_check, profile, sizes, percent")
+        if self.gaps and (self.rows is None or self.columns is None or self.fill
+                          or self.vocab_check or self.profile or self.sizes
+                          or self.percent != "none"):
+            raise ValueError("gaps (Lückenliste) braucht rows und columns und geht nicht "
+                             "zusammen mit fill, vocab_check, profile, sizes oder percent")
         if self.sizes and (other or self.rows or self.profile):
             raise ValueError("sizes geht nicht zusammen mit rows, series, columns, fill, "
                              "vocab_check, profile oder percent")

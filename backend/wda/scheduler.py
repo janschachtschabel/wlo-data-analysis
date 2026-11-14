@@ -44,7 +44,9 @@ def first_error(run: dict[str, Any]) -> str | None:
 class Scheduler:
     def __init__(self, schedules: Callable[[], ScheduleStore], runner: Callable[[], Runner], *,
                  clock: Callable[[], datetime] = utc_now,
-                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
+                 sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+                 also: Callable[[datetime], Awaitable[Any]] | None = None) -> None:
+        self._also = also  # weitere regelmäßige Arbeit, etwa das Nachziehen der Abzüge
         self._schedules = schedules
         self._runner = runner
         self._clock = clock
@@ -118,6 +120,8 @@ class Scheduler:
         while True:
             try:
                 await self.tick()
+                if self._also is not None:
+                    await self._also(self._clock())
             except asyncio.CancelledError:
                 raise
             except Exception:

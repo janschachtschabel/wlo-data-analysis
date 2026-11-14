@@ -275,7 +275,20 @@ def test_coverage_dashboard_runs_and_separates_school_and_university_subjects(ap
     assert first["values"][ids.index("ohne")] == sum(
         1 for d in having if not d["ccm:commonlicense_key"])
     report = api.get(f"/api/runs/{run['id']}/report").json()
-    assert {b["view"]["type"] for b in report["blocks"]} == {"heatmap"}
+    assert {b["view"]["type"] for b in report["blocks"]} == {"heatmap", "table"}
+    # Lückenliste: aufsteigend nach dem Anteil am Erwarteten, Zahl stimmt mit der Matrix
+    gaps = results["luecken-schule"]
+    assert [c["id"] for c in gaps["columns"]] == ["count", "expected", "ratio"]
+    ratios = [r["values"][2] for r in gaps["rows"]]
+    assert ratios and ratios == sorted(ratios)
+    row_key, col_key = gaps["rows"][0]["key"].split("|")
+    grid = results["schule-stufe"]
+    matrix_row = next(r for r in grid["rows"] if r["key"] == row_key)
+    matrix_col = [c["id"] for c in grid["columns"]].index(col_key)
+    assert gaps["rows"][0]["values"][0] == (matrix_row["values"][matrix_col] or 0)
+    assert "gaps" in {n["code"] for n in gaps["provenance"]["notes"]}
+    assert "anteil" in ids and results["hochschule-lizenz"]["rows"]
+    assert results["schule-erschliessung"]["rows"] and results["sprachniveau-stufe"]["rows"]
     html = api.get(f"/api/runs/{run['id']}/export?format=html").text
     assert 'class="h6"' in html and "0 (Lücke)" in html
 

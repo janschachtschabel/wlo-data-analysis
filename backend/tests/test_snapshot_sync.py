@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from wda.cache import TTLCache
+from wda.config import Settings
 from wda.edusharing.client import EduSharingClient
 from wda.instances import Instance
 from wda.main import create_app
@@ -207,3 +208,47 @@ def test_dashboard_runs_from_the_snapshot(api):
     for fmt in ("html", "csv", "md", "json"):
         text = api.get(f"/api/runs/{run['id']}/export?format={fmt}").text
         assert "Material Nummer" not in text and "/pfad/" not in text, fmt
+
+
+def test_nightly_update_runs_once_per_night_and_never_creates_a_snapshot(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from wda.instances import InstanceRegistry
+    from wda.services import Services
+
+    repo = DataRepo(make_docs(40))
+    settings = Settings(admin_password=ADMIN_PASSWORD, data_dir=tmp_path, snapshot_page=20,
+                        snapshot_nightly="03:30", timezone="Europe/Berlin")
+    night = datetime(2026, 11, 15, 2, 45, tzinfo=UTC)  # 03:45 in Berlin
+
+    async def go():
+        services = Services(settings, InstanceRegistry(None), transport=repo.transport())
+        try:
+            assert await services.nightly_snapshots(night) == []  # kein Abzug vorhanden
+            assert not (tmp_path / "abzug").exists()
+            services.start_sync("wlo-prod", "full")
+            await services.syncs["wlo-prod"]
+            snap = services.snapshot("wlo-prod")
+            # der Abzug stammt vom Vortag
+            snap.set_state(finished_at=(night - timedelta(hours=12)).timestamp())
+            before = repo.node_requests
+            assert await services.nightly_snapshots(night) == ["wlo-prod"]
+            await services.syncs["wlo-prod"]
+            assert repo.node_requests > before and snap.state()["mode"] == "update"
+            assert snap.state()["status"] == "ok"
+            # dieselbe Nacht noch einmal und am Tag darauf vor der Zeit: nichts
+            assert await services.nightly_snapshots(night + timedelta(minutes=1)) == []
+            assert await services.nightly_snapshots(night + timedelta(hours=20)) == []
+            assert await services.nightly_snapshots(night + timedelta(hours=24)) == ["wlo-prod"]
+            await services.syncs["wlo-prod"]
+        finally:
+            await services.aclose()
+
+    asyncio.run(go())
+
+
+def test_nightly_update_can_be_switched_off(tmp_path):
+    off = Settings(admin_password=ADMIN_PASSWORD, data_dir=tmp_path, snapshot_nightly="off")
+    assert off.snapshot_nightly == ""
+    with pytest.raises(ValueError, match="HH:MM"):
+        Settings(admin_password=ADMIN_PASSWORD, data_dir=tmp_path, snapshot_nightly="25:00")

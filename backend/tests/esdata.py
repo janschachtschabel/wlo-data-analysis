@@ -36,7 +36,8 @@ KNOWN = {"ccm:taxonid", "ccm:educationalcontext", "ccm:commonlicense_key", "lice
          "ccm:oeh_lrt_aggregated", "cclom:general_language", "ccm:oeh_publisher_combined",
          "ccm:educationalintendedenduserrole", "ccm:curriculum", "ccm:oeh_widgets"}
 # Wie live gemessen: als Facette zählbar, als Kriterium abgelehnt
-FACET_ONLY = {"ccm:price", "ccm:oeh_buffet_criteria", "virtual:kita_search",
+FACET_ONLY = {"ccm:oeh_languageLevel",
+              "ccm:price", "ccm:oeh_buffet_criteria", "virtual:kita_search",
               "ccm:conditionsOfAccess", "ccm:containsAdvertisement",
               "ccm:dataProtectionConformity", "ccm:fskRating", "ccm:oeh_quality_login"}
 # weitere Felder mit Werteliste: (Bezeichnung, Widget-Art, Werte, Anteil gefüllt)
@@ -81,6 +82,8 @@ MDS = {"id": "oeh", "widgets": [
      "values": [{"id": v, "caption": v} for v in BUFFET]},
     {"id": "ccm:editorial_checklist", "caption": "Erschließungsstatus", "type": "multioption",
      "values": [{"id": v, "caption": v} for v in ("2", "9")]},
+    {"id": "ccm:oeh_languageLevel", "caption": "Sprachniveau", "type": "multioption",
+     "values": [{"id": v, "caption": v} for v in ("A1", "A2", "B1", "B2")]},
     {"id": "virtual:kita_search", "caption": "Kita", "type": "singleoption",
      "values": [{"id": "1", "caption": "ja"}]},
     {"id": "ccm:oeh_publisher_combined", "caption": "Bezugsquelle", "type": "text"},
@@ -118,6 +121,10 @@ def make_docs(n: int = 400, seed: int = 7) -> list[Doc]:
         doc["ccm:price"] = [extra.choice(PRICES)] if extra.random() < 0.5 else []
         doc["ccm:oeh_buffet_criteria"] = extra.sample(BUFFET, extra.choice([0, 0, 2, 3]))
         doc["ccm:editorial_checklist"] = [extra.choice(["2", "9"])] if extra.random() < 0.1 else []
+    level = random.Random(seed + 2000)  # noqa: S311
+    for doc in docs:
+        doc["ccm:oeh_languageLevel"] = (
+            [level.choice(["A1", "A2", "B1", "B2"])] if level.random() < 0.15 else [])
     for doc in docs:
         if extra.random() < 0.2:
             doc["ccm:taxonid"] = [*doc["ccm:taxonid"], extra.choice(list(UNI_SUBJECTS.values()))]

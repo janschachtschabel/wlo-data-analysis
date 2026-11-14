@@ -8,7 +8,7 @@ import json
 import logging
 import os
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,7 @@ from .jobs import Jobs
 from .llm import config as llm_config
 from .llm.client import LlmClient
 from .snapshot.store import Snapshot
+from .snapshot.sync import sync
 from .store.db import Database
 from .store.definitions import DefinitionStore
 from .store.history import History
@@ -230,6 +231,49 @@ class Services:
             self._snapshots[instance_id] = Snapshot(
                 self._settings.data_dir / "abzug" / f"{instance_id}.sqlite3")
         return self._snapshots[instance_id]
+
+    def sync_running(self, instance_id: str) -> bool:
+        task = self.syncs.get(instance_id)
+        return task is not None and not task.done()
+
+    def start_sync(self, instance_id: str, mode: str) -> None:
+        """Startet den Abzug im Hintergrund. Fehler stehen danach im Stand des Abzugs."""
+        snap, client, secret = (self.snapshot(instance_id), self.client(instance_id),
+                                self.snapshot_secret)
+
+        async def go() -> None:
+            with contextlib.suppress(Exception):
+                await sync(client, snap, secret, mode, page=self._settings.snapshot_page)
+
+        self.syncs[instance_id] = asyncio.create_task(go())
+
+    async def nightly_snapshots(self, now: datetime) -> list[str]:
+        """Zieht einmal je Nacht Änderungen in jeden vollständigen Abzug nach. Legt keinen
+        Abzug an; ein gescheiterter Versuch wird erst in der nächsten Nacht wiederholt."""
+        at = self._settings.snapshot_nightly
+        if not at:
+            return []
+        local = now.astimezone(ZoneInfo(self._settings.timezone))
+        due = local.replace(hour=int(at[:2]), minute=int(at[3:]), second=0, microsecond=0)
+        if due > local:
+            due -= timedelta(days=1)
+        started = []
+        for inst in self.registry.list():
+            path = self._settings.data_dir / "abzug" / f"{inst.id}.sqlite3"
+            if self.sync_running(inst.id) or not path.exists():
+                continue
+            snap = self.snapshot(inst.id)
+            state = await asyncio.to_thread(snap.state)
+            try:
+                last = max(float(state["finished_at"]), float(state.get("nightly_at", "0")))
+            except (KeyError, ValueError):
+                continue  # kein vollständiger Abzug
+            if last >= due.timestamp() or self.sync_running(inst.id):
+                continue
+            await asyncio.to_thread(lambda s=snap: s.set_state(nightly_at=now.timestamp()))
+            self.start_sync(inst.id, "update")
+            started.append(inst.id)
+        return started
 
     @property
     def snapshot_secret(self) -> bytes:

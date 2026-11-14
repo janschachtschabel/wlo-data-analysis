@@ -102,7 +102,8 @@ def create_app(
 
     app.state.scheduler_clock = now
     app.state.scheduler = Scheduler(
-        lambda: app.state.services.schedules, lambda: app.state.services.runner, clock=now)
+        lambda: app.state.services.schedules, lambda: app.state.services.runner, clock=now,
+        also=lambda when: app.state.services.nightly_snapshots(when))
 
     @app.exception_handler(TooManyJobs)
     async def too_many_jobs(request: Request, exc: TooManyJobs) -> JSONResponse:
