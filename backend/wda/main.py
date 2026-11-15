@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import mimetypes
 import re
 import time
@@ -44,6 +45,8 @@ from .scheduler import Scheduler, utc_now
 from .security import LoginThrottle, SessionSigner, session_signing_key, viewer_mark
 from .services import Services
 
+log = logging.getLogger(__name__)
+
 # Die einzigen API-Pfade, die ohne Admin-Session antworten. Alles andere hängt am
 # geschützten Router; tests/test_routes_guard.py prüft das für jede Route.
 PUBLIC_API_PATHS: frozenset[str] = frozenset(
@@ -72,6 +75,9 @@ def create_app(
 ) -> FastAPI:
     settings = settings or load_settings()
     set_display_zone(settings.timezone)
+    if len(settings.admin_password.get_secret_value()) < 12:
+        log.warning("Das Admin-Passwort hat weniger als 12 Zeichen; ein längeres schützt "
+                    "besser gegen Ausprobieren.")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -104,6 +110,7 @@ def create_app(
     app.state.signer = SessionSigner(
         session_signing_key(settings), settings.session_max_age, viewer_mark(settings))
     app.state.throttle = LoginThrottle(clock=clock)
+    app.state.throttle_all = LoginThrottle(limit=30, clock=clock)
     app.state.services = Services(settings, app.state.instances, transport=transport,
                                   llm_transport=llm_transport)
 
@@ -161,6 +168,8 @@ def create_app(
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if settings.cookie_secure:  # die App läuft hinter HTTPS: Browser sollen dabei bleiben
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         if request.url.path.startswith("/api"):
             response.headers["Cache-Control"] = "no-store"
         return response

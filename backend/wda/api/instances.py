@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StrictStr, ValidationError
 
+from ..deps import role_of
 from ..errors import UnknownInstance, describe_validation, error_body
 from ..instances import MAX_STORED, Instance
 
@@ -92,6 +93,8 @@ def _invalid(exc: _Invalid) -> JSONResponse:
 @router.get("")
 def list_instances(request: Request) -> list[dict[str, Any]]:
     registry = request.app.state.services.registry
+    if role_of(request) != "admin":  # der Lesezugang braucht Namen, keine Adressen
+        return [{"id": inst.id, "name": inst.name} for inst in registry.list()]
     return [registry.describe(inst) for inst in registry.list()]
 
 

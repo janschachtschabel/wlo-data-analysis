@@ -15,6 +15,9 @@ class LoginBody(BaseModel):
     password: StrictStr
 
 
+EVERYONE = "*"
+
+
 def _client_key(request: Request) -> str:
     return request.client.host if request.client else "unbekannt"
 
@@ -23,7 +26,8 @@ def _client_key(request: Request) -> str:
 def login(body: LoginBody, request: Request, response: Response) -> None:
     state = request.app.state
     key = _client_key(request)
-    wait = state.throttle.retry_after(key)
+    # je Adresse und, falls die Adresse gefälscht ist (X-Forwarded-For), über alle zusammen
+    wait = max(state.throttle.retry_after(key), state.throttle_all.retry_after(EVERYONE))
     if wait:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
@@ -37,6 +41,7 @@ def login(body: LoginBody, request: Request, response: Response) -> None:
         role = "viewer"
     else:
         state.throttle.record_failure(key)
+        state.throttle_all.record_failure(EVERYONE)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Passwort falsch")
     state.throttle.reset(key)
     response.set_cookie(

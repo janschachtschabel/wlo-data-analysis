@@ -574,6 +574,11 @@ class Runner:
                 "DELETE FROM runs WHERE definition_id=? AND seq NOT IN ("
                 " SELECT seq FROM runs WHERE definition_id=? ORDER BY seq DESC LIMIT ?)",
                 (run["definition_id"], run["definition_id"], self._keep))
+        # Läufe ohne Definition (gelöscht oder nie gespeichert) zusammen ebenso begrenzen
+        con.execute(
+            "DELETE FROM runs WHERE definition_id IS NULL AND seq NOT IN ("
+            " SELECT seq FROM runs WHERE definition_id IS NULL ORDER BY seq DESC LIMIT ?)",
+            (self._keep,))
 
     # ---- Lesen -----------------------------------------------------------------
 

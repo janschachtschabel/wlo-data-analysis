@@ -5,6 +5,7 @@
 services:
   init:
     image: ${WDA_IMAGE:-ghcr.io/janschachtschabel/wlo-data-analysis:latest}
+    pull_policy: always
     command: ["python", "-m", "wda.init"]
     restart: "no"
     environment:
@@ -15,6 +16,7 @@ services:
 
   app:
     image: ${WDA_IMAGE:-ghcr.io/janschachtschabel/wlo-data-analysis:latest}
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       init:
@@ -40,6 +42,17 @@ services:
       WDA_SMTP_PASSWORD: ${WDA_SMTP_PASSWORD:-}
       WDA_SMTP_FROM: ${WDA_SMTP_FROM:-}
       WDA_SMTP_SECURITY: ${WDA_SMTP_SECURITY:-starttls}
+      WDA_SCHEDULER: ${WDA_SCHEDULER:-}
+      WDA_RUNS_KEEP: ${WDA_RUNS_KEEP:-}
+      WDA_SESSION_MAX_AGE: ${WDA_SESSION_MAX_AGE:-}
+      WDA_SESSION_SECRET: ${WDA_SESSION_SECRET:-}
+      WDA_LLM_EFFORT: ${WDA_LLM_EFFORT:-}
+      WDA_CACHE_TTL: ${WDA_CACHE_TTL:-}
+      WDA_VOCAB_TTL: ${WDA_VOCAB_TTL:-}
+      WDA_UPSTREAM_TIMEOUT: ${WDA_UPSTREAM_TIMEOUT:-}
+      WDA_UPSTREAM_CONCURRENCY: ${WDA_UPSTREAM_CONCURRENCY:-}
+      WDA_SNAPSHOT_PAGE: ${WDA_SNAPSHOT_PAGE:-}
+      WDA_OERSI_URL: ${WDA_OERSI_URL:-}
       FORWARDED_ALLOW_IPS: "*"
     volumes:
       - wda-data:/data

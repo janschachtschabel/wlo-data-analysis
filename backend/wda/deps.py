@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, status
 from starlette.responses import JSONResponse
@@ -46,6 +47,27 @@ class _TooLarge(Exception):
     pass
 
 
+def _foreign(scope: Scope) -> bool:
+    """Schreibende Anfrage von einer anderen Seite? Das Cookie (SameSite=Strict) hält fremde
+    Websites fern, nicht aber eine Nachbar-Subdomain. Maßgeblich ist, was der Browser über die
+    Herkunft sagt (``Sec-Fetch-Site``), sonst ``Origin`` gegen den eigenen Host. Anfragen
+    ohne beides (Skripte, ältere Browser) bleiben erlaubt."""
+    if scope["method"] in ("GET", "HEAD", "OPTIONS"):
+        return False
+    headers = dict(scope["headers"])
+    site = headers.get(b"sec-fetch-site")
+    if site is not None:
+        return site.strip().lower() not in (b"same-origin", b"none")
+    origin = headers.get(b"origin")
+    if origin is None:
+        return False
+    try:
+        return urlsplit(origin.decode("latin-1")).netloc.lower() != headers.get(
+            b"host", b"").decode("latin-1").lower()
+    except ValueError:
+        return True
+
+
 class AdminGate:
     """Sperrt alles unter ``/api`` außer den öffentlichen Pfaden, bevor eine Route gewählt
     wird. Eine Route kann den Schutz damit nicht vergessen; ``require_admin`` an den Routen
@@ -70,6 +92,12 @@ class AdminGate:
             {"detail": "Die Anfrage ist zu groß.", "kind": "too_large"}, status_code=413)
         if length.isdigit() and int(length) > limit:
             await too_large(scope, receive, send)
+            return
+        if (path == "/api" or path.startswith("/api/")) and _foreign(scope):
+            response = JSONResponse(
+                {"detail": "Diese Anfrage kommt nicht von der App selbst.",
+                 "kind": "cross_origin"}, status_code=403, headers={"Cache-Control": "no-store"})
+            await response(scope, receive, send)
             return
         if (path == "/api" or path.startswith("/api/")) and path not in self.public_paths:
             role = role_of(Request(scope))
