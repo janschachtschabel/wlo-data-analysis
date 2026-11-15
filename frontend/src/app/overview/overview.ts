@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api, ApiError } from '../core/api';
+import { Auth } from '../core/auth';
 import { formatTime } from '../core/format';
 
 export interface Highlight {
@@ -46,7 +47,9 @@ export function changeText(item: Pick<Highlight, 'before' | 'after' | 'delta' | 
     @if (error() || !data()) { }
     @else if (!data()!.items.length) {
       <p class="card" role="status">
-        @if (!data()!.watched) {
+        @if (!data()!.watched && viewer()) {
+          Es gibt noch keine gespeicherten Läufe.
+        } @else if (!data()!.watched) {
           Es gibt noch keine gespeicherten Läufe. Öffne eine Auswertung und wähle „Lauf speichern“, oder richte in der
           <a routerLink="/bibliothek">Bibliothek</a> einen Zeitplan ein; ab dem zweiten Lauf zeigen sich hier Veränderungen.
         } @else if (!data()!.compared) {
@@ -77,6 +80,7 @@ export function changeText(item: Pick<Highlight, 'before' | 'after' | 'delta' | 
 })
 export class Overview {
   private readonly api = inject(Api);
+  protected readonly viewer = inject(Auth).viewer;
   protected readonly data = signal<Highlights | null>(null);
   protected readonly error = signal('');
   protected readonly time = formatTime;

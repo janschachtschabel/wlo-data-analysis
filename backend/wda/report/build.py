@@ -367,6 +367,28 @@ def build_matrix(section: dict[str, Any], results: dict[str, dict[str, Any]]
             sources.append({"label": block["label"], "kind": "manual",
                             "as_of": block.get("as_of"), "note": block.get("note")})
             continue
+        if block["source"] == "difference":
+            whole, part = (per_block[n] for n in (
+                next(i for i, b in enumerate(section["blocks"]) if b["id"] == block[side])
+                for side in ("of", "minus")))
+            if not whole or not part:  # einer der beiden Blöcke ist gescheitert
+                failed += 1
+                sources.append({"label": block["label"], "kind": "failed"})
+                continue
+            for key, values in whole.items():
+                less = part.get(key, [0] * width)
+                given = {s["id"]: (None if a is None or s["id"] in formulas
+                                   else max(a - (b or 0), 0))
+                         for s, a, b in zip(series, values, less, strict=True)}
+                for _ in formulas:
+                    for fid, formula in formulas.items():
+                        given[fid] = formula.evaluate(given)
+                cells[key] = [given[s["id"]] for s in series]
+            names = {b["id"]: b["label"] for b in section["blocks"]}
+            sources.append({"label": block["label"], "kind": "manual", "as_of": None,
+                            "note": f"berechnet: „{names[block['of']]}“ abzüglich "
+                                    f"„{names[block['minus']]}“"})
+            continue
         if block["source"] == "oersi":
             counts = usable(results.get(f"{sid}/{block['id']}/oersi"), block["label"],
                             EXTERNAL_SCHEMA_VERSION)

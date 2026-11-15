@@ -10,7 +10,7 @@ import {
   setSeries, toggleShow,
 } from './matrix-edit';
 
-const SOURCES: Record<MatrixBlock['source'], string> = { query: 'Abfrage', manual: 'Handeintrag', oersi: 'OERSI' };
+const SOURCES: Record<MatrixBlock['source'], string> = { query: 'Abfrage', manual: 'Handeintrag', oersi: 'OERSI', difference: 'Berechnet' };
 const LICENSES: [string, string][] = [
   ['CC_0', 'CC 0'], ['PDM', 'Public Domain'], ['CC_BY', 'CC BY'], ['CC_BY_SA', 'CC BY-SA'], ['CC_BY_NC', 'CC BY-NC'],
   ['CC_BY_ND', 'CC BY-ND'], ['CC_BY_NC_SA', 'CC BY-NC-SA'], ['CC_BY_NC_ND', 'CC BY-NC-ND'], ['CUSTOM', 'andere Lizenz'],
@@ -159,6 +159,18 @@ const LICENSES: [string, string][] = [
                   <app-filter-bar [instance]="instance()" [filters]="block.filters ?? []" [labels]="labels()"
                                   (changed)="emit(block_(block.id, { filters: $event }))" />
                 }
+              } @else if (block.source === 'difference') {
+                <p class="muted small">Zelle für Zelle der erste Block abzüglich des zweiten. Das stimmt, wenn der zweite ein Teil des ersten ist (dieselben Filter und einer mehr). Beide müssen in der Tabelle vor diesem Block stehen.</p>
+                <div class="line">
+                  <label>Block
+                    <select [attr.name]="'mx-of-' + matrix().id + '-' + block.id" (change)="emit(block_(block.id, { of: $any($event.target).value }))">
+                      @for (other of queryBlocks(); track other.id) { <option [value]="other.id" [selected]="block.of === other.id">{{ other.label }}</option> }
+                    </select></label>
+                  <label>abzüglich
+                    <select [attr.name]="'mx-minus-' + matrix().id + '-' + block.id" (change)="emit(block_(block.id, { minus: $any($event.target).value }))">
+                      @for (other of queryBlocks(); track other.id) { <option [value]="other.id" [selected]="block.minus === other.id">{{ other.label }}</option> }
+                    </select></label>
+                </div>
               } @else if (block.source === 'oersi') {
                 <p class="muted small">OERSI zählt je Zeilengruppe über die Werte der Destatis-Systematik, die in den Gruppen stehen. Je Spalte wählst du, was gezählt wird.</p>
                 @for (series of counted(); track series.id) {
@@ -227,6 +239,7 @@ const LICENSES: [string, string][] = [
               <option value="query">Abfrage im Repositorium</option>
               <option value="manual">Handeintrag</option>
               <option value="oersi" [disabled]="!counted().length">OERSI</option>
+              <option value="difference" [disabled]="queryBlocks().length < 2">Berechnet: ein Block abzüglich eines anderen</option>
             </select>
           </label>
           <button type="button" (click)="addBlock(newBlock, $any(newSource.value))" [disabled]="matrix().blocks.length >= 12">Block hinzufügen</button>
@@ -292,6 +305,7 @@ export class MatrixForm {
   private readonly property = computed(() => (this.problem() ? '' : this.matrix().rows.property));
   protected readonly groups = computed<MatrixGroup[]>(() => this.matrix().rows.sections);
   protected readonly valueCount = computed(() => this.groups().reduce((sum, g) => sum + g.values.length, 0));
+  protected readonly queryBlocks = computed(() => this.matrix().blocks.filter((b) => b.source === 'query'));
   protected readonly counted = computed(() => this.matrix().series.filter((s) => !this.isFormula(s)));
   protected readonly blockNames = computed(() => this.matrix().blocks.map((b) => `${b.label} (${SOURCES[b.source]})`).join(', '));
   protected readonly knownField = computed(() => this.fields().some((f) => f.property === this.matrix().rows.property));

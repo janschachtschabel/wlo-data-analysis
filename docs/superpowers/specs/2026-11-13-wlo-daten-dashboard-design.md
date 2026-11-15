@@ -2,6 +2,10 @@
 
 Stand: 2026-11-13 · Status: **freigegeben** (Jan, 2026-11-13), Abschnitt 8 enthält seine Antworten
 
+> Historisch: Dies ist der Entwurf vom Anfang mit zehn Paketen. Gebaut wurden zwanzig; was
+> jedes brachte, steht in den Plänen unter `docs/superpowers/plans/`, der heutige Stand im
+> README.
+
 ## 1. Absicht
 
 Ein Quellen- und Daten-Dashboard für WirLernenOnline (WLO) und generisch für

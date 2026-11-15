@@ -14,6 +14,9 @@ from .main import create_app
 def main() -> int:
     try:
         app = create_app()
+        # die Ablage schon hier öffnen: Eine beschädigte Datei beendet den Start mit einem
+        # Satz statt mit einer Fehlerkette beim Hochfahren
+        _ = app.state.services.db
     except ConfigError as exc:
         print(f"Start abgebrochen: {exc}", file=sys.stderr)
         return 2

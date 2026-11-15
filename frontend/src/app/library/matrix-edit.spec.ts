@@ -1,5 +1,5 @@
 import {
-  MatrixSpec, addBlock, addGroup, addSeries, emptyMatrix, ident, manualRows, parseNumber, removeGroup,
+  MatrixSpec, addBlock, addGroup, addSeries, emptyMatrix, ident, manualRows, parseNumber, removeBlock, removeGroup,
   removeSeries, reorder, setCount, setGroup, setManual, setRows, setSeries, toggleShow,
 } from './matrix-edit';
 
@@ -87,6 +87,11 @@ describe('Gegliederte Tabelle bearbeiten', () => {
     expect(addBlock(base(), 'query', 'WLO: Hochschule').blocks[3]).toEqual({ id: 'wlo_hochschule', label: 'WLO: Hochschule', source: 'query', filters: [] });
     expect(addBlock(base(), 'manual', 'Mundo').blocks[3]).toEqual({ id: 'mundo', label: 'Mundo', source: 'manual' });
     expect(addBlock(base(), 'oersi', 'OERSI 2').blocks[3]).toEqual({ id: 'oersi_2', label: 'OERSI 2', source: 'oersi', counts: { gesamt: 'total' } });
+    // berechnet: braucht zwei Abfrage-Blöcke und verschwindet mit einem von ihnen
+    const two = addBlock(addBlock(base(), 'query', 'Teil'), 'difference', 'Rest');
+    const made = two.blocks[two.blocks.length - 1];
+    expect(made.source).toBe('difference');
+    expect(removeBlock(two, made.minus!).blocks.some((b) => b.source === 'difference')).toBe(false);
   });
 
   it('trägt Handzahlen ein und räumt leere Einträge weg', () => {

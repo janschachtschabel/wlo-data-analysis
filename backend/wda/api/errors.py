@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import sqlite3
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -13,6 +16,7 @@ from ..store.definitions import Conflict, NotFound
 from ..store.runner import DamagedRun
 from ..store.specs import InvalidDefinition
 
+log = logging.getLogger(__name__)
 _HTTP_KINDS = {401: "unauthenticated", 404: "not_found", 405: "method_not_allowed",
                409: "conflict", 413: "too_large", 429: "throttled", 503: "unavailable"}
 
@@ -51,6 +55,14 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(DamagedRun)
     async def damaged_run(request: Request, exc: DamagedRun) -> JSONResponse:
         return JSONResponse(error_body("damaged_run", str(exc)), status_code=422)
+
+    @app.exception_handler(sqlite3.Error)
+    async def storage_error(request: Request, exc: sqlite3.Error) -> JSONResponse:
+        log.error("Ablage nicht benutzbar (%s)", type(exc).__name__)
+        return JSONResponse(error_body(
+            "storage_unavailable",
+            "Die Ablage der App ist gerade nicht benutzbar (etwa voller Datenträger oder "
+            "gesperrte Datei). Näheres steht im Protokoll der App."), status_code=503)
 
     @app.exception_handler(ConfigError)
     async def config_error(request: Request, exc: ConfigError) -> JSONResponse:

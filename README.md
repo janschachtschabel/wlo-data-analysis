@@ -5,11 +5,14 @@ Es ruft Zahlen live ab, lässt Filter und Ansichten zusammenstellen und erzeugt 
 gespeicherten Templates Dashboards und Zahlen-Dokumente.
 
 **Grundsatz:** Nach außen gehen nur Auswertungen. Keine Schnittstelle liefert einzelne
-Datensätze aus einem Cache, und alles außer Anmeldung und Health-Check verlangt die
-Admin-Anmeldung.
+Datensätze aus einem Cache, und alles außer Anmeldung und Health-Check verlangt eine
+Anmeldung: als Admin oder, wenn eingerichtet, mit dem Lesezugang, der nur abgelegte Läufe
+und Berichte ansehen darf.
 
-Stand: Paket 3 von 10 (Grundgerüst, edu-sharing-Client, Abfrage-Engine). Design und Paketfolge stehen in
-[`docs/superpowers/specs/`](docs/superpowers/specs/), die Umsetzungspläne in
+Stand: Die Pakete 1 bis 20 sind umgesetzt (Auswertungen, Oberfläche, Historie und
+Zeitpläne, Datenqualität, Abzüge, KI-Assistent, Berichte, Versand, Lesezugang, Docker). Das
+ursprüngliche Design steht in [`docs/superpowers/specs/`](docs/superpowers/specs/), die
+Umsetzungspläne mit dem Stand nach jedem Review in
 [`docs/superpowers/plans/`](docs/superpowers/plans/).
 
 ## Start mit Docker
@@ -28,8 +31,12 @@ zeigt es an. Ein eigenes Passwort setzt `WDA_ADMIN_PASSWORD` in der `.env`.
 
 `docker-compose.yml` im Hauptordner ist der Produktiv-Stack: Er zieht das fertige Image aus
 der GitHub Container Registry (`ghcr.io/janschachtschabel/wlo-data-analysis`, veröffentlicht
-von `.github/workflows/image.yml` bei jedem Stand auf `main`), baut nichts und belegt keine
-Ports. Traefik erreicht die App über das Netz `wlo-data-analysis-web` und die Labels am Dienst.
+von `.github/workflows/image.yml` für jeden Stand auf `main`, sobald dessen CI grün ist), baut
+nichts und belegt keine Ports. Der Stack legt das Netz `wlo-data-analysis-web` selbst an;
+Traefik findet die App über die Labels am Dienst. Bei Hostinger läuft Traefik im Netz des
+Hosts und erreicht jedes Docker-Netz. Ein Traefik, der selbst in einem Docker-Netz läuft,
+muss zusätzlich an `wlo-data-analysis-web` hängen, oder `TRAEFIK_NETWORK` nennt sein Netz.
+Jedes Bereitstellen zieht das aktuelle Image (`pull_policy: always`).
 
 1. Im Docker Manager „Compose from URL“ mit der Adresse des Repositorys wählen. Der erste
    Start gelingt ohne jede Variable; `.env.example` (lauter leere Felder) wird zur `.env`.
@@ -46,6 +53,16 @@ Läuft die App hinter einem Reverse-Proxy in einem anderen Container, muss
 `FORWARDED_ALLOW_IPS` dessen Adresse nennen (der Produktiv-Stack setzt `*`, weil nur Traefik
 den Container erreicht). Sonst sieht die Anmelde-Sperre alle Aufrufe unter der Adresse des
 Proxys, und fünf fremde Fehlversuche sperren für eine Minute auch die richtige Anmeldung.
+Der Proxy muss fremde `X-Forwarded-For`-Angaben verwerfen (Traefik tut das in der
+Voreinstellung); für den anderen Fall gibt es eine zweite Sperre über alle Adressen
+zusammen (30 Fehlversuche je Minute). Ein selbst gesetztes Admin-Passwort sollte lang sein;
+unter 12 Zeichen warnt die App beim Start.
+
+Schreibende Anfragen nimmt die App nur von ihrer eigenen Oberfläche an (`Sec-Fetch-Site`
+bzw. `Origin`), mit HTTPS-Cookies sendet sie `Strict-Transport-Security`. Die Sitzung ist
+ein signiertes Cookie ohne Liste auf dem Server: „Abmelden“ löscht es im Browser; eine
+Kopie bliebe bis zum Ablauf (`WDA_SESSION_MAX_AGE`) gültig. Ein neues Admin-Passwort
+beendet alle Sitzungen sofort.
 
 ## Konfiguration
 
@@ -67,9 +84,9 @@ Proxys, und fünf fremde Fehlversuche sperren für eine Minute auch die richtige
 | `WDA_VOCAB_TTL` | `86400` | Sekunden, die Felder und Vokabulare einer Instanz gelten |
 | `WDA_UPSTREAM_TIMEOUT` | `90` | Timeout für Abfragen an eine Instanz in Sekunden |
 | `WDA_UPSTREAM_CONCURRENCY` | `4` | gleichzeitige Abfragen je Instanz |
-| `WDA_RUNS_KEEP` | `500` | gespeicherte Läufe je Definition; ältere werden entfernt |
+| `WDA_RUNS_KEEP` | `500` | gespeicherte Läufe je Definition; ältere werden entfernt. Läufe ohne Definition (gelöscht oder nie gespeichert) zählen zusammen als eine Gruppe |
 | `WDA_OERSI_URL` | Suchschnittstelle von oersi.org | Adresse für den OERSI-Abruf in Berichten |
-| `WDA_TIMEZONE` | `Europe/Berlin` | Zeitzone, in der die Uhrzeiten der Zeitpläne gelten |
+| `WDA_TIMEZONE` | `Europe/Berlin` | Zeitzone, in der die Uhrzeiten der Zeitpläne gelten und in der Berichte, Exporte und E-Mails Zeitpunkte nennen |
 | `WDA_SCHEDULER` | `on` | `off` schaltet den Planer ab; Zeitpläne bleiben dann liegen (z. B. bei einer zweiten Instanz auf derselben Datenbank) |
 | `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
 | `WDA_SNAPSHOT_PAGE` | `1000` | Materialien je Seite beim lokalen Abzug (10 bis 2000) |
@@ -78,7 +95,7 @@ Proxys, und fünf fremde Fehlversuche sperren für eine Minute auch die richtige
 | `WDA_LLM_MODEL` | `gpt-6-luna` | Modellname |
 | `WDA_LLM_API_KEY` | – | Schlüssel für die KI-Anbindung |
 | `WDA_LLM_EFFORT` | `auto` | Denkaufwand (`auto`, `off`, `low`, `medium`, `high`); die App passt ihn an, wenn das Modell ihn mit Werkzeugen ablehnt |
-| `WDA_LLM_SETTINGS_UI` | `off` | `on`: Adresse, Modell und Schlüssel lassen sich auch in der App unter „Einstellungen“ eintragen. Sonst gilt allein die Umgebung, und die App zeigt nur an |
+| `WDA_LLM_SETTINGS_UI` | `off` (im mitgelieferten Docker-Stack `on`) | `on`: Adresse, Modell und Schlüssel lassen sich auch in der App unter „Einstellungen“ eintragen. Sonst gilt allein die Umgebung, und die App zeigt nur an |
 
 Vorbelegte Instanzen: `wlo-prod` (`https://redaktion.openeduhub.net`) und `wlo-staging`
 (`https://repository.staging.openeduhub.net`). Ein Eintrag in `WDA_INSTANCES` mit
@@ -89,7 +106,7 @@ optional `repository` (`-home-`), `metadataset` (`mds_oeh`), `query` (`ngsearch`
 
 Facetten sind nur auf Feldern erlaubt, die im Metadatenset eine Werteliste haben, sowie
 auf den in `facet_fields` freigegebenen Feldern (Standard: Lizenzschlüssel, Quelle,
-Bezugsquelle, Sprache). Eine Facette über Titel oder URL wäre eine Liste einzelner
+Bezugsquelle, Sprache, Schlagwörter). Eine Facette über Titel oder URL wäre eine Liste einzelner
 Datensätze und wird abgelehnt.
 
 ## Schnittstelle
@@ -97,17 +114,30 @@ Datensätze und wird abgelehnt.
 | Route | Anmeldung | Inhalt |
 |---|---|---|
 | `GET /api/health` | nein | Status und Version |
-| `POST /api/auth/login` | nein | `{"password": "…"}`, setzt das Session-Cookie; nach 5 Fehlversuchen je Minute gesperrt |
+| `POST /api/auth/login` | nein | `{"password": "…"}`, setzt das Session-Cookie; nach 5 Fehlversuchen je Minute und Adresse gesperrt |
 | `POST /api/auth/logout` | nein | löscht das Cookie |
-| `GET /api/auth/status` | nein | ob angemeldet |
-| `GET /api/instances` | ja | Instanzen ohne Zugangsdaten |
-| `POST /api/instances`, `PUT`/`DELETE /api/instances/{id}` | ja | Instanz anlegen, ändern, entfernen (Seite „Instanzen“). Zugangsdaten gehen nur hinein; sie liegen in der Datenbank im Datenverzeichnis (Dateirechte 0600). Eine Änderung an einer festen Instanz überschreibt sie, Entfernen stellt sie wieder her. |
-| `GET /api/settings` | ja | KI-Basis-URL, Modell, ob ein Schlüssel gesetzt ist |
-| `GET /api/instances/{id}/about` | ja | Erreichbarkeit, Version und Gesamtzahl der Instanz |
-| `GET /api/instances/{id}/fields` | ja | Felder des Metadatensets mit Anzahl der Vokabularwerte |
-| `GET /api/instances/{id}/vocab?property=…&q=…` | ja | Werte eines Feldes (URI, Label, Oberbegriff), durchsuchbar |
-| `POST /api/instances/{id}/aggregate` | ja | Gesamtzahl und Facetten für Filter; Werte als Label oder URI |
-| `POST /api/query` | ja | Tabelle aus einer Abfrage-Beschreibung: Zeilen, Spalten, Gruppen, Formeln, Anteile |
+| `GET /api/auth/status` | nein | ob angemeldet und in welcher Rolle (`admin`, `viewer`) |
+| `GET /api/instances` | ja, auch Lesezugang | Instanzen ohne Zugangsdaten; der Lesezugang sieht nur Kennung und Name |
+| `POST /api/instances`, `PUT`/`DELETE /api/instances/{id}` | Admin | Instanz anlegen, ändern, entfernen (Seite „Instanzen“). Zugangsdaten gehen nur hinein; sie liegen in der Datenbank im Datenverzeichnis (Dateirechte 0600). Eine Änderung an einer festen Instanz überschreibt sie, Entfernen stellt sie wieder her. |
+| `GET /api/instances/{id}/about` | Admin | Erreichbarkeit, Version und Gesamtzahl der Instanz |
+| `GET /api/instances/{id}/fields` | Admin | Felder des Metadatensets mit Anzahl der Vokabularwerte |
+| `GET /api/instances/{id}/vocab?property=…&q=…` | Admin | Werte eines Feldes (URI, Label, Oberbegriff), durchsuchbar |
+| `POST /api/instances/{id}/aggregate` | Admin | Gesamtzahl und Facetten für Filter; Werte als Label oder URI |
+| `POST /api/query`, `POST /api/preview`, `POST /api/check` | Admin | Tabelle aus einer Abfrage-Beschreibung; Vorschau und Prüfung einer Definition, ohne zu speichern |
+| `GET`/`POST /api/definitions`, `GET`/`PUT`/`DELETE /api/definitions/{id}` | Admin; eine einzelne lesen auch der Lesezugang | Filter, Kennzahlen, Dashboards und Templates |
+| `POST /api/definitions/{id}/duplicate`, `POST /api/definitions/export`, `POST /api/definitions/import` | Admin | kopieren, als Datei herausgeben, einlesen |
+| `POST /api/definitions/{id}/run` | Admin | ausführen und als Lauf ablegen |
+| `GET /api/definitions/{id}/runs`, `…/history`, `…/history/keys`, `…/trends` | ja, auch Lesezugang | Läufe, Verlauf einer Zahl, Verlaufslinien einer Definition |
+| `GET`/`POST /api/groups`, `PUT`/`DELETE /api/groups/{id}` | Admin | Ordner der Bibliothek |
+| `GET /api/builtin`, `POST /api/builtin/{id}/install` | Admin | mitgelieferte Auswertungen |
+| `GET /api/runs`, `GET /api/runs/{id}`, `…/report`, `…/export?format=…` | ja, auch Lesezugang | abgelegte Läufe, Bericht, Datei |
+| `DELETE /api/runs`, `DELETE /api/runs/{id}` | Admin | Läufe löschen |
+| `GET /api/highlights` | ja, auch Lesezugang | auffällige Veränderungen und verfehlte Zielwerte |
+| `GET`/`POST /api/schedules`, `PUT`/`DELETE /api/schedules/{id}`, `POST /api/schedules/{id}/run` | Admin | Zeitpläne samt Versand; jetzt ausführen |
+| `GET`/`DELETE /api/snapshot/{instanz}`, `POST …/start`, `POST …/stop` | Admin | Stand des Abzugs, löschen, starten, anhalten. Der Abzug selbst ist über keine Route abrufbar |
+| `GET /api/settings` | ja, auch Lesezugang | Stand der Einstellungen; der Lesezugang sieht nichts zum Sprachmodell |
+| `PUT`/`DELETE /api/settings/llm`, `POST /api/settings/llm/test` | Admin | Sprachmodell eintragen (nur mit `WDA_LLM_SETTINGS_UI`), Verbindung prüfen |
+| `POST /api/assistant/chat`, `…/comment`, `…/document` | Admin | Assistent, Kommentar zu einem Lauf, Vorlage in Text wandeln (nichts davon wird gespeichert) |
 
 Beispiel für eine Aggregat-Abfrage (offene Lizenzen in der Sekundarstufe I nach Fach):
 
@@ -232,7 +262,10 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
   einen Zielwert; der Bericht sagt, welche Zeilen ihn erreichen. Im Formular das Feld
   „Zielwert (mindestens)“.
 - Der mitgelieferte Bericht „WLO und OERSI im Vergleich“ stellt die Hochschulmaterialien beider
-  Bestände nach Fächergruppe nebeneinander.
+  Bestände nach Fächergruppe nebeneinander. OERSI wird direkt über dessen Schnittstelle
+  gezählt. Weil WLO auch OERSI-Inhalte einsammelt, stehen vier Blöcke da: WLO gesamt, davon
+  aus OERSI übernommen (`ccm:replicationsource` = `oersi_spider`), WLO ohne OERSI und OERSI
+  direkt. Zum Zusammenzählen taugen die letzten beiden.
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 
@@ -305,7 +338,7 @@ Rechner mit mindestens fünf Materialien einzeln.
 
 ## KI: Assistent und Einstellungen
 
-- **Einstellungen** (Menü): zeigt Basis-URL, Modell und ob ein Schlüssel gesetzt ist, und prüft die Verbindung. Eingestellt wird über die Umgebung (`WDA_LLM_BASE_URL`, `WDA_LLM_MODEL`, `WDA_LLM_API_KEY`, `WDA_LLM_EFFORT`), damit der Schlüssel in der App nirgends eingegeben werden muss. Mit `WDA_LLM_SETTINGS_UI=on` lassen sich die Werte auch in der App eintragen; sie gehen dann denen der Umgebung vor. Ein früher in der App eingetragener Schlüssel bleibt in der Datenbank der App liegen, auch wenn der Schalter wieder aus ist; er wird dann nicht benutzt. Wer ihn loswerden will, löscht ihn einmal mit eingeschaltetem Schalter unter „Einstellungen“. `WDA_LLM_BASE_URL` sollte mit `https://` beginnen, sonst reist der Schlüssel unverschlüsselt.
+- **Einstellungen** (Menü): zeigt Basis-URL, Modell und ob ein Schlüssel gesetzt ist, und prüft die Verbindung. Eingestellt wird über die Umgebung, im mitgelieferten Docker-Stack auch in der App (`WDA_LLM_BASE_URL`, `WDA_LLM_MODEL`, `WDA_LLM_API_KEY`, `WDA_LLM_EFFORT`), damit der Schlüssel in der App nirgends eingegeben werden muss. Mit `WDA_LLM_SETTINGS_UI=on` lassen sich die Werte auch in der App eintragen; sie gehen dann denen der Umgebung vor. Ein früher in der App eingetragener Schlüssel bleibt in der Datenbank der App liegen, auch wenn der Schalter wieder aus ist; er wird dann nicht benutzt. Wer ihn loswerden will, löscht ihn einmal mit eingeschaltetem Schalter unter „Einstellungen“. `WDA_LLM_BASE_URL` sollte mit `https://` beginnen, sonst reist der Schlüssel unverschlüsselt.
 - **Assistent** (Menü): Fragen in eigenen Worten. Der Assistent schlägt Felder und Werte nach,
   zählt über dieselbe Engine wie alle Auswertungen und zeigt Ansichten und Dashboards als
   Karten („Im Explorer öffnen“, „Als Kennzahl speichern“, „Dashboard anlegen“). Der Knopf
@@ -346,7 +379,7 @@ Rechner mit mindestens fünf Materialien einzeln.
 
 ## Berichte, Export und die OER-Statistik
 
-- `GET /api/runs/{id}/export?format=json|csv|md|html|pdf|xlsx` liefert einen gespeicherten Lauf
+- `GET /api/runs/{id}/export?format=json|csv|md|html|pdf|xlsx|docx` liefert einen gespeicherten Lauf
   als Datei. HTML und PDF sind in sich vollständig (Grafiken als SVG, nichts wird
   nachgeladen); CSV ist UTF-8 mit BOM und `;` als Trenner. Jede Tabelle nennt Quelle,
   Abrufzeitpunkt und die Hinweise zur Zählung; fehlende Werte stehen als „–", nie als 0.
@@ -356,7 +389,9 @@ Rechner mit mindestens fünf Materialien einzeln.
   Browser aus dem, was gerade zu sehen ist.
 - Templates kennen neben Text, Tabelle und Grafik den Abschnitt `matrix`: Zeilen in Gruppen
   mit Zwischensummen, Spaltenblöcke je Quelle. Eine Quelle ist eine Abfrage an die Instanz
-  (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen) oder ein Handeintrag (`manual`).
+  (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen), ein Handeintrag (`manual`) oder
+  ein berechneter Block (`difference`: ein Abfrage-Block abzüglich eines anderen, der ein
+  Teil von ihm ist, etwa „WLO ohne die von OERSI übernommenen Materialien“).
 - Ein Bericht wie die OER-Statistik lässt sich ganz in der Oberfläche bauen: Unter
   „bearbeiten“ zeigt der Baukasten für jede gegliederte Tabelle die Zeilen (Feld, Gruppen,
   Werte über die Wertesuche, Mitzähler ohne eigene Zeile, „ohne Wert“, Zwischensummen), die
@@ -390,7 +425,8 @@ Rechner mit mindestens fünf Materialien einzeln.
   `.docx` herunterladen (Diagramme erscheinen als ihre Tabelle).
 - **Versand nach Zeitplan:** Ein Zeitplan kann den Bericht nach dem Lauf per E-Mail
   verschicken (Anhang PDF, Word, Excel oder HTML) und eine kurze Nachricht an einen Webhook
-  senden (`title`, `status`, `started_at`, `url`, `missed_targets`, `changes`; keine
+  senden (`title`, `definition_id`, `run_id`, `status`, `started_at`, `url`,
+  `missed_targets`, `changes`; keine
   Tabellen). „Nur bei Auffälligkeit“ verschickt nur, wenn ein Zielwert verfehlt ist, der
   Lauf nur teilweise gelang oder sich eine Zahl seit dem letzten Lauf dieses Zeitplans
   auffällig geändert hat (Läufe von Hand oder über Nacht dazwischen ändern daran nichts).
@@ -432,7 +468,7 @@ Die Oberfläche (Angular, `frontend/`) ist im Docker-Image enthalten und unter `
   verschieben, löschen, importieren, exportieren; mitgelieferte Vorlagen (OER-Statistik)
   installieren. „Bearbeiten“ öffnet die Definition mit Prüfung und Vorschau.
 - **Bericht und Läufe:** Eine Definition ansehen zählt frisch und speichert nichts; „Lauf
-  speichern“ legt den Stand ab, der sich als JSON, CSV, Markdown, HTML und PDF abrufen lässt.
+  speichern“ legt den Stand ab, der sich als JSON, CSV, Markdown, HTML, PDF, Excel und Word abrufen lässt.
 - **Verlauf und Zeitpläne:** Jeder gespeicherte Lauf ist ein Punkt im Verlauf einer
   Definition. Ein Zeitplan lässt sie von selbst laufen; war die Anwendung zum Termin aus, wird
   der Lauf einmal nachgeholt, nach einem Fehlschlag folgen bis zu drei neue Versuche. Am Lauf
