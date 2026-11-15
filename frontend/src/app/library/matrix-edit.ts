@@ -11,7 +11,9 @@ export interface MatrixSeries { id: string; label: string; filters?: Filter[]; f
 export type Count = 'total' | 'licensed' | string[];
 type Cells = Record<string, number | null>;
 export interface MatrixBlock {
-  id: string; label: string; source: 'query' | 'manual' | 'oersi';
+  id: string; label: string; source: 'query' | 'manual' | 'oersi' | 'difference';
+  /** berechneter Block: der Block `of` abzüglich des Blocks `minus` */
+  of?: string; minus?: string;
   filters?: Filter[]; as_of?: string | null; note?: string | null;
   totals?: Cells; sections?: Record<string, Cells>; cells?: Record<string, Cells>;
   counts?: Record<string, Count>; [more: string]: unknown;
@@ -216,7 +218,10 @@ export function addBlock(matrix: MatrixSpec, source: MatrixBlock['source'], labe
   const id = ident(label, matrix.blocks.map((b) => b.id));
   const first = matrix.series.find((s) => !s.formula);
   if (source === 'oersi' && !first) return matrix;   // OERSI zählt; ohne gezählte Spalte gibt es nichts zuzuordnen
+  const queries = matrix.blocks.filter((b) => b.source === 'query');
+  if (source === 'difference' && queries.length < 2) return matrix;   // gerechnet wird aus zwei Abfrage-Blöcken davor
   const block: MatrixBlock = source === 'query' ? { id, label, source, filters: [] }
+    : source === 'difference' ? { id, label, source, of: queries[0].id, minus: queries[1].id }
     : source === 'oersi' ? { id, label, source, counts: first ? { [first.id]: 'total' } : {} }
       : { id, label, source };
   return { ...matrix, blocks: [...matrix.blocks, block] };
@@ -232,7 +237,8 @@ export function setBlock(matrix: MatrixSpec, id: string, change: Partial<MatrixB
 }
 
 export function removeBlock(matrix: MatrixSpec, id: string): MatrixSpec {
-  return { ...matrix, blocks: matrix.blocks.filter((b) => b.id !== id) };
+  // ein berechneter Block geht mit, wenn einer seiner beiden Blöcke geht
+  return { ...matrix, blocks: matrix.blocks.filter((b) => b.id !== id && !(b.source === 'difference' && (b.of === id || b.minus === id))) };
 }
 
 /** Setzt oder löscht (`null`) eine Handzahl: Gesamtzeile, Zwischensumme einer Gruppe oder Zeile. */

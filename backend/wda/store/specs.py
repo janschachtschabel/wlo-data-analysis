@@ -180,6 +180,18 @@ class OersiBlock(_Model):
         Annotated[StrictStr, Field(max_length=40)]]] = Field(min_length=1, max_length=MAX_SERIES)
 
 
+class DifferenceBlock(_Model):
+    """Berechneter Block: die Zahlen des Blocks ``of`` abzüglich derer des Blocks ``minus``,
+    Zelle für Zelle. Richtig ist das, wenn ``minus`` ein Teil von ``of`` ist (dieselben Filter
+    und einer mehr), etwa „WLO ohne die aus OERSI übernommenen Materialien“."""
+
+    id: Ident
+    label: Label
+    source: Literal["difference"]
+    of: Ident
+    minus: Ident
+
+
 class MatrixSection(_Model):
     """Tabelle mit gegliederten Zeilen und einem Spaltenblock je Quelle."""
 
@@ -192,7 +204,7 @@ class MatrixSection(_Model):
     # Spalten, die erscheinen (in dieser Reihenfolge); ohne Angabe alle. Hilfsspalten, die
     # nur eine Formel speisen, bleiben so aus der Tabelle heraus.
     show: list[Ident] | None = Field(default=None, min_length=1, max_length=MAX_SERIES)
-    blocks: list[Annotated[QueryBlock | ManualBlock | OersiBlock,
+    blocks: list[Annotated[QueryBlock | ManualBlock | OersiBlock | DifferenceBlock,
                            Field(discriminator="source")]] = Field(
         min_length=1, max_length=12)
 
@@ -223,7 +235,15 @@ class MatrixSection(_Model):
                 raise ValueError(f"Die Formel der Spalte {s.id} verweist auf unbekannte "
                                  f"Spalten ({', '.join(sorted(missing))})")
         counted = {s.id for s in self.series if s.formula is None}
+        earlier: set[str] = set()
         for block in self.blocks:
+            if isinstance(block, DifferenceBlock) and (
+                    block.of == block.minus or not {block.of, block.minus} <= earlier):
+                raise ValueError(
+                    f"Block {block.id}: of und minus nennen zwei verschiedene Abfrage-Blöcke, "
+                    "die in der Tabelle davor stehen")
+            if isinstance(block, QueryBlock):
+                earlier.add(block.id)
             if isinstance(block, OersiBlock) and (wrong := set(block.counts) - counted):
                 raise ValueError(
                     f"Block {block.id}: counts nennt Spalten, die es nicht gibt oder die "

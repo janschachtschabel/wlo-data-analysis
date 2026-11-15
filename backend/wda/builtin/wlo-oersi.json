@@ -4,7 +4,7 @@
  "builtin": {
   "id": "wlo-oersi",
   "title": "WLO und OERSI im Vergleich",
-  "description": "Hochschulmaterialien nach Fächergruppe nebeneinander: Bestand, offene Lizenzen und OER-Anteil in WLO (Bildungsstufe Hochschule) und in OERSI. OERSI wird direkt gezählt, nur als Summen."
+  "description": "Hochschulmaterialien nach Fächergruppe nebeneinander: Bestand, offene Lizenzen und OER-Anteil in WLO (Bildungsstufe Hochschule) und in OERSI. Was WLO von OERSI übernommen hat, steht eigens da und ist in „WLO ohne OERSI“ herausgerechnet. OERSI wird direkt gezählt, nur als Summen."
  },
  "groups": [
   {
@@ -26,7 +26,7 @@
      {
       "id": "einleitung",
       "type": "text",
-      "markdown": "## WLO und OERSI im Vergleich\n\nStand {{run.date}}. Die Tabelle stellt die Hochschulmaterialien beider Bestände nach Fächergruppe nebeneinander: links WLO mit der Bildungsstufe Hochschule, rechts OERSI. „A: OER“ sind Materialien mit offener Lizenz (CC 0, Public Domain, CC BY, CC BY-SA)."
+      "markdown": "## WLO und OERSI im Vergleich\n\nStand {{run.date}}. Die Tabelle stellt die Hochschulmaterialien beider Bestände nach Fächergruppe nebeneinander: links WLO mit der Bildungsstufe Hochschule, dann der Teil davon, den WLO von OERSI übernommen hat, dann WLO ohne diesen Teil, rechts OERSI selbst. „A: OER“ sind Materialien mit offener Lizenz (CC 0, Public Domain, CC BY, CC BY-SA)."
      },
      {
       "id": "vergleich",
@@ -1899,6 +1899,38 @@
         ]
        },
        {
+        "id": "aus_oersi",
+        "label": "davon aus OERSI übernommen",
+        "source": "query",
+        "filters": [
+         {
+          "property": "ccm:educationalcontext",
+          "values": [
+           {
+            "value": "http://w3id.org/openeduhub/vocabs/educationalContext/hochschule",
+            "literal": true
+           }
+          ]
+         },
+         {
+          "property": "ccm:replicationsource",
+          "values": [
+           {
+            "value": "oersi_spider",
+            "literal": true
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "id": "eigen",
+        "label": "WLO ohne OERSI",
+        "source": "difference",
+        "of": "hochschule",
+        "minus": "aus_oersi"
+       },
+       {
         "id": "oersi",
         "label": "OERSI (direkt)",
         "source": "oersi",
@@ -1918,7 +1950,7 @@
      {
       "id": "methodik",
       "type": "text",
-      "markdown": "### Lesehilfe\n\n- Beide Seiten zählen nach der Hochschulfächersystematik von Destatis. WLO ordnet zusätzlich Schulfächer zu; sie stehen in ihrer Fächergruppe mit.\n- Ein Material mit mehreren Fächern zählt in jeder Zeile, in den Zwischensummen und in der Gesamtzeile nur einmal.\n- OERSI wird direkt bei oersi.org gezählt (nur Summen, keine einzelnen Treffer). WLO sammelt auch OERSI-Inhalte ein; die beiden Bestände überschneiden sich also.\n- Der OER-Anteil ist der Anteil offener Lizenzen am jeweiligen Bestand der Zeile."
+      "markdown": "### Lesehilfe\n\n- Beide Seiten zählen nach der Hochschulfächersystematik von Destatis. WLO ordnet zusätzlich Schulfächer zu; sie stehen in ihrer Fächergruppe mit.\n- Ein Material mit mehreren Fächern zählt in jeder Zeile, in den Zwischensummen und in der Gesamtzeile nur einmal.\n- „OERSI (direkt)“ wird bei oersi.org gezählt (nur Summen, keine einzelnen Treffer).\n- WLO sammelt auch OERSI-Inhalte ein; die beiden Bestände überschneiden sich. „davon aus OERSI übernommen“ zählt in WLO die Materialien mit der Quelle OERSI (`ccm:replicationsource` = `oersi_spider`), „WLO ohne OERSI“ ist WLO abzüglich dieser Materialien. Wer beide Bestände zusammenzählen will, nimmt „WLO ohne OERSI“ und „OERSI (direkt)“.\n- „davon aus OERSI übernommen“ ist kleiner als „OERSI (direkt)“: WLO übernimmt nicht alles, und nur ein Teil trägt in WLO die Bildungsstufe Hochschule.\n- Der OER-Anteil ist der Anteil offener Lizenzen am jeweiligen Bestand der Zeile."
      }
     ]
    }

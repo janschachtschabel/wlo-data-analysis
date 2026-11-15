@@ -382,11 +382,42 @@ def test_wlo_and_oersi_side_by_side(api):
     report = api.get(f"/api/runs/{run['id']}/report").json()
     assert [b["type"] for b in report["blocks"]] == ["text", "table", "text"]
     table = report["blocks"][1]
-    assert [g[0] for g in table["header_groups"]] == ["WLO: Hochschule", "OERSI (direkt)"]
-    assert [c["label"] for c in table["columns"]] == ["Gesamt", "A: OER", "OER-Anteil %"] * 2
+    assert [g[0] for g in table["header_groups"]] == [
+        "WLO: Hochschule", "davon aus OERSI übernommen", "WLO ohne OERSI", "OERSI (direkt)"]
+    assert [c["label"] for c in table["columns"]] == ["Gesamt", "A: OER", "OER-Anteil %"] * 4
+    # was WLO von OERSI übernommen hat, ist in „WLO ohne OERSI“ herausgerechnet
+    for row in table["rows"]:
+        v = row["values"]
+        if v[0] is not None and v[3] is not None:
+            assert 0 < v[3] <= v[0] or v[3] == 0
+            assert v[6] == v[0] - v[3] and v[7] == v[1] - v[4], row["label"]
+            assert v[8] == round(100 * v[7] / max(v[6], 1), 1)
+    assert any("berechnet" in line for line in source_lines_of(table))
     # nur die Fächergruppen: Einzelfächer der Schule sagten neben OERSI nichts
     assert {r["kind"] for r in table["rows"]} <= {"group", "missing", "total"}
     total = next(r for r in table["rows"] if r["kind"] == "total")
-    for at in (0, 3):  # der Anteil passt zu den beiden Zahlen links davon
+    for at in (0, 3, 6, 9):  # der Anteil passt zu den beiden Zahlen links davon
         whole, oer, share = total["values"][at:at + 3]
         assert whole and share == round(100 * oer / whole, 1)
+
+
+def source_lines_of(table):
+    return [str(src.get("note") or "") for src in table.get("sources", [])]
+
+
+def test_difference_block_needs_two_earlier_query_blocks():
+    import pytest
+    from pydantic import ValidationError
+
+    from wda.store.specs import MatrixSection
+    base = {"id": "m", "type": "matrix", "title": "T",
+            "rows": {"property": "ccm:taxonid", "sections": [
+                {"id": "g", "label": "G", "values": ["Mathematik"]}]},
+            "series": [{"id": "gesamt", "label": "Gesamt"}]}
+    a = {"id": "a", "label": "A", "source": "query"}
+    b = {"id": "b", "label": "B", "source": "query"}
+    diff = {"id": "d", "label": "D", "source": "difference", "of": "a", "minus": "b"}
+    MatrixSection.model_validate({**base, "blocks": [a, b, diff]})
+    for blocks in ([a, diff, b], [a, b, {**diff, "minus": "a"}], [a, b, {**diff, "of": "x"}]):
+        with pytest.raises(ValidationError):
+            MatrixSection.model_validate({**base, "blocks": blocks})

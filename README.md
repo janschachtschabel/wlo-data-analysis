@@ -232,7 +232,10 @@ der Datensätze. Mitgeliefert ist dazu das Dashboard „Datenqualität“ (Bibli
   einen Zielwert; der Bericht sagt, welche Zeilen ihn erreichen. Im Formular das Feld
   „Zielwert (mindestens)“.
 - Der mitgelieferte Bericht „WLO und OERSI im Vergleich“ stellt die Hochschulmaterialien beider
-  Bestände nach Fächergruppe nebeneinander.
+  Bestände nach Fächergruppe nebeneinander. OERSI wird direkt über dessen Schnittstelle
+  gezählt. Weil WLO auch OERSI-Inhalte einsammelt, stehen vier Blöcke da: WLO gesamt, davon
+  aus OERSI übernommen (`ccm:replicationsource` = `oersi_spider`), WLO ohne OERSI und OERSI
+  direkt. Zum Zusammenzählen taugen die letzten beiden.
 - Suchhilfen der Redaktionsoberfläche (`virtual:*`) stehen nicht in den Feldlisten: Sie
   heißen wie die echten Felder, zählen aber nichts.
 
@@ -356,7 +359,9 @@ Rechner mit mindestens fünf Materialien einzeln.
   Browser aus dem, was gerade zu sehen ist.
 - Templates kennen neben Text, Tabelle und Grafik den Abschnitt `matrix`: Zeilen in Gruppen
   mit Zwischensummen, Spaltenblöcke je Quelle. Eine Quelle ist eine Abfrage an die Instanz
-  (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen) oder ein Handeintrag (`manual`).
+  (`query`), ein Abruf bei OERSI (`oersi`, nur Zählungen), ein Handeintrag (`manual`) oder
+  ein berechneter Block (`difference`: ein Abfrage-Block abzüglich eines anderen, der ein
+  Teil von ihm ist, etwa „WLO ohne die von OERSI übernommenen Materialien“).
 - Ein Bericht wie die OER-Statistik lässt sich ganz in der Oberfläche bauen: Unter
   „bearbeiten“ zeigt der Baukasten für jede gegliederte Tabelle die Zeilen (Feld, Gruppen,
   Werte über die Wertesuche, Mitzähler ohne eigene Zeile, „ohne Wert“, Zwischensummen), die
