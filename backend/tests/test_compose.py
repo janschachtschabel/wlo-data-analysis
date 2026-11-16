@@ -69,3 +69,29 @@ def test_start_reads_the_port(monkeypatch):
     for wrong in ("0", "70000", "acht", "-1"):
         with pytest.raises(ConfigError):
             _port(wrong)
+
+
+PORT = (ROOT / "docker-compose.port.yml").read_text(encoding="utf-8")
+PORT_CODE = "\n".join(line for line in PORT.splitlines() if not line.lstrip().startswith("#"))
+PORT_EXAMPLE = (ROOT / ".env.port.example").read_text(encoding="utf-8")
+
+
+def test_port_stack_runs_without_domain_and_without_traefik():
+    for word in ("traefik", "DOMAIN", "labels:", "networks:", "build:", "external:"):
+        assert word not in PORT_CODE, word
+    assert '- "${HOST_PORT:-8090}:8080"' in PORT_CODE and PORT_CODE.count("ports:") == 1
+    assert "WDA_COOKIE_SECURE: ${WDA_COOKIE_SECURE:-auto}" in PORT_CODE
+    assert "FORWARDED_ALLOW_IPS" not in PORT_CODE  # direkt erreichbar: Kopfzeilen nicht glauben
+    for use in re.findall(r"\$\{[^}]*\}", PORT_CODE):
+        assert re.fullmatch(r"\$\{[A-Z_]+:-[^${}]*\}", use), use
+    # dieselben App-Variablen wie der Traefik-Stack, nur ohne Domain und Traefik
+    app = set(re.findall(r"^\s+(WDA_[A-Z_]+):", CODE, flags=re.M)) - {"WDA_PORT"}
+    assert set(re.findall(r"^\s+(WDA_[A-Z_]+):", PORT_CODE, flags=re.M)) == app
+
+
+def test_port_example_lists_every_variable_of_the_port_stack():
+    used = set(re.findall(r"\$\{([A-Z_]+):-", PORT_CODE))
+    listed = dict(re.findall(r"^([A-Z_]+)=(.*)$", PORT_EXAMPLE, flags=re.M))
+    assert used == set(listed), used ^ set(listed)
+    assert listed["HOST_PORT"] == "8090"
+    assert all(value == "" for key, value in listed.items() if key != "HOST_PORT"), listed

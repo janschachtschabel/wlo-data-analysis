@@ -50,11 +50,15 @@ die andere ist nicht mehr erreichbar. Ein anderer Port ändert daran nichts. Abh
 eigene (Sub-)Domain je App, deren DNS-Eintrag auf den Server zeigt, oder der Betrieb ohne
 Domain über einen Port.
 
-**Ohne Domain, direkt über einen Port:** `HOST_PORT=8090` und `TRAEFIK_ENABLE=false` setzen
-und neu bereitstellen; die App ist dann unter `http://<server>:8090` erreichbar (die
-Firewall des Servers muss den Port durchlassen). Das läuft ohne HTTPS: Passwort und Daten
-gehen unverschlüsselt über die Leitung. Für den Dauerbetrieb ist eine eigene Domain besser.
-Das Anmelde-Cookie stellt sich von selbst darauf ein (`WDA_COOKIE_SECURE` leer bzw. `auto`).
+**Ohne Domain, direkt über einen Port:** Dafür gibt es einen eigenen Stack ohne Traefik,
+`docker-compose.port.yml` mit dem Muster `.env.port.example`. Im Docker Manager von Hostinger
+die Compose-Datei über ihre Raw-Adresse laden, `HOST_PORT=8090` (Vorgabe) setzen und
+bereitstellen; die App ist dann unter `http://<IP des Servers>:8090` erreichbar, mit
+`http://`, nicht `https://`. Die Firewall des Servers muss den Port durchlassen. Das läuft
+ohne HTTPS: Passwort und Daten gehen unverschlüsselt über die Leitung. Das Anmelde-Cookie
+stellt sich von selbst darauf ein (`WDA_COOKIE_SECURE` leer bzw. `auto`). Der Stack glaubt
+keinen weitergeleiteten Kopfzeilen (`FORWARDED_ALLOW_IPS` bleibt ungesetzt), weil kein Proxy
+davor steht. Im Traefik-Stack geht dasselbe mit `HOST_PORT=8090` und `TRAEFIK_ENABLE=false`.
 `WDA_PORT` wählt den Port innerhalb des Containers (Vorgabe 8080); Traefik-Label und
 Healthcheck folgen ihm.
 

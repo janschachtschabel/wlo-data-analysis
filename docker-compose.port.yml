@@ -1,0 +1,62 @@
+# Betrieb ohne Domain und ohne Traefik, direkt über einen Port des Servers. Für den
+# Docker Manager von Hostinger ("Compose from URL") geeignet. Aufruf danach:
+# http://<IP des Servers>:8090 (http, nicht https; die Verbindung ist unverschlüsselt).
+# Port 8090 muss in der Firewall des Servers offen sein. Mit Domain und HTTPS:
+# docker-compose.yml. Admin-Passwort anzeigen: docker compose exec app cat /data/admin.password
+services:
+  init:
+    image: ${WDA_IMAGE:-ghcr.io/janschachtschabel/wlo-data-analysis:latest}
+    pull_policy: always
+    command: ["python", "-m", "wda.init"]
+    restart: "no"
+    environment:
+      WDA_ADMIN_PASSWORD: ${WDA_ADMIN_PASSWORD:-}
+    volumes:
+      - wda-data:/data
+
+  app:
+    image: ${WDA_IMAGE:-ghcr.io/janschachtschabel/wlo-data-analysis:latest}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+        restart: true
+    environment:
+      WDA_ADMIN_PASSWORD: ${WDA_ADMIN_PASSWORD:-}
+      WDA_ADMIN_PASSWORD_FILE: /data/admin.password
+      WDA_VIEWER_PASSWORD: ${WDA_VIEWER_PASSWORD:-}
+      WDA_COOKIE_SECURE: ${WDA_COOKIE_SECURE:-auto}
+      WDA_PUBLIC_URL: ${WDA_PUBLIC_URL:-}
+      WDA_TIMEZONE: ${WDA_TIMEZONE:-Europe/Berlin}
+      WDA_LLM_BASE_URL: ${WDA_LLM_BASE_URL:-https://api.openai.com/v1}
+      WDA_LLM_MODEL: ${WDA_LLM_MODEL:-}
+      WDA_LLM_API_KEY: ${WDA_LLM_API_KEY:-}
+      WDA_LLM_SETTINGS_UI: ${WDA_LLM_SETTINGS_UI:-true}
+      WDA_INSTANCES: ${WDA_INSTANCES:-}
+      WDA_SNAPSHOT_NIGHTLY: ${WDA_SNAPSHOT_NIGHTLY:-03:30}
+      WDA_PRECOMPUTE: ${WDA_PRECOMPUTE:-builtin-themen}
+      WDA_SMTP_HOST: ${WDA_SMTP_HOST:-}
+      WDA_SMTP_PORT: ${WDA_SMTP_PORT:-587}
+      WDA_SMTP_USER: ${WDA_SMTP_USER:-}
+      WDA_SMTP_PASSWORD: ${WDA_SMTP_PASSWORD:-}
+      WDA_SMTP_FROM: ${WDA_SMTP_FROM:-}
+      WDA_SMTP_SECURITY: ${WDA_SMTP_SECURITY:-starttls}
+      WDA_SCHEDULER: ${WDA_SCHEDULER:-}
+      WDA_RUNS_KEEP: ${WDA_RUNS_KEEP:-}
+      WDA_SESSION_MAX_AGE: ${WDA_SESSION_MAX_AGE:-}
+      WDA_SESSION_SECRET: ${WDA_SESSION_SECRET:-}
+      WDA_LLM_EFFORT: ${WDA_LLM_EFFORT:-}
+      WDA_CACHE_TTL: ${WDA_CACHE_TTL:-}
+      WDA_VOCAB_TTL: ${WDA_VOCAB_TTL:-}
+      WDA_UPSTREAM_TIMEOUT: ${WDA_UPSTREAM_TIMEOUT:-}
+      WDA_UPSTREAM_CONCURRENCY: ${WDA_UPSTREAM_CONCURRENCY:-}
+      WDA_SNAPSHOT_PAGE: ${WDA_SNAPSHOT_PAGE:-}
+      WDA_OERSI_URL: ${WDA_OERSI_URL:-}
+    ports:
+      - "${HOST_PORT:-8090}:8080"
+    volumes:
+      - wda-data:/data
+
+volumes:
+  wda-data:
