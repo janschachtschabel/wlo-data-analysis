@@ -104,6 +104,13 @@ def viewer_mark(settings: Settings) -> str | None:
     return hmac.new(secret, b"wda-viewer-v1:" + password, hashlib.sha256).hexdigest()[:32]
 
 
+def secure_cookie(settings: Settings, scheme: str) -> bool:
+    """Ob das Sitzungs-Cookie nur über HTTPS reisen darf (und HSTS gilt)."""
+    if settings.cookie_secure == "auto":
+        return scheme == "https"
+    return bool(settings.cookie_secure)
+
+
 def verify_password(given: str, expected: str) -> bool:
     # surrogatepass: auch kaputte Unicode-Eingaben sind nur ein falsches Passwort, kein Fehler
     return hmac.compare_digest(

@@ -1,4 +1,5 @@
-# Lokal: Image aus diesem Ordner bauen und ohne Traefik auf http://localhost:8080 starten.
+# Lokal: Image aus diesem Ordner bauen und ohne Traefik auf http://localhost:8080 starten
+# (anderer Port: WDA_PORT in der .env).
 #   docker compose -f docker-compose.build.yml up --build
 # Das Admin-Passwort steht danach im Datenvolume:
 #   docker compose -f docker-compose.build.yml exec app cat /data/admin.password
@@ -27,8 +28,9 @@ services:
     environment:
       WDA_ADMIN_PASSWORD_FILE: /data/admin.password
       WDA_COOKIE_SECURE: ${WDA_COOKIE_SECURE:-false}
+      WDA_PORT: ${WDA_PORT:-8080}
     ports:
-      - "8080:8080"
+      - "${WDA_PORT:-8080}:${WDA_PORT:-8080}"
     volumes:
       - wda-data:/data
 

@@ -113,3 +113,18 @@ def test_a_damaged_database_stops_the_start_with_a_sentence(tmp_path, monkeypatc
     monkeypatch.setattr(entry.uvicorn, "run", lambda *a, **k: pytest.fail("gestartet"))
     assert entry.main() == 2
     assert "Start abgebrochen" in capsys.readouterr().err
+
+
+def test_cookie_secure_auto_follows_the_scheme(tmp_path):
+    """Hinter Traefik (https) ist das Cookie sicher, direkt über einen Port (http) nicht:
+    sonst schickte der Browser es nie zurück, und die Anmeldung liefe ins Leere."""
+    with TestClient(_app(tmp_path / "a", cookie_secure="auto")) as plain:
+        out = plain.post("/api/auth/login", json={"password": ADMIN_PASSWORD})
+        assert out.status_code == 204 and "secure" not in out.headers["set-cookie"].lower()
+        assert plain.get("/api/auth/status").json()["authenticated"] is True
+        assert "Strict-Transport-Security" not in plain.get("/api/health").headers
+    with TestClient(_app(tmp_path / "b", cookie_secure="auto"),
+                    base_url="https://testserver") as tls:
+        out = tls.post("/api/auth/login", json={"password": ADMIN_PASSWORD})
+        assert "secure" in out.headers["set-cookie"].lower()
+        assert "max-age=" in tls.get("/api/health").headers["Strict-Transport-Security"]

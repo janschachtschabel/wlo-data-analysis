@@ -42,7 +42,13 @@ from .instances import InstanceRegistry
 from .jobs import TooManyJobs
 from .report.build import set_display_zone
 from .scheduler import Scheduler, utc_now
-from .security import LoginThrottle, SessionSigner, session_signing_key, viewer_mark
+from .security import (
+    LoginThrottle,
+    SessionSigner,
+    secure_cookie,
+    session_signing_key,
+    viewer_mark,
+)
 from .services import Services
 
 log = logging.getLogger(__name__)
@@ -168,7 +174,7 @@ def create_app(
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        if settings.cookie_secure:  # die App läuft hinter HTTPS: Browser sollen dabei bleiben
+        if secure_cookie(settings, request.url.scheme):  # hinter HTTPS: dabei bleiben
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         if request.url.path.startswith("/api"):
             response.headers["Cache-Control"] = "no-store"

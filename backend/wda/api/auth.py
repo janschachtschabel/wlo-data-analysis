@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, StrictStr
 
 from ..deps import role_of
-from ..security import COOKIE_NAME, verify_password
+from ..security import COOKIE_NAME, secure_cookie, verify_password
 
 router = APIRouter(prefix="/auth")
 
@@ -50,7 +50,7 @@ def login(body: LoginBody, request: Request, response: Response) -> None:
         max_age=state.settings.session_max_age,
         httponly=True,
         samesite="strict",
-        secure=state.settings.cookie_secure,
+        secure=secure_cookie(state.settings, request.url.scheme),
         path="/",
     )
 
@@ -61,7 +61,7 @@ def logout(request: Request, response: Response) -> None:
         COOKIE_NAME,
         httponly=True,
         samesite="strict",
-        secure=request.app.state.settings.cookie_secure,
+        secure=secure_cookie(request.app.state.settings, request.url.scheme),
         path="/",
     )
 

@@ -236,6 +236,9 @@ def test_nightly_update_runs_once_per_night_and_never_creates_a_snapshot(tmp_pat
             await services.syncs["wlo-prod"]
             assert repo.node_requests > before and snap.state()["mode"] == "update"
             assert snap.state()["status"] == "ok"
+            # das Nachziehen endet in Wirklichkeit „jetzt“; im Test gilt die Nacht selbst,
+            # sonst hinge das Ergebnis vom Tag ab, an dem der Test läuft
+            snap.set_state(finished_at=(night + timedelta(minutes=5)).timestamp())
             # dieselbe Nacht noch einmal und am Tag darauf vor der Zeit: nichts
             assert await services.nightly_snapshots(night + timedelta(minutes=1)) == []
             assert await services.nightly_snapshots(night + timedelta(hours=20)) == []
