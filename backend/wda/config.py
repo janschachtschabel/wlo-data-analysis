@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     viewer_password: SecretStr | None = None
     session_secret: SecretStr | None = None
     session_max_age: int = 43200
-    cookie_secure: bool = True
+    # True: Cookie nur über HTTPS; "auto": je Anfrage nach dem Schema (hinter Traefik https,
+    # direkt über einen Port http)
+    cookie_secure: bool | Literal["auto"] = True
     data_dir: Path = Path("/data")
     instances: str | None = None
     llm_base_url: str = "https://api.openai.com/v1"

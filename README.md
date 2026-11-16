@@ -32,7 +32,7 @@ zeigt es an. Ein eigenes Passwort setzt `WDA_ADMIN_PASSWORD` in der `.env`.
 `docker-compose.yml` im Hauptordner ist der Produktiv-Stack: Er zieht das fertige Image aus
 der GitHub Container Registry (`ghcr.io/janschachtschabel/wlo-data-analysis`, veröffentlicht
 von `.github/workflows/image.yml` für jeden Stand auf `main`, sobald dessen CI grün ist), baut
-nichts und belegt keine Ports. Der Stack legt das Netz `wlo-data-analysis-web` selbst an;
+nichts und belegt nach außen keine Ports (nur `127.0.0.1:18080` auf dem Server selbst). Der Stack legt das Netz `wlo-data-analysis-web` selbst an;
 Traefik findet die App über die Labels am Dienst. Bei Hostinger läuft Traefik im Netz des
 Hosts und erreicht jedes Docker-Netz. Ein Traefik, der selbst in einem Docker-Netz läuft,
 muss zusätzlich an `wlo-data-analysis-web` hängen, oder `TRAEFIK_NETWORK` nennt sein Netz.
@@ -43,6 +43,20 @@ Jedes Bereitstellen zieht das aktuelle Image (`pull_policy: always`).
 2. Danach `DOMAIN` (nur der Hostname, etwa `daten.example.org`) und nach Bedarf die übrigen
    Werte eintragen und neu bereitstellen. Das erzeugte Admin-Passwort bleibt dabei gleich.
 3. Das Admin-Passwort anzeigen: `docker compose exec app cat /data/admin.password`.
+
+**Jede App braucht ihre eigene Domain.** Traefik verteilt nach dem Hostnamen. Tragen zwei
+Apps dieselbe `DOMAIN` (etwa beide `srvNNNNNN.hstgr.cloud`), gewinnt eine von beiden, und
+die andere ist nicht mehr erreichbar. Ein anderer Port ändert daran nichts. Abhilfe: eine
+eigene (Sub-)Domain je App, deren DNS-Eintrag auf den Server zeigt, oder der Betrieb ohne
+Domain über einen Port.
+
+**Ohne Domain, direkt über einen Port:** `HOST_PORT=8090` und `TRAEFIK_ENABLE=false` setzen
+und neu bereitstellen; die App ist dann unter `http://<server>:8090` erreichbar (die
+Firewall des Servers muss den Port durchlassen). Das läuft ohne HTTPS: Passwort und Daten
+gehen unverschlüsselt über die Leitung. Für den Dauerbetrieb ist eine eigene Domain besser.
+Das Anmelde-Cookie stellt sich von selbst darauf ein (`WDA_COOKIE_SECURE` leer bzw. `auto`).
+`WDA_PORT` wählt den Port innerhalb des Containers (Vorgabe 8080); Traefik-Label und
+Healthcheck folgen ihm.
 
 Der Dienst `init` läuft vor jedem Start einmal durch: Er legt das Passwort an, falls keines
 gesetzt ist, und bricht mit einer klaren Meldung ab, wenn `DOMAIN` mit `https://`, Pfad oder
@@ -74,7 +88,8 @@ beendet alle Sitzungen sofort.
 | `WDA_PUBLIC_URL` | – | Adresse der App von außen (`https://…`) für den Link in verschickten Berichten |
 | `WDA_SMTP_HOST`, `WDA_SMTP_PORT`, `WDA_SMTP_USER`, `WDA_SMTP_PASSWORD`, `WDA_SMTP_FROM`, `WDA_SMTP_SECURITY` | –, `587`, –, –, –, `starttls` | Mailserver für den Versand von Berichten nach Zeitplan; ohne Host und Absender gibt es keine E-Mails. Sicherheit: `starttls`, `ssl` oder `none` |
 | `WDA_PRECOMPUTE` | `builtin-themen` | Auswertungen (IDs, durch Komma getrennt), die zur Uhrzeit von `WDA_SNAPSHOT_NIGHTLY` neu gezählt und als Lauf abgelegt werden; die Wissenslandkarte zeigt dann den abgelegten Stand; `off` schaltet das Vorrechnen ab |
-| `WDA_COOKIE_SECURE` | `true` | Anmelde-Cookie nur über HTTPS senden |
+| `WDA_COOKIE_SECURE` | `true` (im Docker-Stack `auto`) | `true`: Anmelde-Cookie nur über HTTPS senden. `auto`: je Anfrage, über HTTPS geschützt, direkt über einen Port ohne HTTPS ungeschützt |
+| `HOST_PORT`, `TRAEFIK_ENABLE` | `127.0.0.1:18080`, `true` | nur im Docker-Stack: Port auf dem Server für den Betrieb ohne Domain (etwa `8090`), und ob Traefik die App bedient |
 | `WDA_SESSION_MAX_AGE` | `43200` | Gültigkeit einer Anmeldung in Sekunden |
 | `WDA_SESSION_SECRET` | automatisch | Signatur-Geheimnis; sonst in `WDA_DATA_DIR/session.secret` |
 | `WDA_DATA_DIR` | `/data` | internes Datenverzeichnis, wird nie ausgeliefert |
@@ -88,7 +103,7 @@ beendet alle Sitzungen sofort.
 | `WDA_OERSI_URL` | Suchschnittstelle von oersi.org | Adresse für den OERSI-Abruf in Berichten |
 | `WDA_TIMEZONE` | `Europe/Berlin` | Zeitzone, in der die Uhrzeiten der Zeitpläne gelten und in der Berichte, Exporte und E-Mails Zeitpunkte nennen |
 | `WDA_SCHEDULER` | `on` | `off` schaltet den Planer ab; Zeitpläne bleiben dann liegen (z. B. bei einer zweiten Instanz auf derselben Datenbank) |
-| `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers (der Healthcheck des Images erwartet 8080) |
+| `WDA_HOST`, `WDA_PORT` | `0.0.0.0`, `8080` | Adresse und Port des Servers. Im Docker-Stack folgen Healthcheck und Traefik-Label `WDA_PORT`; beim lokalen Stack (`docker-compose.build.yml`) ist es auch der Port auf dem Rechner |
 | `WDA_SNAPSHOT_PAGE` | `1000` | Materialien je Seite beim lokalen Abzug (10 bis 2000) |
 | `WDA_SNAPSHOT_NIGHTLY` | `03:30` | Uhrzeit (in `WDA_TIMEZONE`), zu der vorhandene Abzüge Änderungen nachziehen; `off` schaltet das ab (ebenso `WDA_SCHEDULER=off`) |
 | `WDA_LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-kompatible Basis-URL (auch B-API) |

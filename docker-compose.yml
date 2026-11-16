@@ -1,6 +1,7 @@
 # Produktiv-Stack für den Docker Manager von Hostinger ("Compose from URL") und jeden Host
 # mit Traefik. Der erste Start gelingt ohne jede Variable: Das Admin-Passwort entsteht im
 # Datenvolume (anzeigen: docker compose exec app cat /data/admin.password).
+# Ohne Domain: HOST_PORT=8090 und TRAEFIK_ENABLE=false, dann http://<server>:8090.
 # Lokal bauen und ohne Traefik starten: docker compose -f docker-compose.build.yml up
 services:
   init:
@@ -25,8 +26,9 @@ services:
     environment:
       WDA_ADMIN_PASSWORD: ${WDA_ADMIN_PASSWORD:-}
       WDA_ADMIN_PASSWORD_FILE: /data/admin.password
+      WDA_PORT: ${WDA_PORT:-8080}
       WDA_VIEWER_PASSWORD: ${WDA_VIEWER_PASSWORD:-}
-      WDA_COOKIE_SECURE: ${WDA_COOKIE_SECURE:-true}
+      WDA_COOKIE_SECURE: ${WDA_COOKIE_SECURE:-auto}
       WDA_PUBLIC_URL: ${WDA_PUBLIC_URL:-}
       WDA_TIMEZONE: ${WDA_TIMEZONE:-Europe/Berlin}
       WDA_LLM_BASE_URL: ${WDA_LLM_BASE_URL:-https://api.openai.com/v1}
@@ -54,16 +56,20 @@ services:
       WDA_SNAPSHOT_PAGE: ${WDA_SNAPSHOT_PAGE:-}
       WDA_OERSI_URL: ${WDA_OERSI_URL:-}
       FORWARDED_ALLOW_IPS: "*"
+    # Ohne Domain direkt über einen Port: HOST_PORT=8090 macht die App unter
+    # http://<server>:8090 erreichbar. Die Vorgabe bindet nur an den Server selbst.
+    ports:
+      - "${HOST_PORT:-127.0.0.1:18080}:${WDA_PORT:-8080}"
     volumes:
       - wda-data:/data
     labels:
-      - traefik.enable=true
+      - traefik.enable=${TRAEFIK_ENABLE:-true}
       - traefik.docker.network=${TRAEFIK_NETWORK:-wlo-data-analysis-web}
       - traefik.http.routers.wlo-data-analysis.rule=Host(`${DOMAIN:-}`)
       - traefik.http.routers.wlo-data-analysis.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
       - traefik.http.routers.wlo-data-analysis.tls=true
       - traefik.http.routers.wlo-data-analysis.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
-      - traefik.http.services.wlo-data-analysis.loadbalancer.server.port=8080
+      - traefik.http.services.wlo-data-analysis.loadbalancer.server.port=${WDA_PORT:-8080}
 
 networks:
   default:

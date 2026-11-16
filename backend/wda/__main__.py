@@ -11,8 +11,17 @@ from .config import ConfigError
 from .main import create_app
 
 
+def _port(value: str | None) -> int:
+    """Port aus ``WDA_PORT``; leer heißt 8080."""
+    text = (value or "").strip() or "8080"
+    if not text.isdigit() or not 1 <= int(text) <= 65535:
+        raise ConfigError(f"WDA_PORT ist kein Port (1 bis 65535): {text[:20]!r}")
+    return int(text)
+
+
 def main() -> int:
     try:
+        port = _port(os.environ.get("WDA_PORT"))
         app = create_app()
         # die Ablage schon hier öffnen: Eine beschädigte Datei beendet den Start mit einem
         # Satz statt mit einer Fehlerkette beim Hochfahren
@@ -24,7 +33,7 @@ def main() -> int:
     uvicorn.run(
         app,
         host=os.environ.get("WDA_HOST", "0.0.0.0"),  # noqa: S104 - im Container gewollt
-        port=int(os.environ.get("WDA_PORT", "8080")),
+        port=port,
     )
     return 0
 
